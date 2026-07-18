@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_qtcafe_manager_account_list" model="ir.ui.view">
+        <field name="name">qtcafe.manager.account.list</field>
+        <field name="model">qtcafe.manager.account</field>
+        <field name="arch" type="xml">
+            <list string="Independent Managers">
+                <field name="name"/>
+                <field name="login"/>
+                <field name="pos_config_ids" widget="many2many_tags"/>
+                <field name="active"/>
+                <field name="can_view_dashboard"/>
+                <field name="can_manage_store"/>
+                <field name="last_login"/>
+                <field name="session_expires_at"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_qtcafe_manager_account_form" model="ir.ui.view">
+        <field name="name">qtcafe.manager.account.form</field>
+        <field name="model">qtcafe.manager.account</field>
+        <field name="arch" type="xml">
+            <form string="Independent Manager">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="login"/>
+                            <field name="pos_config_ids" widget="many2many_tags" required="1"/>
+                            <field name="pos_config_id" invisible="1"/>
+                            <field name="new_password" password="True" required="not id"
+                                   placeholder="8 characters minimum"/>
+                            <field name="active"/>
+                        </group>
+                        <group>
+                            <field name="can_view_dashboard"/>
+                            <field name="can_manage_store"/>
+                            <field name="last_login" readonly="1"/>
+                            <field name="session_expires_at" readonly="1"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_qtcafe_manager_accounts" model="ir.actions.act_window">
+        <field name="name">Independent Managers</field>
+        <field name="res_model">qtcafe.manager.account</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>

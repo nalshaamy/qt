@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="action_qtcafe_flexsys_settings" model="ir.actions.act_window">
+        <field name="name">FlexSys Settings</field>
+        <field name="res_model">res.config.settings</field>
+        <field name="view_mode">form</field>
+        <field name="target">current</field>
+        <field name="context">{'module': 'qtcafe_qr_order', 'bin_size': False}</field>
+    </record>
+
+    <menuitem id="menu_qtcafe_settings"
+              name="Settings"
+              parent="menu_qtcafe_config"
+              action="action_qtcafe_flexsys_settings"
+              groups="base.group_system"
+              sequence="10"/>
+</odoo>
