@@ -1,0 +1,483 @@
+QT Cafe QR Order - Consolidated Change Notes
+=================================================
+هذا الملف يجمع سجل التعديلات السابق للموديول حسب تسلسل الإصدارات.
+الإصدار الحالي: 19.0.16.17.0
+
+========================================================================================
+V6_NOTES.txt
+========================================================================================
+V6 - POS Config Routing
+- Added Default POS setting for QR orders.
+- Added pos_config_id on QR orders.
+- QR URL can route to specific POS: /qr-menu?pos_config_id=<POS_CONFIG_ID>
+- Pending POS alert endpoint can filter by pos_config_id.
+- Added helper note inside POS Config form.
+
+========================================================================================
+V7_NOTES.txt
+========================================================================================
+V7 - Load QR Order to POS
+- Adds QR Orders button in POS control buttons.
+- Fetches pending QR orders for current POS config.
+- Loads first pending QR order into a new POS order with products, qty and price.
+- Marks QR order as loaded/accepted to prevent duplicates.
+- Adds QT Cafe → Configuration → Settings shortcut for Default POS.
+
+========================================================================================
+V7_1_NOTES.txt
+========================================================================================
+V7.1 - Concurrency/Double Click Fix
+- Mark loaded endpoint is idempotent.
+- Duplicate accepted/loaded updates return success instead of failing.
+- POS QR Orders button has a click guard to reduce duplicate requests.
+- Addresses: could not serialize access due to concurrent update.
+
+========================================================================================
+V7_2_NOTES.txt
+========================================================================================
+V7.2 - Registry Fix
+- Fixed wrong menu external ID in QT Cafe settings menu.
+- Parent menu corrected from menu_qtcafe_qr_order_config to menu_qtcafe_config.
+- Simplified POS config view extension to avoid fragile POS form inheritance during registry loading.
+
+========================================================================================
+V8_NOTES.txt
+========================================================================================
+V8 - Auto Create Backend POS Order
+- QR order now stores pos_config_id from the QR link/default setting.
+- When customer submits a QR order, the module tries to create a real backend pos.order in the open POS session.
+- Accepting a QR order also creates the POS order if it was not created yet.
+- QR order form includes manual Create POS Order fallback.
+- This is intended to make the order visible in POS Orders/Ticket screen, not just show the alert.
+
+========================================================================================
+V10_NOTES.txt
+========================================================================================
+V10 - QR Number in POS
+- POS orders created from QR orders now use the QR order number in name and pos_reference.
+- This prevents POS order list from showing false for QR-originated orders.
+
+========================================================================================
+V10_1_NOTES.txt
+========================================================================================
+V10.1 - models/__init__.py fix
+- Rebuilt models/__init__.py based on actual model files in the module.
+- Fixes ImportError caused by importing qtcafe_qr_printer_config when the actual file name differs or is absent.
+
+========================================================================================
+V11_REGISTERED_CUSTOMER_NOTES.txt
+========================================================================================
+V11 Registered Customer / Guest
+- /qr-menu now shows two choices: registered customer or guest.
+- Registered customers use Odoo login and are linked to res.partner.
+- QR orders store partner_id for authenticated users.
+- /qr-menu/my-orders shows the logged-in customer's previous QR orders only.
+- Guest orders remain unlinked and do not expose order history.
+- Existing QR → POS flow is preserved.
+
+========================================================================================
+V11_1_NOTES.txt
+========================================================================================
+V11.1
+- Fixed res.partner mobile access for databases where the mobile field is not installed.
+- Falls back safely to phone.
+
+========================================================================================
+V11_2_NOTES.txt
+========================================================================================
+V11.2
+- Fixed SCSS incompatible px/% units by replacing min() with width + max-width.
+- Added mobile-web-app-capable meta tag.
+
+========================================================================================
+V12_PHONE_LOGIN_NOTES.txt
+========================================================================================
+V12 Phone Login
+- Internal branded login and registration pages.
+- Customer login uses normalized Saudi mobile number + password.
+- Registration creates a portal user linked to res.partner.
+- Registered users can access /qr-menu/my-orders.
+- This version uses password authentication, not SMS OTP.
+
+========================================================================================
+V12_1_NOTES.txt
+========================================================================================
+V12.1
+- Added required email field during customer registration.
+- Saudi phone field now shows a fixed +966 country code.
+- Customer enters only 9 digits beginning with 5.
+- Login remains by mobile number + password.
+- Email is stored on the linked res.partner/user.
+
+========================================================================================
+V12_2_NOTES.txt
+========================================================================================
+V12.2 Email Password Reset
+- Added branded /qr-menu/forgot-password page.
+- Login page now includes 'Forgot password?'.
+- Uses Odoo auth_signup native reset token and email flow.
+- Response does not reveal whether an email is registered.
+- Requires outgoing email server and password reset feature configuration.
+
+========================================================================================
+V12_3_NOTES.txt
+========================================================================================
+V12.3
+- Fixed Odoo 19 res.users field: groups_id -> group_ids.
+- Uses Command.set() to assign the Portal group.
+
+========================================================================================
+V12_4_NOTES.txt
+========================================================================================
+V12.4 Customer Order History
+- My Orders now shows all orders linked to the customer account.
+- Also finds older guest orders by Saudi mobile number variants (+966, 05, 966, 00966).
+- Matching old guest orders are linked to the registered partner automatically.
+- Customer-facing status 'ready' is displayed as 'منفذ'.
+- Cancelled orders remain displayed as 'ملغي'.
+
+========================================================================================
+V12_5_NOTES.txt
+========================================================================================
+V12.5 POS Customer Link
+- Registered QR customer is copied to pos.order.partner_id.
+- Existing linked POS orders without a customer are backfilled when reloaded.
+- Guest QR orders continue without a POS customer.
+
+========================================================================================
+V12_7_NOTES.txt
+========================================================================================
+V12.7
+- Name, email, and Saudi mobile are mandatory in registration.
+- Added frontend and server-side validation.
+- Added app icon favicon, splash screen, and loading screen.
+- Preserved V12.6 functionality.
+
+========================================================================================
+V12_8_NOTES.txt
+========================================================================================
+V12.8 POS Cancel Sync
+- POS cancellation updates the linked QR order to cancelled.
+- The customer page displays the status as ملغي.
+- Ready/completed QR orders are not overwritten.
+
+========================================================================================
+V12_9_NOTES.txt
+========================================================================================
+V12.9 POS Delete/Cancel Sync
+- Deleting a draft POS order now sets the linked QR order to cancelled before unlink.
+- Explicit POS cancel actions also force QR cancellation.
+- Fixes QR orders remaining Accepted when cashier deletes/cancels an unpaid POS order.
+
+========================================================================================
+V12_10_NOTES.txt
+========================================================================================
+V12.10 POS Frontend Cancel Sync
+- Added a POS frontend patch on PosOrder.delete().
+- Before the cashier removes a local draft POS order, an RPC explicitly sets the linked QR order to cancelled.
+- The backend resolves the QR order by relation, POS id/uuid, reference, or QR order number.
+- Ready/completed QR orders are not changed.
+
+========================================================================================
+V13_MANAGER_DASHBOARD_NOTES.txt
+========================================================================================
+V13 Manager Dashboard
+- Added standalone /qr-menu/dashboard page for QT Cafe managers.
+- Added date/state/POS/customer-type filters.
+- Added KPIs, top products, latest orders, sales and customer counts.
+- Added store open/close toggle, closure message, reopen time and browse-while-closed setting.
+- Checkout is blocked while the store is closed.
+- Added QT Cafe Manager security group.
+
+========================================================================================
+V13_1_BUILD_FIX_NOTES.txt
+========================================================================================
+V13.1 Build Fix
+- Removed invalid Odoo 19 res.groups category_id field.
+- Replaced mixed-unit Sass min(1500px, 100%) with width/max-width.
+- Removed duplicate direct manager_dashboard.js script tag; asset bundle remains active.
+
+========================================================================================
+V13_2_NOTES.txt
+========================================================================================
+V13.2
+- Removed invalid category_id from res.groups for Odoo 19.
+
+========================================================================================
+V14_INDEPENDENT_MANAGER_NOTES.txt
+========================================================================================
+V14 Independent Manager Login
+- Added qtcafe.manager.account independent from res.users.
+- Added /qr-menu/manager/login and /qr-menu/manager/logout.
+- Dashboard and APIs use a secure HttpOnly cookie session.
+- Manager passwords are stored as PBKDF2 hashes, never plain text.
+- Managers can be created only by Odoo system administrators.
+- Dashboard access no longer depends on Odoo login or Odoo user groups.
+
+========================================================================================
+V14_1_NOTES.txt
+========================================================================================
+V14.1
+- Replaced deprecated _sql_constraints with models.Constraint for Odoo 19.
+- Manager login remains unique.
+
+========================================================================================
+V14_2_NOTES.txt
+========================================================================================
+V14.2 Odoo Menu Fix
+- QT Cafe now opens QR Orders first instead of redirecting to manager login.
+- Independent Managers remains under Configuration for Odoo administrators.
+- Manager Dashboard Login moved under Configuration and no longer hijacks the QT Cafe root menu.
+
+========================================================================================
+V14_3_NOTES.txt
+========================================================================================
+V14.3 Store and Product Availability
+- When store is closed and browsing is disabled, /qr-menu and /qr-menu/shop show only a closed-store page.
+- Dashboard includes QR menu product availability controls.
+- Unavailable products remain visible to customers with 'نفذت الكمية' and cannot be added to cart.
+- Order creation still rejects unavailable products server-side.
+
+========================================================================================
+V15_MULTI_BRANCH_NOTES.txt
+========================================================================================
+V15 Multi Branch / Nearest POS
+- Multiple POS configurations can be enabled as QR branches.
+- Each branch has name, address, latitude, longitude, open/closed state and maximum distance.
+- Customer can grant browser geolocation and branches are sorted nearest-first using Haversine distance.
+- No Google API key or billing is required.
+- Selected branch is saved as pos_config_id and the QR order goes only to that POS.
+- Dashboard shows branch status and can open/close each branch independently.
+
+========================================================================================
+V15_1_MANAGER_BRANCH_NOTES.txt
+========================================================================================
+V15.1
+- Each Independent Manager must be linked to one QR-enabled POS branch.
+- Dashboard orders and statistics are limited to the assigned POS.
+- Branch open/close controls affect only the assigned POS branch.
+- Manager cannot view or modify other branches.
+- Product availability is still global across branches in this version.
+
+========================================================================================
+V15_2_DASHBOARD_SECTIONS_NOTES.txt
+========================================================================================
+V15.2 Professional Dashboard Sections
+- Added two main dashboard pages: Overview and Management & Settings.
+- Moved store status, closure settings, branches/POS, and product availability into Management & Settings.
+- Kept KPIs, filters, top products, and recent orders in Overview.
+- Added sticky professional tab navigation and quick branch status summary.
+
+========================================================================================
+V15_3_NOTES.txt
+========================================================================================
+V15.3 Manager Branch Upgrade Fix
+- Removed database-level required=True from qtcafe.manager.account.pos_config_id.
+- Prevents upgrade warnings for existing manager records with NULL branch.
+- The branch remains required in the form UI.
+- Active manager accounts are validated to have a QR-enabled POS branch.
+
+========================================================================================
+V15_4_NOTES.txt
+========================================================================================
+V15.4 Reorganization
+- Independent Managers now support multiple POS branches (Many2many).
+- Dashboard permissions and filters are restricted to assigned POS branches.
+- Added top-level Products menu with QR Menu Products and Categories.
+- Moved Cashier/KDS/Store links under Configuration > Preview Pages.
+- QR Menu POS Routing is now a standalone QT Cafe settings page.
+- Renamed Default POS to Fallback POS; customer branch selection keeps priority.
+
+========================================================================================
+V15_5_NOTES.txt
+========================================================================================
+V15.5 Routing Settings Access Fix
+- Added access rules for qtcafe.routing.settings.
+- Access is restricted to Odoo system administrators.
+
+========================================================================================
+V15_6_NOTES.txt
+========================================================================================
+V15.6 Routing Settings UI Fix
+- Added a clean record name to remove NewId/model technical text.
+- Routing settings now open in a modal dialog.
+- Closing with X or Discard returns to QT Cafe instead of leaving the application.
+- Save keeps the user within the routing settings flow.
+
+========================================================================================
+V16_MAJOR_FEATURES_NOTES.txt
+========================================================================================
+V16 Major Checkout & Dashboard
+- Added payment methods: cash, card, electronic wallet.
+- Added order types: dine-in, takeaway, car order, delivery.
+- Added branch-specific table management and mandatory table selection for dine-in.
+- Added required car details for car orders.
+- Added browser geolocation for delivery with server-side distance validation per branch.
+- Delivery location is saved as a Google Maps link without requiring Google API.
+- Replaced customer-facing 'menu' terminology with 'product list'.
+- Added top 10 frequent customers based on completed orders and spending.
+- Rebuilt manager dashboard with professional tabs, analytics and VIP customers.
+
+========================================================================================
+V16_1_NOTES.txt
+========================================================================================
+V16.1
+- Fixed NameError when opening the product list.
+- Checkout validation now runs only inside create_order().
+- Payment, order type, table, car and delivery validation remain active.
+
+========================================================================================
+V16_2_NOTES.txt
+========================================================================================
+V16.2
+- Customer logout redirects to /qr-menu/shop.
+- Added daily highest/lowest sales and order comparisons.
+- Order types and payment methods can be enabled/disabled per POS branch.
+- Delivery radius is editable per branch from dashboard.
+- QR order customer/source/payment/order/car fields are readonly in backend form.
+
+========================================================================================
+V16_3_NOTES.txt
+========================================================================================
+V16.3 QWeb Context Fix
+- Added enabled_order_types and enabled_payment_methods to menu context.
+- Made customer product-list QWeb conditions read branch settings directly.
+- Fixes KeyError: enabled_order_types while rendering qr_menu_page.
+
+========================================================================================
+V16_4_NOTES.txt
+========================================================================================
+V16.4 Customer Logout and RTL
+- Added a dedicated /qr-menu/customer/logout route.
+- Customer logout no longer uses the independent manager logout route.
+- After logout, the customer returns to /qr-menu with Login, Register and Continue as Guest.
+- Added explicit RTL direction and alignment across the customer product-list interface.
+
+========================================================================================
+V16_5_NOTES.txt
+========================================================================================
+V16.5 Customer Logout / RTL Scope Fix
+- Customer logout uses /qr-menu/customer/logout only.
+- Logout ends the website customer session and returns to /qr-menu.
+- /qr-menu shows Login, Register and Continue as Guest.
+- RTL rules are scoped only to qr-menu/shop via qt-customer-shop-rtl.
+- Manager dashboard keeps its Arabic RTL direction and is no longer affected.
+
+========================================================================================
+V16_6_NOTES.txt
+========================================================================================
+V16.6 Dashboard RTL Restore
+- Restored the manager dashboard to full Arabic RTL layout.
+- Tabs, filters, tables, header, cards and forms now flow right-to-left.
+- Customer-shop RTL remains isolated and does not alter dashboard layout.
+
+========================================================================================
+V16_7_NOTES.txt
+========================================================================================
+V16.7 Deterministic Dashboard RTL
+- Reordered dashboard navigation, filters, table headers and rows in source.
+- Reversed KPI and daily-comparison rendering in JavaScript.
+- Header brand is fixed on the right and action buttons on the left.
+- The layout no longer depends only on inherited CSS direction.
+
+========================================================================================
+V16_8_NOTES.txt
+========================================================================================
+V16.8 inline dashboard RTL fix
+
+========================================================================================
+V16_9_NOTES.txt
+========================================================================================
+V16.9 Real RTL Fix
+- Removed double-reversal CSS and JavaScript.
+- Restored logical Arabic source order for header, tabs, filters and table columns.
+- Uses one clean RTL rule set only.
+
+========================================================================================
+V16_10_NOTES.txt
+========================================================================================
+V16.10 - Restore pre-RTL layout behavior
+
+- Kept the independent customer logout route introduced after V16.3.
+- Kept customer logout links pointing to /qr-menu/customer/logout.
+- Removed qt-customer-shop-rtl and dir="rtl" from the customer shop body.
+- Removed dashboard dir="rtl" attributes.
+- Removed the customer and dashboard RTL CSS blocks added after V16.3.
+- Customer shop and manager dashboard layout now match V16.3 behavior.
+
+========================================================================================
+V16_11_NOTES.txt
+========================================================================================
+Version 16.11
+- POS QR alerts are filtered by the active POS config_id.
+- Product sold-out availability is stored per POS branch.
+- Customer menu and order validation use branch-specific availability.
+- Manager must select a POS branch before changing product availability.
+
+========================================================================================
+V16_12_NOTES
+========================================================================================
+- استبدال _sql_constraints بصيغة models.Constraint المتوافقة مع Odoo 19.
+- الإبقاء على قيد تفرد توفر المنتج لكل نقطة بيع.
+
+========================================================================================
+V16_13_NOTES
+========================================================================================
+- إصلاح خطأ JavaScript: selectedPosConfigId is not defined.
+- إزالة استخدام المتغير من دالة أفضل المنتجات renderTopProducts.
+
+========================================================================================
+V16_14_NOTES
+========================================================================================
+- إضافة اختيار نقطة بيع واضح داخل قسم إدارة قائمة المنتجات.
+- عرض حالة توفر المنتجات بحسب الفرع المختار.
+
+========================================================================================
+V16_15_NOTES
+========================================================================================
+- فصل فلتر إدارة المنتجات بالكامل عن فلتر إحصائيات الداشبورد.
+- إضافة endpoint مستقل لتحميل منتجات وتوفر نقطة البيع.
+- إعادة تحميل قسم المنتجات فقط عند تغيير حالة المنتج.
+
+========================================================================================
+V16_16_NOTES
+========================================================================================
+- إصلاح خطأ حفظ Fallback POS.
+- استبدال Action الناقص بإغلاق نافذة الإعدادات بعد ظهور إشعار النجاح.
+
+========================================================================================
+V16_17_NOTES
+========================================================================================
+- تغيير الخط العام للداشبورد وصفحات العميل من Tahoma إلى Cairo.
+- تطبيق Cairo على صفحات القائمة والطلبات والواجهات الإدارية التابعة للموديول.
+- دمج جميع ملفات NOTES السابقة في ملف واحد مرتب حسب تسلسل الإصدارات.
+
+========================================================================================
+V16_18_NOTES
+========================================================================================
+- التراجع عن خط Cairo الخارجي بعد تأثيره على توزيع الواجهات.
+- إعادة الخط السابق Tahoma في الداشبورد وصفحات العميل.
+- الإبقاء على ملف الملاحظات الموحد وجميع الإصلاحات السابقة.
+
+
+========================================================================================
+V16_19_NOTES
+========================================================================================
+- تجهيز الموديول لاستخدام خط Cairo محليًا من static/src/fonts.
+- إضافة تعريفات @font-face للأوزان 400 و600 و700/800.
+- إضافة Tahoma كبديل تلقائي في حال عدم توفر ملفات الخط.
+- إضافة ضوابط line-height لتقليل تأثير اختلاف أبعاد Cairo على الواجهات.
+- إضافة ملف README داخل مجلد الخطوط يوضح أسماء الملفات المطلوبة.
+
+V16_20_NOTES
+- تضمين ملفات Cairo WOFF2 محليًا داخل الموديول.
+
+========================================================================================
+V16_21_NOTES
+========================================================================================
+- إصلاح ملف Cairo-Regular الذي لم يكن يحتوي على المحارف العربية.
+- استخدام ملف Cairo العربي الكامل للنصوص ذات الوزن العادي.
+- تغيير اسم عائلة الخط الداخلية لتجاوز كاش ملفات الخط القديمة.
+- فرض Cairo على العناصر النصية في صفحات العميل والداشبورد.
+- استثناء خطوط الأيقونات حتى لا تتأثر أيقونات Odoo وFont Awesome.
+- ضبط line-height للحقول والأزرار للحفاظ على توزيع الواجهات.

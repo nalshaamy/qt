@@ -1,0 +1,5 @@
+Odoo 19 POS order number fix:
+- name = QR order number
+- pos_reference = QR order number
+- tracking_number = QR order number (field shown as Order Number)
+- floating_order_name = QR order number
