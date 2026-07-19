@@ -37,3 +37,4 @@ Independent managers are not `res.users`; they use a separate model and session.
 - Added server-side pagination and operational filters for warehouse operations and transfers.
 - Added warehouse overview cards and direct navigation from dashboard summaries to the responsible workspace.
 - Standardized the independent manager session key as `flexsys_inventory_manager_id` while retaining legacy-session compatibility.
+Test For Acode
