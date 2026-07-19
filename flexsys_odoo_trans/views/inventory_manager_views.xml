@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_flexsys_inventory_manager_list" model="ir.ui.view">
+        <field name="name">flexsys.inventory.manager.list</field>
+        <field name="model">flexsys.inventory.manager</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="email"/>
+                <field name="warehouse_ids" widget="many2many_tags"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="last_login"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+    <record id="view_flexsys_inventory_manager_form" model="ir.ui.view">
+        <field name="name">flexsys.inventory.manager.form</field>
+        <field name="model">flexsys.inventory.manager</field>
+        <field name="arch" type="xml">
+            <form string="Independent Manager">
+                <sheet>
+                    <widget name="web_ribbon" title="Inactive" bg_color="text-bg-danger" invisible="active"/>
+                    <div class="oe_title"><h1><field name="name" placeholder="Manager name"/></h1></div>
+                    <group>
+                        <group>
+                            <field name="email"/>
+                            <field name="password" password="True" placeholder="Enter a new password"/>
+                            <field name="active"/>
+                            <field name="last_login" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="warehouse_ids" widget="many2many_tags" options="{'no_create': True}"/>
+                            <field name="warehouse_id" invisible="1"/>
+                        </group>
+                    </group>
+                    <group string="Dashboard Permissions">
+                        <field name="can_view_stock"/>
+                        <field name="can_view_moves"/>
+                        <field name="can_view_transfers"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <record id="action_flexsys_inventory_manager" model="ir.actions.act_window">
+        <field name="name">Independent Managers</field>
+        <field name="res_model">flexsys.inventory.manager</field>
+        <field name="view_mode">list,form</field>
+    </record>
+    <menuitem id="menu_flexsys_trans_root" name="FlexSys Trans Manager" sequence="20" groups="base.group_system"/>
+    <menuitem id="menu_flexsys_inventory_manager" name="Independent Managers" parent="menu_flexsys_trans_root" action="action_flexsys_inventory_manager" sequence="10"/>
+</odoo>
