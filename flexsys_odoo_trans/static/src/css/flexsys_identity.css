@@ -1,0 +1,122 @@
+/* FlexSys Unified Identity System — 19.0.1.5.0 */
+:root {
+    --fs-brand-primary: #102f4a;
+    --fs-brand-primary-strong: #0b263c;
+    --fs-brand-secondary: #5f8db2;
+    --fs-brand-secondary-soft: #eef5fa;
+    --fs-brand-accent: #f39a3c;
+    --fs-brand-surface: #ffffff;
+    --fs-brand-canvas: #f5f7fb;
+    --fs-brand-text: #1f2d3d;
+    --fs-brand-muted: #7b8794;
+    --fs-brand-border: #e8edf3;
+    --fs-brand-success: #25a76d;
+    --fs-brand-danger: #c43c3c;
+    --fs-radius-sm: 8px;
+    --fs-radius-md: 12px;
+    --fs-radius-lg: 18px;
+    --fs-shadow-sm: 0 8px 24px rgba(32, 54, 74, .06);
+    --fs-shadow-md: 0 16px 40px rgba(18, 42, 63, .18);
+    --fs-transition: 180ms ease;
+    --fs-font: "Cairo", "Tahoma", sans-serif;
+}
+
+.fs-app-shell,
+.fs-app-shell input,
+.fs-app-shell button,
+.fs-app-shell select,
+.fs-app-shell textarea {
+    font-family: var(--fs-font);
+}
+
+.fs-app-shell {
+    color: var(--fs-brand-text);
+    background: var(--fs-brand-canvas);
+}
+
+.fs-brand-mark {
+    color: #fff;
+    background: linear-gradient(135deg, var(--fs-brand-secondary), #84adca);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, .20);
+    letter-spacing: -.5px;
+}
+
+.fs-brand strong,
+.fs-login-brand strong,
+.fs-mobile-brand {
+    letter-spacing: -.25px;
+}
+
+.fs-brand-dot {
+    width: 7px;
+    height: 7px;
+    display: inline-block;
+    border-radius: 50%;
+    background: var(--fs-brand-accent);
+    box-shadow: 0 0 0 4px rgba(243, 154, 60, .13);
+    margin-inline-end: 7px;
+}
+
+.fs-identity-caption {
+    margin-bottom: 12px;
+    padding-inline: 4px;
+    color: rgba(255, 255, 255, .48);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: .35px;
+    text-transform: uppercase;
+}
+
+.fs-panel,
+.fs-card,
+.fs-login-card,
+.fs-filter-menu {
+    border-color: var(--fs-brand-border);
+}
+
+.fs-panel,
+.fs-card {
+    box-shadow: var(--fs-shadow-sm);
+}
+
+.fs-primary-btn,
+.fs-filter-apply {
+    transition: transform var(--fs-transition), box-shadow var(--fs-transition), opacity var(--fs-transition);
+}
+
+.fs-primary-btn:hover,
+.fs-filter-apply:hover {
+    transform: translateY(-1px);
+    opacity: .96;
+}
+
+.fs-primary-btn:focus-visible,
+.fs-filter-apply:focus-visible,
+.fs-filter-clear:focus-visible,
+.fs-nav-link:focus-visible,
+.fs-column-filter > summary:focus-visible {
+    outline: 3px solid rgba(95, 141, 178, .28);
+    outline-offset: 2px;
+}
+
+.fs-table thead th {
+    color: #536170;
+}
+
+.fs-table tbody tr {
+    transition: background-color var(--fs-transition);
+}
+
+.fs-table tbody tr:hover {
+    background: #f8fbfd;
+}
+
+.fs-topbar-badge {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid rgba(95, 141, 178, .16);
+}
+
+@media (max-width: 800px) {
+    .fs-identity-caption { display: none; }
+}
