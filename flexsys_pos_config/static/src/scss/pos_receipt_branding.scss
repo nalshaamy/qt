@@ -1,0 +1,18 @@
+.flexsys-pos-receipt-custom-logo {
+    margin: 0 auto 8px;
+
+    img {
+        display: block;
+        width: auto;
+        max-width: 180px;
+        max-height: 90px;
+        margin: 0 auto;
+        object-fit: contain;
+    }
+}
+
+/* When a dedicated receipt logo is configured, suppress the standard company
+   logo only; the remaining standard receipt header information is preserved. */
+.flexsys-custom-receipt-logo-active .pos-receipt-logo {
+    display: none !important;
+}
