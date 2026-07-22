@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- FLPOS settings under Point of Sale > Configuration > Settings. -->
+    <record id="res_config_settings_view_form_flexsys_pos_config" model="ir.ui.view">
+        <field name="name">res.config.settings.form.flexsys.pos.config</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="point_of_sale.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//app[@name='point_of_sale']" position="inside">
+                <!-- Receipt settings: each POS keeps its own receipt identity. -->
+                <block title="Receipt" name="flexsys_pos_receipt_settings">
+                    <setting id="flexsys_enable_custom_receipt_logo_setting"
+                             string="Custom Receipt Logo"
+                             help="Display a custom logo on customer receipts.">
+                        <field name="flexsys_enable_custom_receipt_logo"/>
+                        <div class="content-group mt16"
+                             invisible="not flexsys_enable_custom_receipt_logo">
+                            <label for="flexsys_receipt_logo" string="Receipt Logo"/>
+                            <div class="text-muted mb8">
+                                Upload a logo used only by this Point of Sale.
+                            </div>
+                            <field name="flexsys_receipt_logo"
+                                   widget="image"
+                                   class="oe_avatar"
+                                   style="max-width: 120px;"
+                                   options="{'preview_image': 'flexsys_receipt_logo', 'size': [120, 120]}"/>
+                        </div>
+                    </setting>
+
+                    <setting id="flexsys_hide_company_logo_setting"
+                             string="Hide Default Receipt Logo"
+                             help="Hide the standard company logo from customer receipts.">
+                        <field name="flexsys_hide_company_logo"/>
+                        <div class="content-group mt16">
+                            <div class="d-flex align-items-start gap-2">
+                                <field name="flexsys_hide_powered_by_odoo"/>
+                                <div>
+                                    <label for="flexsys_hide_powered_by_odoo"
+                                           string="Hide &quot;Powered by Odoo&quot;"/>
+                                    <div class="text-muted">
+                                        Remove the Powered by Odoo line from customer receipts.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </setting>
+                </block>
+
+                <!-- Closing reports are independent and can be enabled separately. -->
+                <block title="Closing Reports" name="flexsys_pos_closing_report_settings">
+                    <setting id="flexsys_enable_thermal_closing_report_setting"
+                             string="Thermal Closing Report"
+                             help="Print session closing reports on thermal printers.">
+                        <field name="flexsys_enable_thermal_closing_report"/>
+                    </setting>
+
+                    <setting id="flexsys_enable_a4_closing_report_setting"
+                             string="A4 Closing Report"
+                             help="Generate printable A4 session reports or PDF files.">
+                        <field name="flexsys_enable_a4_closing_report"/>
+                    </setting>
+                </block>
+            </xpath>
+        </field>
+    </record>
+</odoo>
