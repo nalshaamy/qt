@@ -19,13 +19,22 @@ class FlexsysPosReceiptTemplate(models.Model):
         default=lambda self: self.env.company,
         index=True,
     )
+    # Kept temporarily to preserve and migrate data from releases that used
+    # one Point of Sale per template. New code must use pos_config_ids.
     pos_config_id = fields.Many2one(
         "pos.config",
-        string="Point of Sale",
-        required=True,
-        domain="[('company_id', '=', company_id)]",
+        string="Legacy Point of Sale",
         index=True,
-        ondelete="cascade",
+        ondelete="set null",
+        copy=False,
+    )
+    pos_config_ids = fields.Many2many(
+        "pos.config",
+        "flexsys_receipt_template_pos_rel",
+        "template_id",
+        "pos_config_ids",
+        string="Points of Sale",
+        domain="[('company_id', '=', company_id)]",
     )
     is_default = fields.Boolean(
         string="Default Template",
@@ -45,31 +54,71 @@ class FlexsysPosReceiptTemplate(models.Model):
         sanitize=False,
     )
 
-    _name_pos_config_unique = models.Constraint(
-        "UNIQUE(name, pos_config_id)",
-        "Template names must be unique per Point of Sale.",
-    )
-
-    @api.constrains("is_default", "pos_config_id", "active")
-    def _check_single_default_template(self):
-        for template in self.filtered(lambda rec: rec.is_default and rec.active):
-            duplicate = self.search_count(
+    @api.constrains("name", "pos_config_ids")
+    def _check_unique_name_per_pos(self):
+        """Prevent duplicate template names on any shared Point of Sale."""
+        for template in self.filtered(lambda rec: rec.name and rec.pos_config_ids):
+            duplicate = self.search(
                 [
                     ("id", "!=", template.id),
-                    ("pos_config_id", "=", template.pos_config_id.id),
-                    ("is_default", "=", True),
-                    ("active", "=", True),
-                ]
+                    ("name", "=", template.name),
+                    ("pos_config_ids", "in", template.pos_config_ids.ids),
+                ],
+                limit=1,
             )
             if duplicate:
+                shared_pos = template.pos_config_ids & duplicate.pos_config_ids
                 raise ValidationError(
-                    _("Only one active default receipt template is allowed per Point of Sale.")
+                    _(
+                        'Template name "%(template_name)s" is already used for '
+                        'Point of Sale "%(pos_name)s".',
+                        template_name=template.name,
+                        pos_name=shared_pos[:1].display_name,
+                    )
                 )
 
-    @api.onchange("pos_config_id")
-    def _onchange_pos_config_id(self):
-        if self.pos_config_id:
-            self.company_id = self.pos_config_id.company_id
+    @api.constrains("pos_config_ids")
+    def _check_pos_company(self):
+        for template in self:
+            invalid_pos = template.pos_config_ids.filtered(
+                lambda pos: pos.company_id != template.company_id
+            )
+            if invalid_pos:
+                raise ValidationError(
+                    _("All selected Points of Sale must belong to the template company.")
+                )
+
+    @api.constrains("pos_config_ids")
+    def _check_pos_config_required(self):
+        for template in self:
+            if not template.pos_config_ids:
+                raise ValidationError(
+                    _("Select at least one Point of Sale for the receipt template.")
+                )
+
+    @api.constrains("is_default", "pos_config_ids", "active")
+    def _check_single_default_template(self):
+        for template in self.filtered(
+            lambda rec: rec.is_default and rec.active and rec.pos_config_ids
+        ):
+            duplicate = self.search(
+                [
+                    ("id", "!=", template.id),
+                    ("pos_config_ids", "in", template.pos_config_ids.ids),
+                    ("is_default", "=", True),
+                    ("active", "=", True),
+                ],
+                limit=1,
+            )
+            if duplicate:
+                shared_pos = template.pos_config_ids & duplicate.pos_config_ids
+                raise ValidationError(
+                    _(
+                        'Only one active default receipt template is allowed for '
+                        'Point of Sale "%(pos_name)s".',
+                        pos_name=shared_pos[:1].display_name,
+                    )
+                )
 
     @api.depends(
         "name",
@@ -98,7 +147,12 @@ class FlexsysPosReceiptTemplate(models.Model):
                 + "</div>"
             )
 
-        pos_name = self.pos_config_id.display_name or _("Point of Sale")
+        if len(self.pos_config_ids) == 1:
+            pos_name = self.pos_config_ids.display_name
+        elif self.pos_config_ids:
+            pos_name = _("%s Points of Sale") % len(self.pos_config_ids)
+        else:
+            pos_name = _("No Point of Sale")
         return Markup(
             """
             <div class="o_flexsys_receipt_preview_wrap">
@@ -190,6 +244,18 @@ class FlexsysPosReceiptTemplate(models.Model):
             )
         )
 
+    def init(self):
+        """Migrate legacy Many2one assignments into the new Many2many relation."""
+        self.env.cr.execute(
+            """
+            INSERT INTO flexsys_receipt_template_pos_rel (template_id, pos_config_id)
+            SELECT id, pos_config_id
+              FROM flexsys_pos_receipt_template
+             WHERE pos_config_id IS NOT NULL
+            ON CONFLICT DO NOTHING
+            """
+        )
+
     def action_preview(self):
         self.ensure_one()
         return {
@@ -204,8 +270,24 @@ class FlexsysPosReceiptTemplate(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         templates = super().create(vals_list)
+        templates._sync_legacy_pos_config()
         templates._ensure_default_blocks()
         return templates
+
+    def write(self, vals):
+        result = super().write(vals)
+        if "pos_config_ids" in vals:
+            self._sync_legacy_pos_config()
+        return result
+
+    def _sync_legacy_pos_config(self):
+        """Keep the old field populated until dependent XML/code is migrated."""
+        for template in self:
+            legacy_pos = template.pos_config_ids[:1]
+            if template.pos_config_id != legacy_pos:
+                super(FlexsysPosReceiptTemplate, template).write(
+                    {"pos_config_id": legacy_pos.id or False}
+                )
 
     def _ensure_default_blocks(self):
         Block = self.env["flexsys.pos.receipt.block"]
