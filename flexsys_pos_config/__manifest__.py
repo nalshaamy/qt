@@ -4,7 +4,7 @@
 {
     "name": "FLPOS",
     "summary": "Configurable POS receipt engine and enhanced session closing reports",
-    "version": "19.0.4.2.0",
+    "version": "19.0.4.2.1",
     "category": "Sales/Point of Sale",
     "author": "FlexSys",
     "website": "https://flexsys.sa",

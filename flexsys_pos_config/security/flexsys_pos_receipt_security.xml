@@ -11,16 +11,27 @@
         <field name="sequence">36</field>
     </record>
 
-    <record id="group_flexsys_receipt_designer_user" model="res.groups">
-        <field name="name">Receipt Studio User</field>
+    <!-- Odoo 19 classifies user permissions through res.groups.privilege. -->
+    <record id="privilege_flexsys_receipt_studio" model="res.groups.privilege">
+        <field name="name">Receipt Studio</field>
+        <field name="description">Control access to FLPOS Receipt Studio.</field>
+        <field name="placeholder">No Access</field>
+        <field name="sequence">10</field>
         <field name="category_id" ref="module_category_flexsys_pos"/>
+    </record>
+
+    <record id="group_flexsys_receipt_designer_user" model="res.groups">
+        <field name="name">User</field>
+        <field name="sequence">10</field>
+        <field name="privilege_id" ref="privilege_flexsys_receipt_studio"/>
         <field name="implied_ids" eval="[(4, ref('point_of_sale.group_pos_user'))]"/>
         <field name="comment">Can open Receipt Studio and create or edit receipt templates.</field>
     </record>
 
     <record id="group_flexsys_receipt_designer_manager" model="res.groups">
-        <field name="name">Receipt Studio Manager</field>
-        <field name="category_id" ref="module_category_flexsys_pos"/>
+        <field name="name">Manager</field>
+        <field name="sequence">20</field>
+        <field name="privilege_id" ref="privilege_flexsys_receipt_studio"/>
         <field name="implied_ids" eval="[(4, ref('group_flexsys_receipt_designer_user'))]"/>
         <field name="comment">Can fully manage and delete FLPOS receipt templates and components.</field>
     </record>
