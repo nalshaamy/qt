@@ -19,24 +19,13 @@ class FlexsysPosReceiptTemplate(models.Model):
         default=lambda self: self.env.company,
         index=True,
     )
-    # Legacy field kept temporarily for backward compatibility with existing
-    # views and records. New development must use pos_config_ids.
     pos_config_id = fields.Many2one(
         "pos.config",
-        string="Legacy Point of Sale",
+        string="Point of Sale",
+        required=True,
         domain="[('company_id', '=', company_id)]",
         index=True,
-        ondelete="set null",
-        copy=False,
-    )
-    pos_config_ids = fields.Many2many(
-        "pos.config",
-        "flexsys_receipt_template_pos_rel",
-        "receipt_template_id",
-        "pos_config_ids",
-        "pos_config_id",
-        string="Points of Sale",
-        domain="[('company_id', '=', company_id)]",
+        ondelete="cascade",
     )
     is_default = fields.Boolean(
         string="Default Template",
@@ -56,68 +45,31 @@ class FlexsysPosReceiptTemplate(models.Model):
         sanitize=False,
     )
 
-    @api.constrains("name", "pos_config_ids")
-    def _check_unique_name_per_pos(self):
-        for template in self.filtered(lambda rec: rec.name and rec.pos_config_ids):
-            duplicate = self.search(
-                [
-                    ("id", "!=", template.id),
-                    ("name", "=", template.name),
-                    ("pos_config_ids", "in", template.pos_config_ids.ids),
-                ],
-                limit=1,
-            )
-            if duplicate:
-                shared_pos = template.pos_config_ids & duplicate.pos_config_ids
-                raise ValidationError(
-                    _(
-                        'Template name "%(template_name)s" is already used for '
-                        'Point of Sale "%(pos_name)s".',
-                        template_name=template.name,
-                        pos_name=shared_pos[:1].display_name,
-                    )
-                )
+    _name_pos_config_unique = models.Constraint(
+        "UNIQUE(name, pos_config_id)",
+        "Template names must be unique per Point of Sale.",
+    )
 
-    @api.constrains("pos_config_ids", "company_id")
-    def _check_pos_company(self):
-        for template in self:
-            invalid_pos = template.pos_config_ids.filtered(
-                lambda pos: pos.company_id != template.company_id
-            )
-            if invalid_pos:
-                raise ValidationError(
-                    _("All selected Points of Sale must belong to the template company.")
-                )
-
-    @api.constrains("is_default", "pos_config_ids", "active")
+    @api.constrains("is_default", "pos_config_id", "active")
     def _check_single_default_template(self):
-        for template in self.filtered(
-            lambda rec: rec.is_default and rec.active and rec.pos_config_ids
-        ):
-            duplicate = self.search(
+        for template in self.filtered(lambda rec: rec.is_default and rec.active):
+            duplicate = self.search_count(
                 [
                     ("id", "!=", template.id),
-                    ("pos_config_ids", "in", template.pos_config_ids.ids),
+                    ("pos_config_id", "=", template.pos_config_id.id),
                     ("is_default", "=", True),
                     ("active", "=", True),
-                ],
-                limit=1,
+                ]
             )
             if duplicate:
-                shared_pos = template.pos_config_ids & duplicate.pos_config_ids
                 raise ValidationError(
-                    _(
-                        'Only one active default receipt template is allowed for '
-                        'Point of Sale "%(pos_name)s".',
-                        pos_name=shared_pos[:1].display_name,
-                    )
+                    _("Only one active default receipt template is allowed per Point of Sale.")
                 )
 
     @api.onchange("pos_config_id")
     def _onchange_pos_config_id(self):
         if self.pos_config_id:
             self.company_id = self.pos_config_id.company_id
-            self.pos_config_ids = [(6, 0, [self.pos_config_id.id])]
 
     @api.depends(
         "name",
@@ -146,15 +98,7 @@ class FlexsysPosReceiptTemplate(models.Model):
                 + "</div>"
             )
 
-        selected_pos = self.pos_config_ids
-        if len(selected_pos) == 1:
-            pos_name = selected_pos.display_name
-        elif selected_pos:
-            pos_name = _("%s Points of Sale") % len(selected_pos)
-        elif self.pos_config_id:
-            pos_name = self.pos_config_id.display_name
-        else:
-            pos_name = _("No Point of Sale")
+        pos_name = self.pos_config_id.display_name or _("Point of Sale")
         return Markup(
             """
             <div class="o_flexsys_receipt_preview_wrap">
@@ -259,40 +203,9 @@ class FlexsysPosReceiptTemplate(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        prepared_vals_list = []
-        for vals in vals_list:
-            vals = dict(vals)
-            legacy_pos_id = vals.get("pos_config_id")
-            if legacy_pos_id and not vals.get("pos_config_ids"):
-                vals["pos_config_ids"] = [(6, 0, [legacy_pos_id])]
-            prepared_vals_list.append(vals)
-
-        templates = super().create(prepared_vals_list)
-        templates._sync_legacy_pos_config()
+        templates = super().create(vals_list)
         templates._ensure_default_blocks()
         return templates
-
-    def write(self, vals):
-        vals = dict(vals)
-        legacy_pos_id = vals.get("pos_config_id")
-        if legacy_pos_id and "pos_config_ids" not in vals:
-            vals["pos_config_ids"] = [(6, 0, [legacy_pos_id])]
-
-        result = super().write(vals)
-
-        if "pos_config_ids" in vals and "pos_config_id" not in vals:
-            self._sync_legacy_pos_config()
-
-        return result
-
-    def _sync_legacy_pos_config(self):
-        for template in self:
-            first_pos = template.pos_config_ids[:1]
-            legacy_pos_id = first_pos.id if first_pos else False
-            if template.pos_config_id.id != legacy_pos_id:
-                super(FlexsysPosReceiptTemplate, template).write(
-                    {"pos_config_id": legacy_pos_id}
-                )
 
     def _ensure_default_blocks(self):
         Block = self.env["flexsys.pos.receipt.block"]
