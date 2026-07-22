@@ -2,7 +2,7 @@
     <field name="name">flexsys.pos.receipt.template.search</field>
     <field name="model">flexsys.pos.receipt.template</field>
     <field name="arch" type="xml">
-        <search string="Receipt Templates">
+        <search>
             <field name="name"/>
             <field name="pos_config_id"/>
 
@@ -18,20 +18,20 @@
                 domain="[('active', '=', False)]"
             />
 
-            <separator/>
+            <group string="Group By">
+                <filter
+                    name="group_pos"
+                    string="Point of Sale"
+                    context="{'group_by': 'pos_config_id'}"
+                />
 
-            <filter
-                name="group_pos"
-                string="Point of Sale"
-                context="{'group_by': 'pos_config_id'}"
-            />
-
-            <filter
-                name="group_company"
-                string="Company"
-                context="{'group_by': 'company_id'}"
-                groups="base.group_multi_company"
-            />
+                <filter
+                    name="group_company"
+                    string="Company"
+                    context="{'group_by': 'company_id'}"
+                    groups="base.group_multi_company"
+                />
+            </group>
         </search>
     </field>
 </record>
