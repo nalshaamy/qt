@@ -1,37 +1,42 @@
-<record id="view_flexsys_receipt_template_search" model="ir.ui.view">
-    <field name="name">flexsys.pos.receipt.template.search</field>
-    <field name="model">flexsys.pos.receipt.template</field>
-    <field name="arch" type="xml">
-        <search>
-            <field name="name"/>
-            <field name="pos_config_id"/>
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
 
-            <filter
-                name="default_templates"
-                string="Default"
-                domain="[('is_default', '=', True)]"
-            />
+    <record id="view_flexsys_receipt_template_search" model="ir.ui.view">
+        <field name="name">flexsys.pos.receipt.template.search</field>
+        <field name="model">flexsys.pos.receipt.template</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="pos_config_id"/>
 
-            <filter
-                name="archived"
-                string="Archived"
-                domain="[('active', '=', False)]"
-            />
-
-            <group string="Group By">
                 <filter
-                    name="group_pos"
-                    string="Point of Sale"
-                    context="{'group_by': 'pos_config_id'}"
+                    name="default_templates"
+                    string="Default"
+                    domain="[('is_default', '=', True)]"
                 />
 
                 <filter
-                    name="group_company"
-                    string="Company"
-                    context="{'group_by': 'company_id'}"
-                    groups="base.group_multi_company"
+                    name="archived"
+                    string="Archived"
+                    domain="[('active', '=', False)]"
                 />
-            </group>
-        </search>
-    </field>
-</record>
+
+                <group string="Group By">
+                    <filter
+                        name="group_pos"
+                        string="Point of Sale"
+                        context="{'group_by': 'pos_config_id'}"
+                    />
+
+                    <filter
+                        name="group_company"
+                        string="Company"
+                        context="{'group_by': 'company_id'}"
+                        groups="base.group_multi_company"
+                    />
+                </group>
+            </search>
+        </field>
+    </record>
+
+</odoo>
