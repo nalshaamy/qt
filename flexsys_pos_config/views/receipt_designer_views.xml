@@ -1,11 +1,117 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
+    <record id="view_flexsys_receipt_template_list" model="ir.ui.view">
+        <field name="name">flexsys.pos.receipt.template.list</field>
+        <field name="model">flexsys.pos.receipt.template</field>
+        <field name="arch" type="xml">
+            <list string="Receipt Templates" default_order="name">
+                <field name="name"/>
+                <field name="pos_config_id"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="is_default"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_flexsys_receipt_template_form" model="ir.ui.view">
+        <field name="name">flexsys.pos.receipt.template.form</field>
+        <field name="model">flexsys.pos.receipt.template</field>
+        <field name="arch" type="xml">
+            <form string="Receipt Template">
+                <header>
+                    <button
+                        name="action_preview"
+                        type="object"
+                        string="Preview Receipt"
+                        class="btn-primary"
+                        icon="fa-eye"
+                    />
+                </header>
+
+                <sheet>
+                    <widget
+                        name="web_ribbon"
+                        title="Archived"
+                        bg_color="text-bg-danger"
+                        invisible="active"
+                    />
+
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1>
+                            <field
+                                name="name"
+                                placeholder="Example: Coffee Shop Receipt"
+                            />
+                        </h1>
+                    </div>
+
+                    <group>
+                        <group>
+                            <field
+                                name="pos_config_id"
+                                options="{'no_create': True}"
+                            />
+                            <field
+                                name="company_id"
+                                groups="base.group_multi_company"
+                            />
+                        </group>
+
+                        <group>
+                            <field name="is_default"/>
+                            <field name="active"/>
+                        </group>
+                    </group>
+
+                    <field
+                        name="description"
+                        placeholder="Internal notes about this template..."
+                    />
+
+                    <notebook>
+                        <page string="Receipt Blocks" name="receipt_blocks">
+                            <field
+                                name="block_ids"
+                                context="{'default_template_id': id}"
+                            >
+                                <list editable="bottom" default_order="sequence">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="enabled"/>
+                                    <field name="block_type"/>
+                                    <field name="title"/>
+                                    <field name="show_title" optional="hide"/>
+                                    <field name="content" optional="hide"/>
+                                </list>
+                            </field>
+                        </page>
+
+                        <page string="Preview" name="preview">
+                            <div class="alert alert-info" role="alert">
+                                The preview uses safe sample data. Live POS
+                                receipt rendering will be connected in the next
+                                release.
+                            </div>
+
+                            <field
+                                name="preview_html"
+                                nolabel="1"
+                                readonly="1"
+                            />
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
     <record id="view_flexsys_receipt_template_search" model="ir.ui.view">
         <field name="name">flexsys.pos.receipt.template.search</field>
         <field name="model">flexsys.pos.receipt.template</field>
         <field name="arch" type="xml">
-            <search>
+            <search string="Receipt Templates">
                 <field name="name"/>
                 <field name="pos_config_id"/>
 
@@ -21,22 +127,51 @@
                     domain="[('active', '=', False)]"
                 />
 
-                <group string="Group By">
-                    <filter
-                        name="group_pos"
-                        string="Point of Sale"
-                        context="{'group_by': 'pos_config_id'}"
-                    />
+                <separator/>
 
-                    <filter
-                        name="group_company"
-                        string="Company"
-                        context="{'group_by': 'company_id'}"
-                        groups="base.group_multi_company"
-                    />
-                </group>
+                <filter
+                    name="group_pos"
+                    string="Point of Sale"
+                    context="{'group_by': 'pos_config_id'}"
+                />
+
+                <filter
+                    name="group_company"
+                    string="Company"
+                    context="{'group_by': 'company_id'}"
+                    groups="base.group_multi_company"
+                />
             </search>
         </field>
     </record>
+
+    <record id="action_flexsys_receipt_templates" model="ir.actions.act_window">
+        <field name="name">Receipt Designer</field>
+        <field name="res_model">flexsys.pos.receipt.template</field>
+        <field name="view_mode">list,form</field>
+        <field
+            name="search_view_id"
+            ref="view_flexsys_receipt_template_search"
+        />
+        <field name="context">{}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create your first receipt template
+            </p>
+            <p>
+                Arrange receipt blocks, assign the template to a Point of Sale,
+                and preview it with sample data.
+            </p>
+        </field>
+    </record>
+
+    <menuitem
+        id="menu_flexsys_receipt_designer"
+        name="Receipt Designer"
+        parent="point_of_sale.menu_point_root"
+        action="action_flexsys_receipt_templates"
+        sequence="85"
+        groups="flexsys_pos_config.group_flexsys_receipt_designer_user"
+    />
 
 </odoo>
