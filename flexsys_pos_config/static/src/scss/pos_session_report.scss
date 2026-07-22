@@ -1,0 +1,17 @@
+.fs-pos-report { font-family: DejaVu Sans, sans-serif; color: #243746; font-size: 11px; }
+.fs-pos-report h1 { font-size: 24px; margin: 0; font-weight: 700; }
+.fs-pos-report h2 { font-size: 16px; margin: 18px 0 8px; border-right: 4px solid #f28c28; padding-right: 8px; }
+.fs-title-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #5f8db2; padding-bottom: 10px; }
+.fs-session-badge { background: #5f8db2; color: white; padding: 8px 14px; border-radius: 6px; font-weight: 700; }
+.fs-muted, .fs-footer { color: #6c757d; }
+.fs-info-grid, .fs-kpis, .fs-cash-grid { display: table; width: 100%; table-layout: fixed; border-spacing: 6px; margin-top: 10px; }
+.fs-info-grid > div, .fs-kpis > div, .fs-cash-grid > div { display: table-cell; border: 1px solid #dbe3ea; padding: 8px; vertical-align: top; }
+.fs-info-grid span, .fs-kpis span, .fs-cash-grid span { display: block; color: #6c757d; margin-bottom: 4px; }
+.fs-kpis strong { font-size: 15px; }
+.fs-table { width: 100%; border-collapse: collapse; }
+.fs-table th { background: #eaf1f6; color: #243746; font-weight: 700; }
+.fs-table th, .fs-table td { border: 1px solid #dbe3ea; padding: 5px; text-align: right; vertical-align: middle; }
+.fs-products { font-size: 9px; }
+.fs-signatures { display: flex; justify-content: space-around; margin-top: 30px; text-align: center; }
+.fs-signatures span { display: inline-block; width: 180px; border-bottom: 1px solid #777; margin-top: 30px; }
+.fs-footer { text-align: center; font-size: 8px; margin-top: 20px; }
