@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-name="pos_bonat_loyalty.BonatCodeButton">
+        <button t-if="pos.config.company_id?.enable_bonat_integration or pos.company?.enable_bonat_integration" class="control-button btn btn-light rounded-0 fw-bolder" t-on-click="() => this.fetch_bonat_code()">
+            <i class="fa fa-barcode me-1"></i>
+            <span> </span>
+            <span>Enter Bonat Code</span>
+        </button>
+    </t>
+
+    <!-- Odoo 19: control buttons are no longer registered via ProductScreen.addControlButton.
+         Inject the Bonat button into the core ControlButtons template instead. -->
+    <t t-name="pos_bonat_loyalty.ControlButtonsBonat" t-inherit="point_of_sale.ControlButtons" t-inherit-mode="extension">
+        <xpath expr="//div[hasclass('control-buttons-modal')]" position="inside">
+            <BonatCodeButton/>
+        </xpath>
+    </t>
+
+</templates>

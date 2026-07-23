@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_config_settings_view_form_inherit_bonat" model="ir.ui.view">
+        <field name="name">pos.bonat.loyalty.settings</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="point_of_sale.res_config_settings_view_form" />
+        <field name="arch" type="xml">
+            <xpath expr="//block[@id='pos_inventory_section']" position="after">
+                <block title="Bonat Integration" id="pos_pos_bonat_integration_section">
+                    <setting>
+                        <field name="enable_bonat_integration" />
+                        <div class="content-group" invisible="not enable_bonat_integration">
+                            <div class="mt16">
+                                <label string="API Key" for="bonat_api_key" class="o_light_label" />
+                                <field name="bonat_api_key" placeholder="API Key" />
+                            </div>
+                            <div>
+                                <label string="Merchant ID" for="bonat_merchant_id" class="o_light_label" />
+                                <field name="bonat_merchant_id" placeholder="Merchant ID" />
+                            </div>
+                            <div>
+                                <label string="Merchant Name" for="bonat_merchant_name" class="o_light_label" />
+                                <field name="bonat_merchant_name" placeholder="Merchant Name" />
+                            </div>
+                        </div>
+                        <!-- <field name="bonat_discount_percentage_product_id"/> -->
+                    </setting>
+                </block>
+            </xpath>
+        </field>
+    </record>
+</odoo>
