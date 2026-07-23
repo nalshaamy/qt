@@ -1,39 +1,161 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates id="template" xml:space="preserve">
-    <!--
-        FLPOS Receipt Engine - foundation.
-
-        The extension stays inside OrderReceipt where the current order and
-        its POS configuration are available. It deliberately avoids patching
-        ReceiptHeader, POS loaders, stores, and JavaScript services.
-    -->
     <t t-name="flexsys_pos_config.OrderReceipt"
        t-inherit="point_of_sale.OrderReceipt"
        t-inherit-mode="extension">
 
-        <!--
-            Add feature classes to the receipt root. CSS uses these classes to
-            control Odoo's default receipt logo without touching ReceiptHeader.
-        -->
+        <!-- Use Odoo's standard receipt only when no active Receipt Studio design exists. -->
         <xpath expr="//div[hasclass('pos-receipt')]" position="attributes">
-            <attribute name="t-att-class">{
-                'flexsys-receipt-engine': true,
-                'flexsys-hide-default-receipt-logo': order.config.flexsys_hide_company_logo,
-            }</attribute>
+            <attribute name="t-if">!order.config.flexsys_receipt_design?.blocks?.length</attribute>
         </xpath>
 
-        <!-- Dedicated logo for this Point of Sale. -->
-        <xpath expr="//ReceiptHeader" position="before">
-            <div t-if="order.config.flexsys_enable_custom_receipt_logo and order.config.flexsys_has_receipt_logo"
-                 class="flexsys-receipt-logo text-center">
-                <img t-att-src="'/web/image/pos.config/' + order.config.id + '/flexsys_receipt_logo'"
-                     alt="Receipt Logo"/>
+        <!-- Receipt Studio is the single presentation layer for configured receipts. -->
+        <xpath expr="//div[hasclass('pos-receipt')]" position="before">
+            <div t-if="order.config.flexsys_receipt_design?.blocks?.length"
+                 class="pos-receipt p-2 flexsys-studio-receipt"
+                 t-att-data-template-id="order.config.flexsys_receipt_design.template_id">
+                <t t-set="showTaxGroupLabels" t-value="doesAnyOrderlineHaveTaxLabel()"/>
+                <t t-set="taxTotals" t-value="order.prices.taxDetails"/>
+                <t t-set="company" t-value="order.company"/>
+
+                <t t-foreach="order.config.flexsys_receipt_design.blocks"
+                   t-as="block"
+                   t-key="block.id">
+                    <section t-att-class="{
+                                'flexsys-studio-block': true,
+                                'flexsys-block-bold': block.bold,
+                                'flexsys-size-small': block.font_size === 'small',
+                                'flexsys-size-large': block.font_size === 'large',
+                                'flexsys-size-xlarge': block.font_size === 'xlarge',
+                            }"
+                             t-att-style="'text-align:' + block.alignment + ';'"
+                             t-att-data-block-type="block.type">
+                        <div t-if="block.show_title" class="flexsys-block-title" t-esc="block.title"/>
+
+                        <t t-if="block.type === 'logo'">
+                            <img t-if="order.config.flexsys_enable_custom_receipt_logo and order.config.flexsys_has_receipt_logo"
+                                 t-att-src="'/web/image/pos.config/' + order.config.id + '/flexsys_receipt_logo'"
+                                 class="flexsys-studio-logo"
+                                 alt="Receipt Logo"/>
+                            <img t-elif="!order.config.flexsys_hide_company_logo"
+                                 t-att-src="'/web/image/res.company/' + company.id + '/logo'"
+                                 class="flexsys-studio-logo"
+                                 alt="Company Logo"/>
+                        </t>
+
+                        <t t-elif="block.type === 'company' or block.type === 'header'">
+                            <div class="flexsys-company-name" t-esc="company.name"/>
+                            <div t-if="company.vat"><span>VAT: </span><span t-esc="company.vat"/></div>
+                            <div t-if="company.company_registry"><span>CR: </span><span t-esc="company.company_registry"/></div>
+                            <div t-if="company.phone" dir="ltr" t-esc="company.phone"/>
+                            <div t-if="company.email" t-esc="company.email"/>
+                            <div t-if="company.website" t-esc="company.website"/>
+                            <div t-if="company.street or company.city">
+                                <t t-if="company.street" t-esc="company.street"/>
+                                <t t-if="company.city" t-esc="(company.street ? ', ' : '') + company.city"/>
+                            </div>
+                        </t>
+
+                        <t t-elif="block.type === 'queue'">
+                            <div class="flexsys-label">Queue Number</div>
+                            <div class="flexsys-queue-number" t-esc="order.trackingNumber or order.name"/>
+                        </t>
+
+                        <t t-elif="block.type === 'order_info'">
+                            <div class="flexsys-row"><span>Order</span><strong t-esc="order.name"/></div>
+                            <div class="flexsys-row" t-if="order.user_id?.name"><span>Cashier</span><span t-esc="order.user_id.name"/></div>
+                            <div class="flexsys-row"><span>Point of Sale</span><span t-esc="order.config.name"/></div>
+                        </t>
+
+                        <t t-elif="block.type === 'customer'">
+                            <div t-if="order.partner_id" class="flexsys-row">
+                                <span>Customer</span><span t-esc="order.partner_id.name"/>
+                            </div>
+                            <div t-if="order.partner_id?.phone" class="flexsys-row">
+                                <span>Phone</span><span dir="ltr" t-esc="order.partner_id.phone"/>
+                            </div>
+                        </t>
+
+                        <t t-elif="block.type === 'items'">
+                            <OrderDisplay order="order" t-slot-scope="scope" mode="'receipt'">
+                                <t t-set="line" t-value="scope.line"/>
+                                <Orderline line="line"
+                                           showTaxGroup="showTaxGroupLabels"
+                                           mode="'receipt'"
+                                           basic_receipt="props.basic_receipt">
+                                    <li t-if="line.customerNote" class="customer-note w-100 p-2 my-1 rounded text-break">
+                                        <i class="fa fa-sticky-note me-1" role="img" aria-label="Customer Note" title="Customer Note"/>
+                                        <t t-esc="line.customerNote"/>
+                                    </li>
+                                </Orderline>
+                            </OrderDisplay>
+                        </t>
+
+                        <t t-elif="block.type === 'totals'">
+                            <div t-if="taxTotals and taxTotals.has_tax_groups" class="pos-receipt-taxes">
+                                <t t-foreach="taxTotals.subtotals" t-as="subtotal" t-key="subtotal.name">
+                                    <div class="flexsys-row">
+                                        <span>Subtotal</span>
+                                        <span t-out="formatCurrency(order.priceExcl)" class="font-monospace"/>
+                                    </div>
+                                    <div t-foreach="subtotal.tax_groups" t-as="tax_group" t-key="tax_group.id" class="flexsys-row">
+                                        <span t-esc="tax_group.group_name"/>
+                                        <span t-out="formatCurrency(tax_group.tax_amount_currency)" class="font-monospace"/>
+                                    </div>
+                                </t>
+                            </div>
+                            <div class="flexsys-row flexsys-total">
+                                <span>Total</span>
+                                <span t-out="order.currencyDisplayPriceIncl" class="font-monospace"/>
+                            </div>
+                            <div t-if="order.showChange" class="flexsys-row">
+                                <span>Change</span>
+                                <span t-out="formatCurrency(order.change)" class="font-monospace"/>
+                            </div>
+                        </t>
+
+                        <t t-elif="block.type === 'payments'">
+                            <div class="flexsys-row" t-foreach="paymentLines" t-as="line" t-key="line_index">
+                                <span t-esc="line.payment_method_id.name"/>
+                                <span t-out="formatCurrency(line.getAmount())" class="font-monospace"/>
+                            </div>
+                        </t>
+
+                        <t t-elif="block.type === 'qr'">
+                            <img t-if="this.qrCode" id="posqrcode" t-att-src="this.qrCode" class="flexsys-studio-qr" alt="QR Code"/>
+                            <div t-else="" class="flexsys-qr-placeholder">QR</div>
+                        </t>
+
+                        <t t-elif="block.type === 'message'">
+                            <div class="flexsys-preline" t-esc="block.content"/>
+                        </t>
+
+                        <t t-elif="block.type === 'divider'">
+                            <div class="flexsys-divider"/>
+                        </t>
+
+                        <t t-elif="block.type === 'spacer'">
+                            <div class="flexsys-spacer"/>
+                        </t>
+
+                        <t t-elif="block.type === 'footer'">
+                            <div class="flexsys-preline" t-esc="block.content or order.config.receipt_footer"/>
+                            <div t-if="!order.config.flexsys_hide_powered_by_odoo" class="footer-powered-by">
+                                <span>Powered by <b>Odoo</b></span>
+                            </div>
+                        </t>
+                    </section>
+                </t>
+
+                <!-- Payment terminal tickets are retained outside visual blocks. -->
+                <div class="after-footer">
+                    <t t-foreach="paymentLines" t-as="line" t-key="line_index">
+                        <div t-if="line.ticket" class="pos-payment-terminal-receipt pt-3">
+                            <pre t-esc="line.ticket"/>
+                        </div>
+                    </t>
+                </div>
             </div>
-        </xpath>
-
-        <!-- Odoo branding remains available unless this POS explicitly hides it. -->
-        <xpath expr="//div[contains(@class, 'footer-powered-by')]" position="attributes">
-            <attribute name="t-if">!order.config.flexsys_hide_powered_by_odoo</attribute>
         </xpath>
     </t>
 </templates>
