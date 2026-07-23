@@ -47,12 +47,6 @@ class PosConfig(models.Model):
         "pos_config_id",
         string="Receipt Templates",
     )
-    flexsys_receipt_design = fields.Json(
-        string="Active Receipt Studio Design",
-        compute="_compute_flexsys_receipt_design",
-        help="Compact active Receipt Studio design loaded by the POS client.",
-    )
-
     # Closing report configuration
     flexsys_enable_thermal_closing_report = fields.Boolean(
         string="Enable Thermal Closing Report",
@@ -67,60 +61,11 @@ class PosConfig(models.Model):
 
     @api.model
     def _load_pos_data_read(self, records, config):
-        """Keep the receipt logo binary out of the POS offline payload.
-
-        The POS only needs the boolean flags. The image itself is served lazily
-        through /web/image when the receipt is rendered.
-        """
+        """Keep the receipt logo binary out of the POS offline payload."""
         loaded_records = super()._load_pos_data_read(records, config)
-        records_by_id = {record.id: record for record in records}
         for loaded_record in loaded_records:
             loaded_record.pop("flexsys_receipt_logo", None)
-            record = records_by_id.get(loaded_record.get("id"))
-            if record:
-                loaded_record["flexsys_receipt_design"] = record.flexsys_receipt_design or False
         return loaded_records
-
-    @api.depends(
-        "flexsys_receipt_template_ids.active",
-        "flexsys_receipt_template_ids.is_default",
-        "flexsys_receipt_template_ids.block_ids.sequence",
-        "flexsys_receipt_template_ids.block_ids.enabled",
-        "flexsys_receipt_template_ids.block_ids.block_type",
-        "flexsys_receipt_template_ids.block_ids.title",
-        "flexsys_receipt_template_ids.block_ids.show_title",
-        "flexsys_receipt_template_ids.block_ids.content",
-        "flexsys_receipt_template_ids.block_ids.alignment",
-        "flexsys_receipt_template_ids.block_ids.font_size",
-        "flexsys_receipt_template_ids.block_ids.bold",
-    )
-    def _compute_flexsys_receipt_design(self):
-        """Expose the active Receipt Studio template as a compact POS payload."""
-        for config in self:
-            template = config.flexsys_receipt_template_ids.filtered(
-                lambda item: item.active and item.is_default
-            )[:1]
-            if not template:
-                config.flexsys_receipt_design = False
-                continue
-
-            blocks = []
-            for block in template.block_ids.filtered("enabled").sorted("sequence"):
-                blocks.append({
-                    "id": block.id,
-                    "type": block.block_type,
-                    "title": block.title or "",
-                    "show_title": block.show_title,
-                    "content": block.content or "",
-                    "alignment": block.alignment,
-                    "font_size": block.font_size,
-                    "bold": block.bold,
-                })
-            config.flexsys_receipt_design = {
-                "template_id": template.id,
-                "name": template.name,
-                "blocks": blocks,
-            }
 
     @api.depends("flexsys_receipt_logo")
     def _compute_flexsys_has_receipt_logo(self):

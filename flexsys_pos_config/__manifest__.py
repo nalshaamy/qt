@@ -4,7 +4,7 @@
 {
     "name": "FLPOS",
     "summary": "Configurable POS receipt engine and enhanced session closing reports",
-    "version": "19.0.5.0.0",
+    "version": "19.0.5.0.1",
     "category": "Sales/Point of Sale",
     "author": "FlexSys",
     "website": "https://flexsys.sa",
@@ -30,10 +30,6 @@
         ],
         "web.report_assets_common": [
             "flexsys_pos_config/static/src/scss/pos_session_report.scss",
-        ],
-        "point_of_sale._assets_pos": [
-            "flexsys_pos_config/static/src/xml/order_receipt.xml",
-            "flexsys_pos_config/static/src/scss/order_receipt.scss",
         ],
     },
     "installable": True,
