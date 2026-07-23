@@ -54,6 +54,18 @@ class PosConfig(models.Model):
         help="Enable the FLPOS A4 session closing report.",
     )
 
+    @api.model
+    def _load_pos_data_read(self, records, config):
+        """Keep the receipt logo binary out of the POS offline payload.
+
+        The POS only needs the boolean flags. The image itself is served lazily
+        through /web/image when the receipt is rendered.
+        """
+        loaded_records = super()._load_pos_data_read(records, config)
+        for loaded_record in loaded_records:
+            loaded_record.pop("flexsys_receipt_logo", None)
+        return loaded_records
+
     @api.depends("flexsys_receipt_logo")
     def _compute_flexsys_has_receipt_logo(self):
         """Store whether a dedicated receipt logo is configured."""
