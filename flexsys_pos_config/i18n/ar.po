@@ -1,0 +1,183 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+#   * flexsys_pos_config
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=6; plural=n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5;\n"
+
+#. module: flexsys_pos_config
+msgid "POS receipt configuration and enhanced session closing reports"
+msgstr "تهيئة إيصالات نقاط البيع وتقارير إغلاق الجلسات المحسنة"
+
+#. module: flexsys_pos_config
+msgid "Hide Powered by Odoo"
+msgstr "إخفاء عبارة مدعوم بواسطة أودو"
+
+#. module: flexsys_pos_config
+msgid "Remove the Powered by Odoo line from customer receipts."
+msgstr "إزالة عبارة مدعوم بواسطة أودو من إيصالات العملاء."
+
+#. module: flexsys_pos_config
+msgid "Customer Receipt Logo"
+msgstr "شعار إيصال العميل"
+
+#. module: flexsys_pos_config
+msgid "Upload a dedicated customer receipt logo that does not use the company logo."
+msgstr "رفع شعار مستقل لإيصال العميل لا يعتمد على شعار الشركة."
+
+#. module: flexsys_pos_config
+msgid "Enhanced Session Closing"
+msgstr "إغلاق الجلسة المحسن"
+
+#. module: flexsys_pos_config
+msgid "Enable Custom Receipt Logo"
+msgstr "تفعيل شعار إيصال مخصص"
+
+#. module: flexsys_pos_config
+msgid "Enable the dedicated FLPOS logo on customer receipts."
+msgstr "تفعيل شعار FLPOS المخصص على إيصالات العملاء."
+
+#. module: flexsys_pos_config
+msgid "Hide Company Logo"
+msgstr "إخفاء شعار الشركة"
+
+#. module: flexsys_pos_config
+msgid "Hide the standard company logo from customer receipts."
+msgstr "إخفاء شعار الشركة الافتراضي من إيصالات العملاء."
+
+#. module: flexsys_pos_config
+msgid "Enable Thermal Closing Report"
+msgstr "تفعيل تقرير الإغلاق الحراري"
+
+#. module: flexsys_pos_config
+msgid "Enable the FLPOS closing report designed for thermal printers."
+msgstr "تفعيل تقرير إغلاق FLPOS المصمم للطابعات الحرارية."
+
+#. module: flexsys_pos_config
+msgid "Enable A4 Closing Report"
+msgstr "تفعيل تقرير الإغلاق A4"
+
+#. module: flexsys_pos_config
+msgid "Enable the FLPOS A4 session closing report."
+msgstr "تفعيل تقرير إغلاق جلسة FLPOS بمقاس A4."
+
+#. module: flexsys_pos_config
+msgid "Upload a dedicated receipt logo independent from the company logo."
+msgstr "رفع شعار مخصص للإيصال مستقل عن شعار الشركة."
+
+#. module: flexsys_pos_config
+msgid "FLPOS — Receipt"
+msgstr "FLPOS — الإيصال"
+
+#. module: flexsys_pos_config
+msgid "FLPOS — Closing Reports"
+msgstr "FLPOS — تقارير الإغلاق"
+
+#. module: flexsys_pos_config
+msgid "Custom Receipt Logo"
+msgstr "شعار إيصال مخصص"
+
+#. module: flexsys_pos_config
+msgid "Display a dedicated logo on customer receipts."
+msgstr "عرض شعار مخصص على إيصالات العملاء."
+
+#. module: flexsys_pos_config
+msgid "Receipt Logo Image"
+msgstr "صورة شعار الإيصال"
+
+#. module: flexsys_pos_config
+msgid "Upload a receipt logo independent from the company logo."
+msgstr "رفع شعار للإيصال مستقل عن شعار الشركة."
+
+#. module: flexsys_pos_config
+msgid "Company Logo"
+msgstr "شعار الشركة"
+
+#. module: flexsys_pos_config
+msgid "Powered by Odoo"
+msgstr "مدعوم بواسطة أودو"
+
+#. module: flexsys_pos_config
+msgid "Thermal Closing Report"
+msgstr "تقرير الإغلاق الحراري"
+
+#. module: flexsys_pos_config
+msgid "Enable the FLPOS session report designed for thermal printers."
+msgstr "تفعيل تقرير جلسة FLPOS المصمم للطابعات الحرارية."
+
+#. module: flexsys_pos_config
+msgid "A4 Closing Report"
+msgstr "تقرير الإغلاق A4"
+
+#. module: flexsys_pos_config
+msgid "Enable the FLPOS A4 session closing report for printing or PDF."
+msgstr "تفعيل تقرير إغلاق جلسة FLPOS بمقاس A4 للطباعة أو الحفظ بصيغة PDF."
+
+#. module: flexsys_pos_config
+msgid "Receipt"
+msgstr "الإيصال"
+
+#. module: flexsys_pos_config
+msgid "Closing Reports"
+msgstr "تقارير الإغلاق"
+
+#. module: flexsys_pos_config
+msgid "Display a dedicated logo on customer receipts for this Point of Sale."
+msgstr "عرض شعار مخصص على إيصالات العملاء لنقطة البيع هذه."
+
+#. module: flexsys_pos_config
+msgid "Upload a logo used only by this Point of Sale."
+msgstr "رفع شعار يُستخدم لنقطة البيع هذه فقط."
+
+#. module: flexsys_pos_config
+msgid "Hide Default Receipt Logo"
+msgstr "إخفاء شعار الإيصال الافتراضي"
+
+#. module: flexsys_pos_config
+msgid "Hide \"Powered by Odoo\""
+msgstr "إخفاء عبارة \"مدعوم بواسطة أودو\""
+
+#. module: flexsys_pos_config
+msgid "Enable the session closing report designed for thermal printers."
+msgstr "تفعيل تقرير إغلاق الجلسة المصمم للطابعات الحرارية."
+
+#. module: flexsys_pos_config
+msgid "Enable the A4 session closing report for printing or PDF."
+msgstr "تفعيل تقرير إغلاق الجلسة بمقاس A4 للطباعة أو الحفظ بصيغة PDF."
+
+#. module: flexsys_pos_config
+msgid "Display a custom logo on customer receipts."
+msgstr "عرض شعار مخصص على إيصالات العملاء."
+
+#. module: flexsys_pos_config
+msgid "Receipt Logo"
+msgstr "شعار الإيصال"
+
+#. module: flexsys_pos_config
+msgid "Print session closing reports on thermal printers."
+msgstr "طباعة تقارير إغلاق الجلسات على الطابعات الحرارية."
+
+#. module: flexsys_pos_config
+msgid "Generate printable A4 session reports or PDF files."
+msgstr "إنشاء تقارير جلسات بمقاس A4 قابلة للطباعة أو الحفظ بصيغة PDF."
+
+#. module: flexsys_pos_config
+msgid "Auto Print Thermal Closing Report After Closing"
+msgstr "طباعة تقرير الإغلاق الحراري تلقائيًا بعد الإغلاق"
+
+#. module: flexsys_pos_config
+msgid "Automatically open the thermal closing report for printing only after the POS session has been closed successfully."
+msgstr "فتح تقرير الإغلاق الحراري للطباعة تلقائيًا فقط بعد نجاح إغلاق جلسة نقطة البيع."
+
+#. module: flexsys_pos_config
+msgid "Auto Print After Close Register"
+msgstr "الطباعة التلقائية بعد إغلاق الجلسة"
+
+#. module: flexsys_pos_config
+msgid "After a successful Close Register operation, automatically open the thermal closing report for printing."
+msgstr "بعد نجاح عملية إغلاق الجلسة، افتح تقرير الإغلاق الحراري للطباعة تلقائيًا."

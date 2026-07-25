@@ -1,0 +1,202 @@
+.fs-pos-report { font-family: DejaVu Sans, sans-serif; color: #243746; font-size: 11px; }
+.fs-pos-report h1 { font-size: 24px; margin: 0; font-weight: 700; }
+.fs-pos-report h2 { font-size: 16px; margin: 18px 0 8px; border-right: 4px solid #f28c28; padding-right: 8px; }
+.fs-title-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #5f8db2; padding-bottom: 10px; }
+.fs-session-badge { background: #5f8db2; color: white; padding: 8px 14px; border-radius: 6px; font-weight: 700; }
+.fs-muted, .fs-footer { color: #6c757d; }
+.fs-info-grid, .fs-kpis, .fs-cash-grid { display: table; width: 100%; table-layout: fixed; border-spacing: 6px; margin-top: 10px; }
+.fs-info-grid > div, .fs-kpis > div, .fs-cash-grid > div { display: table-cell; border: 1px solid #dbe3ea; padding: 8px; vertical-align: top; }
+.fs-info-grid span, .fs-kpis span, .fs-cash-grid span { display: block; color: #6c757d; margin-bottom: 4px; }
+.fs-kpis strong { font-size: 15px; }
+.fs-table { width: 100%; border-collapse: collapse; }
+.fs-table th { background: #eaf1f6; color: #243746; font-weight: 700; }
+.fs-table th, .fs-table td { border: 1px solid #dbe3ea; padding: 5px; text-align: right; vertical-align: middle; }
+.fs-products { font-size: 9px; }
+.fs-signatures { display: flex; justify-content: space-around; margin-top: 30px; text-align: center; }
+.fs-signatures span { display: inline-block; width: 180px; border-bottom: 1px solid #777; margin-top: 30px; }
+.fs-footer { text-align: center; font-size: 8px; margin-top: 20px; }
+
+/* FLPOS 80 mm thermal closing report */
+.fs-thermal-report {
+    width: 74mm;
+    margin: 0 auto;
+    padding: 0;
+    color: #000;
+    font-family: "DejaVu Sans", "Noto Naskh Arabic", "Arial", sans-serif;
+    font-size: 9px;
+    direction: rtl;
+    unicode-bidi: embed;
+    line-height: 1.35;
+}
+.fs-thermal-center { text-align: center; }
+.fs-thermal-logo { display: block; max-width: 46mm; max-height: 22mm; margin: 0 auto 2mm; object-fit: contain; }
+.fs-thermal-company { font-size: 13px; font-weight: 700; margin-bottom: 1mm; }
+.fs-thermal-title { font-size: 12px; font-weight: 700; }
+.fs-thermal-subtitle { font-size: 8px; letter-spacing: .5px; }
+.fs-thermal-separator { overflow: hidden; white-space: nowrap; direction: ltr; text-align: center; margin: 1.5mm 0; }
+.fs-thermal-heading { text-align: center; font-size: 10px; font-weight: 700; margin: 1mm 0; }
+.fs-thermal-row { display: table; width: 100%; table-layout: fixed; margin: .6mm 0; }
+.fs-thermal-row > span, .fs-thermal-row > strong { display: table-cell; width: 50%; vertical-align: top; }
+.fs-thermal-row > span { text-align: right; padding-left: 1mm; }
+.fs-thermal-row > strong { text-align: left; direction: ltr; unicode-bidi: embed; font-weight: 700; overflow-wrap: anywhere; }
+.fs-thermal-total { font-size: 10px; border-top: 1px solid #000; padding-top: 1mm; }
+.fs-thermal-product { page-break-inside: avoid; border-bottom: 1px dotted #777; padding: 1mm 0; }
+.fs-thermal-product-name { font-weight: 700; text-align: right; overflow-wrap: anywhere; }
+.fs-thermal-small { font-size: 8px; }
+.fs-thermal-empty { text-align: center; padding: 1mm 0; }
+.fs-thermal-signatures { margin-top: 3mm; line-height: 2.2; }
+.fs-thermal-footer { text-align: center; font-size: 7px; margin-top: 3mm; }
+
+/* Keep Arabic text shaping and numeric values stable in wkhtmltopdf. */
+.fs-thermal-report,
+.fs-thermal-report * {
+    font-family: "DejaVu Sans", "Noto Naskh Arabic", Arial, sans-serif !important;
+}
+.fs-thermal-report {
+    text-rendering: geometricPrecision;
+}
+
+/* Grouped product/variant table for the 80 mm closing report. */
+.fs-thermal-products-table { width: 100%; margin-top: 1mm; }
+.fs-thermal-products-head,
+.fs-thermal-product-main,
+.fs-thermal-variant-row,
+.fs-thermal-refund-row {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+}
+.fs-thermal-products-head {
+    border-top: 1px solid #000;
+    border-bottom: 1px solid #000;
+    font-weight: 700;
+    font-size: 8px;
+    padding: .7mm 0;
+}
+.fs-thermal-products-head > span,
+.fs-thermal-product-main > strong,
+.fs-thermal-variant-row > span,
+.fs-thermal-refund-row > span { display: table-cell; vertical-align: top; }
+.fs-thermal-products-head > span:first-child,
+.fs-thermal-product-main > strong:first-child,
+.fs-thermal-variant-row > span:first-child,
+.fs-thermal-refund-row > span:first-child { width: 55%; text-align: right; overflow-wrap: anywhere; }
+.fs-thermal-products-head > span:nth-child(2),
+.fs-thermal-product-main > strong:nth-child(2),
+.fs-thermal-variant-row > span:nth-child(2),
+.fs-thermal-refund-row > span:nth-child(2) { width: 15%; text-align: center; direction: ltr; }
+.fs-thermal-products-head > span:nth-child(3),
+.fs-thermal-product-main > strong:nth-child(3),
+.fs-thermal-variant-row > span:nth-child(3),
+.fs-thermal-refund-row > span:nth-child(3) { width: 30%; text-align: left; direction: ltr; }
+.fs-thermal-product-group {
+    page-break-inside: avoid;
+    border-bottom: 1px dashed #777;
+    padding: 1.2mm 0;
+}
+.fs-thermal-product-main {
+    font-size: 9px;
+    padding-bottom: .35mm;
+}
+.fs-thermal-product-name { font-weight: 800; }
+.fs-thermal-variant-row {
+    font-size: 7.7px;
+    color: #222;
+    padding-top: .65mm;
+}
+.fs-thermal-variant-row > span:first-child { padding-right: 2mm; }
+.fs-thermal-variant-name { font-weight: 400; }
+.fs-thermal-variant-row small {
+    display: block;
+    font-size: 6.4px;
+    line-height: 1.1;
+    white-space: nowrap;
+}
+.fs-thermal-refund-row {
+    font-size: 7.3px;
+    padding-top: .45mm;
+    font-weight: 700;
+}
+.fs-thermal-number, .fs-thermal-money { unicode-bidi: embed; }
+
+/* FLPOS 19.0.7.2.2: manager-friendly product and hierarchical variant layout. */
+.fs-thermal-product-main > .fs-thermal-product-title-cell {
+    display: table-cell;
+    width: 55%;
+    text-align: right;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+}
+.fs-thermal-product-title-cell .fs-thermal-product-name {
+    display: block;
+    font-size: 9px;
+    font-weight: 800;
+}
+.fs-thermal-variant-count {
+    display: block;
+    margin-top: .25mm;
+    font-size: 6.6px;
+    font-weight: 400;
+}
+.fs-thermal-variant-card {
+    margin: .7mm 1.8mm .35mm 0;
+    padding: .65mm .8mm;
+    border-right: 1px solid #555;
+    page-break-inside: avoid;
+}
+.fs-thermal-variant-summary {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+    font-size: 7.7px;
+}
+.fs-thermal-variant-summary > * {
+    display: table-cell;
+    vertical-align: top;
+}
+.fs-thermal-variant-summary > *:first-child {
+    width: 55%;
+    text-align: right;
+    overflow-wrap: anywhere;
+}
+.fs-thermal-variant-summary > *:nth-child(2) {
+    width: 15%;
+    text-align: center;
+    direction: ltr;
+}
+.fs-thermal-variant-summary > *:nth-child(3) {
+    width: 30%;
+    text-align: left;
+    direction: ltr;
+}
+.fs-thermal-variant-label { font-weight: 700; }
+.fs-thermal-variant-meta {
+    display: table;
+    width: 100%;
+    margin-top: .35mm;
+    font-size: 6.8px;
+}
+.fs-thermal-share {
+    display: table-cell;
+    width: 15%;
+    text-align: center;
+    direction: ltr;
+    font-weight: 700;
+    vertical-align: top;
+}
+.fs-thermal-attribute-list {
+    display: table-cell;
+    width: 85%;
+    padding-right: 1mm;
+    vertical-align: top;
+}
+.fs-thermal-attribute-row {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+    line-height: 1.25;
+}
+.fs-thermal-attribute-row > * { display: table-cell; vertical-align: top; }
+.fs-thermal-attribute-name { width: 34%; font-weight: 400; }
+.fs-thermal-attribute-separator { width: 5%; text-align: center; }
+.fs-thermal-attribute-value { width: 61%; font-weight: 700; overflow-wrap: anywhere; }
