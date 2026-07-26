@@ -1286,3 +1286,53 @@
     .fs-a4-report .fs-a4-two-column-layout,
     .fs-a4-report .fs-a4-signatures { page-break-inside: avoid; }
 }
+
+
+/* FLPOS 19.0.14.2.3 — Native RTL flow and fully centered report-table data.
+   Page/section direction still follows the selected report language, while
+   every tabular field is centered to stabilize Arabic, English, and mixed text. */
+.fs-a4-report .fs-a4-data-table th,
+.fs-a4-report .fs-a4-data-table td,
+.fs-a4-report .fs-a4-data-table tfoot td,
+.fs-a4-report .fs-a4-data-table .fs-product-cell,
+.fs-a4-report .fs-a4-data-table .fs-product-cell strong,
+.fs-a4-report .fs-a4-data-table .fs-product-cell small,
+.fs-a4-report .fs-a4-data-table .fs-product-category,
+.fs-a4-report .fs-a4-data-table .fs-product-attributes,
+.fs-a4-report .fs-a4-data-table .fs-cashier-name,
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th,
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar td,
+.fs-a4-report[lang="ar"] .fs-payment-table-ar th,
+.fs-a4-report[lang="ar"] .fs-payment-table-ar td,
+.fs-a4-report[lang="ar"] .fs-a4-summary-table-ar th,
+.fs-a4-report[lang="ar"] .fs-a4-summary-table-ar td,
+.fs-a4-report[lang="ar"] .fs-a4-cashier-table-ar th,
+.fs-a4-report[lang="ar"] .fs-a4-cashier-table-ar td {
+    text-align: center !important;
+    vertical-align: middle !important;
+}
+
+/* Mixed Arabic/Latin product and cashier values stay centered as one visual unit. */
+.fs-a4-report .fs-product-cell,
+.fs-a4-report .fs-product-cell strong,
+.fs-a4-report .fs-product-cell small,
+.fs-a4-report .fs-product-category,
+.fs-a4-report .fs-product-attributes,
+.fs-a4-report .fs-cashier-name,
+.fs-a4-report .fs-payment-table td:first-child,
+.fs-a4-report .fs-payment-table td:first-child strong {
+    unicode-bidi: plaintext;
+    text-align: center !important;
+}
+
+/* Native Arabic tables now use logical RTL order: the first column is the
+   rightmost column. Widths therefore match the English semantic structure. */
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(1) { width: 4%; }
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(2) { width: 25%; }
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(3),
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(4) { width: 11%; }
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(5) { width: 7%; }
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(6),
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(7),
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(8),
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(9) { width: 10%; }

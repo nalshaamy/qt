@@ -4,7 +4,7 @@
 {
     "name": "FLPOS",
     "summary": "POS receipt configuration and enhanced session closing reports",
-    "version": "19.0.14.2.2",
+    "version": "19.0.14.2.3",
     "category": "Sales/Point of Sale",
     "author": "FlexSys",
     "website": "https://flexsys.sa",

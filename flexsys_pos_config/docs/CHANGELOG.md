@@ -1,3 +1,10 @@
+## 19.0.14.2.3 — Executive Report Native RTL Edition
+- Rebuilt Arabic product sales, payment methods, cash reconciliation, and cashier performance tables in true logical RTL order.
+- Centered all report table headers and body data, including product names, categories, attributes, payment methods, cashier names, quantities, percentages, and monetary values.
+- Stabilized mixed Arabic/English values using centered bidirectional text handling.
+- Preserved the English Executive Report as LTR while applying the same centered tabular presentation.
+
+
 ## 19.0.14.2.2
 - Completed the Executive Report production-polish pass for Arabic and English.
 - Standardized table header height, padding, vertical alignment, and centered headings.
