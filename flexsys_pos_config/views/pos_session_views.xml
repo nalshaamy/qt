@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_pos_session_form_flexsys_pos_config" model="ir.ui.view">
+        <field name="name">pos.session.form.flexsys.pos.config</field>
+        <field name="model">pos.session</field>
+        <field name="inherit_id" ref="point_of_sale.view_pos_session_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//header" position="inside">
+                <button name="%(action_report_pos_session_closing)d"
+                        type="action"
+                        string="Executive Report"
+                        class="btn-secondary"
+                        icon="fa-file-pdf-o"
+                        invisible="not config_id.flexsys_enable_a4_closing_report"/>
+                <button name="action_flexsys_preview_thermal_closing_report"
+                        type="object"
+                        string="Thermal Report"
+                        class="btn-secondary"
+                        icon="fa-eye"
+                        invisible="not config_id.flexsys_enable_thermal_closing_report"/>
+                <button name="action_flexsys_download_thermal_closing_report"
+                        type="object"
+                        string="Download Thermal PDF"
+                        class="btn-secondary"
+                        icon="fa-download"
+                        invisible="not config_id.flexsys_enable_thermal_closing_report"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>
