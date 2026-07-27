@@ -1,3 +1,11 @@
+# Changelog
+
+## 19.0.14.2.6
+- Renamed the commercial product to **FLPOS Intelligence**.
+- Right-aligned Arabic product names, section titles, and requested payment fields.
+- Prevented the product-table grand total from repeating on intermediate PDF pages.
+- Preserved English/LTR report behavior.
+
 # 19.0.14.2.5
 - Corrected Arabic product-table column widths to match the physical QWeb order used by wkhtmltopdf.
 - Prevented the Arabic total header (الإجمالي) and other compact column headings from splitting across lines.

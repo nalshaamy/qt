@@ -1378,3 +1378,63 @@
     word-break: normal !important;
     font-size: 6.8px !important;
 }
+
+
+/* FLPOS Intelligence 19.0.14.2.6 — Arabic alignment and final-total pagination. */
+
+/* wkhtmltopdf repeats table footers on every printed page by default.
+   Treat the footer as a normal final row group so the grand total is rendered
+   exactly once, after the last product row. */
+.fs-a4-report .fs-a4-products-table tfoot {
+    display: table-row-group !important;
+}
+
+/* Arabic product names are intentionally right aligned.  plaintext keeps
+   mixed Arabic/Latin names readable without pushing the visual block left. */
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar .fs-product-cell,
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar .fs-product-cell strong,
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar .fs-product-cell small {
+    direction: rtl !important;
+    unicode-bidi: plaintext;
+    text-align: right !important;
+}
+
+/* Section bars must follow the Arabic page edge in wkhtmltopdf, including
+   compact sections inside the two-column cash/payment layout. */
+.fs-a4-report[lang="ar"] .fs-a4-section-title,
+.fs-a4-report[lang="ar"] .fs-a4-section-title-small {
+    display: block !important;
+    width: 100% !important;
+    direction: rtl !important;
+    text-align: right !important;
+}
+.fs-a4-report[lang="ar"] .fs-a4-section-title > span,
+.fs-a4-report[lang="ar"] .fs-a4-section-title-small > span {
+    display: block !important;
+    width: 100% !important;
+    direction: rtl !important;
+    text-align: right !important;
+}
+
+/* Arabic payment table physical QWeb order is:
+   amount | percentage | transactions | method.
+   Keep requested edge fields (amount and method) aligned with RTL reading. */
+.fs-a4-report[lang="ar"] .fs-payment-table-ar th:first-child,
+.fs-a4-report[lang="ar"] .fs-payment-table-ar td:first-child {
+    direction: ltr !important;
+    text-align: right !important;
+    white-space: nowrap !important;
+}
+.fs-a4-report[lang="ar"] .fs-payment-table-ar th:last-child,
+.fs-a4-report[lang="ar"] .fs-payment-table-ar td:last-child,
+.fs-a4-report[lang="ar"] .fs-payment-table-ar td:last-child strong {
+    direction: rtl !important;
+    unicode-bidi: plaintext;
+    text-align: right !important;
+}
+
+@media print {
+    .fs-a4-report .fs-a4-products-table tfoot {
+        display: table-row-group !important;
+    }
+}

@@ -2,9 +2,9 @@
 # FLPOS - Standalone Odoo 19 Point of Sale configuration and reporting module.
 
 {
-    "name": "FLPOS",
-    "summary": "POS receipt configuration and enhanced session closing reports",
-    "version": "19.0.14.2.5",
+    "name": "FLPOS Intelligence",
+    "summary": "Advanced POS Reporting, Dashboards & Business Intelligence for Odoo",
+    "version": "19.0.14.2.6",
     "category": "Sales/Point of Sale",
     "author": "FlexSys",
     "website": "https://flexsys.sa",
