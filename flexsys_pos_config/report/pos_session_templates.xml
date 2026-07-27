@@ -87,7 +87,7 @@
                                         <td class="fs-col-money" t-esc="session._flexsys_money(row['unit_price'], data['currency'])"/>
                                         <td class="fs-col-number"><t t-esc="session._flexsys_qty(row['qty'])"/><small t-if="row['refund_qty']"><t t-out="data['a4_labels']['refund']"/>: <t t-esc="session._flexsys_qty(row['refund_qty'])"/></small></td>
                                         <td class="fs-product-attributes" t-esc="row['attributes']"/><td class="fs-product-category" t-esc="row['category']"/>
-                                        <td class="fs-product-cell fs-ar-product-align"><strong class="fs-ar-product-name" t-esc="row['product']"/><small class="fs-ar-product-meta" t-if="row['barcode'] and row['barcode'] != '—'"><t t-out="data['a4_labels']['sku_barcode']"/>: <t t-esc="row['barcode']"/></small></td>
+                                        <td class="fs-product-cell fs-ar-product-align" dir="rtl" style="direction: rtl !important; text-align: right !important;"><strong class="fs-ar-product-name" style="display: block; width: 100%; direction: rtl !important; text-align: right !important;" t-esc="row['product']"/><small class="fs-ar-product-meta" t-if="row['barcode'] and row['barcode'] != '—'"><t t-out="data['a4_labels']['sku_barcode']"/>: <t t-esc="row['barcode']"/></small></td>
                                         <td class="fs-col-no" t-esc="row_index + 1"/>
                                     </tr>
                                     <tr t-if="not data['variant_rows']" class="fs-empty-row"><td colspan="9" t-out="data['a4_labels']['no_product_sales']"/></tr>
@@ -100,7 +100,7 @@
 
                             <table class="fs-a4-two-column-layout fs-a4-two-column-layout-ar" dir="rtl"><tr>
                                 <td>
-                                    <div class="fs-a4-section-title fs-a4-section-title-small fs-ar-section-title"><span t-out="data['a4_labels']['cash_control']"/></div>
+                                    <div class="fs-a4-section-title fs-a4-section-title-small fs-ar-section-title" dir="rtl" style="direction: rtl !important; text-align: right !important; border-left: 0 !important; border-right: 5px solid #f28c28 !important;"><span style="display: block; width: 100%; direction: rtl !important; text-align: right !important;" t-out="data['a4_labels']['cash_control']"/></div>
                                     <table class="fs-a4-data-table fs-a4-summary-table fs-a4-summary-table-ar" dir="rtl"><tbody>
                                         <tr><td t-esc="session._flexsys_money(data['opening_cash'], data['currency'])"/><th t-out="data['a4_labels']['opening_cash']"/></tr>
                                         <tr><td t-esc="session._flexsys_money(data['cash_received'], data['currency'])"/><th t-out="data['a4_labels']['cash_received']"/></tr>
@@ -110,11 +110,11 @@
                                     </tbody></table>
                                 </td>
                                 <td>
-                                    <div class="fs-a4-section-title fs-a4-section-title-small fs-ar-section-title"><span t-out="data['a4_labels']['payments']"/></div>
-                                    <table class="fs-a4-data-table fs-payment-table fs-payment-table-ar" dir="rtl"><thead><tr><th t-out="data['a4_labels']['amount']"/><th t-out="data['a4_labels']['percentage']"/><th t-out="data['a4_labels']['transactions']"/><th t-out="data['a4_labels']['method']"/></tr></thead><tbody>
+                                    <div class="fs-a4-section-title fs-a4-section-title-small fs-ar-section-title" dir="rtl" style="direction: rtl !important; text-align: right !important; border-left: 0 !important; border-right: 5px solid #f28c28 !important;"><span style="display: block; width: 100%; direction: rtl !important; text-align: right !important;" t-out="data['a4_labels']['payments']"/></div>
+                                    <table class="fs-a4-data-table fs-payment-table fs-payment-table-ar" dir="rtl"><thead><tr><th class="fs-ar-payment-amount" style="direction: rtl !important; text-align: right !important;" t-out="data['a4_labels']['amount']"/><th t-out="data['a4_labels']['percentage']"/><th t-out="data['a4_labels']['transactions']"/><th class="fs-ar-payment-method" style="direction: rtl !important; text-align: right !important;" t-out="data['a4_labels']['method']"/></tr></thead><tbody>
                                         <tr t-foreach="data['payment_rows']" t-as="row">
-                                            <td class="fs-col-money fs-ar-payment-amount" t-esc="session._flexsys_money(row['amount'], data['currency'])"/><td class="fs-col-number"><span t-esc="round(row.get('percentage') or 0.0, 1)"/>%</td><td class="fs-col-number" t-esc="row['count']"/>
-                                            <td class="fs-ar-payment-method"><strong t-esc="row['name']"/><div class="fs-payment-track"><span t-att-style="'width: ' + str(min(max(row.get('percentage') or 0.0, 0.0), 100.0)) + '%;'"></span></div></td>
+                                            <td class="fs-col-money fs-ar-payment-amount" style="direction: ltr !important; text-align: right !important; white-space: nowrap !important;" t-esc="session._flexsys_money(row['amount'], data['currency'])"/><td class="fs-col-number"><span t-esc="round(row.get('percentage') or 0.0, 1)"/>%</td><td class="fs-col-number" t-esc="row['count']"/>
+                                            <td class="fs-ar-payment-method" dir="rtl" style="direction: rtl !important; text-align: right !important;"><strong style="display: block; width: 100%; direction: rtl !important; text-align: right !important;" t-esc="row['name']"/><div class="fs-payment-track"><span t-att-style="'width: ' + str(min(max(row.get('percentage') or 0.0, 0.0), 100.0)) + '%;'"></span></div></td>
                                         </tr>
                                         <tr t-if="not data['payment_rows']" class="fs-empty-row"><td colspan="4" t-out="data['a4_labels']['no_payments']"/></tr>
                                     </tbody></table>
@@ -122,7 +122,7 @@
                             </tr></table>
 
                             <t t-if="session.config_id.flexsys_show_cashier_performance and data['cashier_rows']">
-                                <div class="fs-a4-section-title fs-a4-section-title-small fs-ar-section-title"><span t-out="data['a4_labels']['cashier_performance']"/></div>
+                                <div class="fs-a4-section-title fs-a4-section-title-small fs-ar-section-title" dir="rtl" style="direction: rtl !important; text-align: right !important; border-left: 0 !important; border-right: 5px solid #f28c28 !important;"><span style="display: block; width: 100%; direction: rtl !important; text-align: right !important;" t-out="data['a4_labels']['cashier_performance']"/></div>
                                 <table class="fs-a4-data-table fs-a4-cashier-table-ar" dir="rtl"><thead><tr>
                                     <th t-out="data['a4_labels']['net']"/><th class="fs-refunds-label"><t t-out="data['a4_labels']['refunds']"/></th><th><t t-out="data['a4_labels']['discounts']"/></th><th t-out="data['a4_labels']['average_products']"/><th t-out="data['a4_labels']['average_order']"/><th t-out="data['a4_labels']['sales']"/><th t-out="data['a4_labels']['order_count']"/><th t-out="data['a4_labels']['cashier']"/><th>#</th>
                                 </tr></thead><tbody>
@@ -145,7 +145,7 @@
                                 <tbody>
                                     <tr t-foreach="data['variant_rows']" t-as="row">
                                         <td class="fs-col-no" t-esc="row_index + 1"/>
-                                        <td class="fs-product-cell fs-ar-product-align"><strong class="fs-ar-product-name" t-esc="row['product']"/><small class="fs-ar-product-meta" t-if="row['barcode'] and row['barcode'] != '—'"><t t-out="data['a4_labels']['sku_barcode']"/>: <t t-esc="row['barcode']"/></small></td>
+                                        <td class="fs-product-cell fs-ar-product-align" dir="rtl" style="direction: rtl !important; text-align: right !important;"><strong class="fs-ar-product-name" style="display: block; width: 100%; direction: rtl !important; text-align: right !important;" t-esc="row['product']"/><small class="fs-ar-product-meta" t-if="row['barcode'] and row['barcode'] != '—'"><t t-out="data['a4_labels']['sku_barcode']"/>: <t t-esc="row['barcode']"/></small></td>
                                         <td class="fs-product-category" t-esc="row['category']"/><td class="fs-product-attributes" t-esc="row['attributes']"/>
                                         <td class="fs-col-number"><t t-esc="session._flexsys_qty(row['qty'])"/><small t-if="row['refund_qty']"><t t-out="data['a4_labels']['refund']"/>: <t t-esc="session._flexsys_qty(row['refund_qty'])"/></small></td>
                                         <td class="fs-col-money" t-esc="session._flexsys_money(row['unit_price'], data['currency'])"/>

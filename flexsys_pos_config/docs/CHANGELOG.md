@@ -1,3 +1,12 @@
+# Changelog
+
+## 19.0.14.2.8
+- Applied Arabic PDF alignment directly in QWeb with inline wkhtmltopdf-safe styles.
+- Right-aligned Arabic product names.
+- Right-aligned Payment Methods, Cash Control, and Cashier Performance section headings.
+- Right-aligned Method and Amount headers/data in the Arabic payment table.
+- Preserved the final-total-only behavior for multi-page product tables.
+
 ## 19.0.14.2.7
 - Fixed Arabic product-name alignment using direct wkhtmltopdf-safe classes.
 - Fixed Arabic section-title alignment for Payments, Cash Control, and Cashier Performance.

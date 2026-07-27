@@ -4,7 +4,7 @@
 {
     "name": "FLPOS Intelligence",
     "summary": "Advanced POS Reporting, Dashboards & Business Intelligence for Odoo",
-    "version": "19.0.14.2.7",
+    "version": "19.0.14.2.8",
     "category": "Sales/Point of Sale",
     "author": "FlexSys",
     "website": "https://flexsys.sa",
