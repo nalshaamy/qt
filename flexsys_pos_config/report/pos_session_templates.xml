@@ -76,47 +76,47 @@
                         <t t-if="data['report_language'] == 'ar'">
                             <table class="fs-a4-data-table fs-a4-products-table fs-a4-products-table-ar" dir="rtl">
                                 <thead><tr>
-                                    <th class="fs-col-no">#</th><th class="fs-col-product" t-out="data['a4_labels']['product_variant']"/><th t-out="data['a4_labels']['category']"/><th t-out="data['a4_labels']['attributes']"/>
-                                    <th class="fs-col-number" t-out="data['a4_labels']['quantity']"/><th class="fs-col-money" t-out="data['a4_labels']['unit_price']"/><th class="fs-col-money" t-out="data['a4_labels']['discount']"/><th class="fs-col-money" t-out="data['a4_labels']['tax']"/><th class="fs-col-money" t-out="data['a4_labels']['total']"/>
+                                    <th class="fs-col-money" t-out="data['a4_labels']['total']"/><th class="fs-col-money" t-out="data['a4_labels']['tax']"/><th class="fs-col-money" t-out="data['a4_labels']['discount']"/><th class="fs-col-money" t-out="data['a4_labels']['unit_price']"/><th class="fs-col-number" t-out="data['a4_labels']['quantity']"/>
+                                    <th t-out="data['a4_labels']['attributes']"/><th t-out="data['a4_labels']['category']"/><th class="fs-col-product" t-out="data['a4_labels']['product_variant']"/><th class="fs-col-no">#</th>
                                 </tr></thead>
                                 <tbody>
                                     <tr t-foreach="data['variant_rows']" t-as="row">
-                                        <td class="fs-col-no" t-esc="row_index + 1"/>
-                                        <td class="fs-product-cell"><strong t-esc="row['product']"/><small t-if="row['barcode'] and row['barcode'] != '—'"><t t-out="data['a4_labels']['sku_barcode']"/>: <t t-esc="row['barcode']"/></small></td>
-                                        <td class="fs-product-category" t-esc="row['category']"/><td class="fs-product-attributes" t-esc="row['attributes']"/>
-                                        <td class="fs-col-number"><t t-esc="session._flexsys_qty(row['qty'])"/><small t-if="row['refund_qty']"><t t-out="data['a4_labels']['refund']"/>: <t t-esc="session._flexsys_qty(row['refund_qty'])"/></small></td>
-                                        <td class="fs-col-money" t-esc="session._flexsys_money(row['unit_price'], data['currency'])"/>
-                                        <td class="fs-col-money" t-esc="session._flexsys_money(row['discount'], data['currency'])"/>
-                                        <td class="fs-col-money" t-esc="session._flexsys_money(row['tax'], data['currency'])"/>
                                         <td class="fs-col-money fs-cell-strong" t-esc="session._flexsys_money(row['net'], data['currency'])"/>
+                                        <td class="fs-col-money" t-esc="session._flexsys_money(row['tax'], data['currency'])"/>
+                                        <td class="fs-col-money" t-esc="session._flexsys_money(row['discount'], data['currency'])"/>
+                                        <td class="fs-col-money" t-esc="session._flexsys_money(row['unit_price'], data['currency'])"/>
+                                        <td class="fs-col-number"><t t-esc="session._flexsys_qty(row['qty'])"/><small t-if="row['refund_qty']"><t t-out="data['a4_labels']['refund']"/>: <t t-esc="session._flexsys_qty(row['refund_qty'])"/></small></td>
+                                        <td class="fs-product-attributes" t-esc="row['attributes']"/><td class="fs-product-category" t-esc="row['category']"/>
+                                        <td class="fs-product-cell"><strong t-esc="row['product']"/><small t-if="row['barcode'] and row['barcode'] != '—'"><t t-out="data['a4_labels']['sku_barcode']"/>: <t t-esc="row['barcode']"/></small></td>
+                                        <td class="fs-col-no" t-esc="row_index + 1"/>
                                     </tr>
                                     <tr t-if="not data['variant_rows']" class="fs-empty-row"><td colspan="9" t-out="data['a4_labels']['no_product_sales']"/></tr>
                                 </tbody>
                                 <tfoot t-if="data['variant_rows']"><tr>
-                                    <td colspan="4" t-out="data['a4_labels']['total']"/><td class="fs-col-number" t-esc="session._flexsys_qty(data['sold_qty'])"/><td class="fs-col-money">—</td>
-                                    <td class="fs-col-money" t-esc="session._flexsys_money(data['discount_total'], data['currency'])"/><td class="fs-col-money" t-esc="session._flexsys_money(data['tax_total'], data['currency'])"/><td class="fs-col-money" t-esc="session._flexsys_money(data['net_sales'], data['currency'])"/>
+                                    <td class="fs-col-money" t-esc="session._flexsys_money(data['net_sales'], data['currency'])"/><td class="fs-col-money" t-esc="session._flexsys_money(data['tax_total'], data['currency'])"/><td class="fs-col-money" t-esc="session._flexsys_money(data['discount_total'], data['currency'])"/>
+                                    <td class="fs-col-money">—</td><td class="fs-col-number" t-esc="session._flexsys_qty(data['sold_qty'])"/><td colspan="4" t-out="data['a4_labels']['total']"/>
                                 </tr></tfoot>
                             </table>
 
                             <table class="fs-a4-two-column-layout fs-a4-two-column-layout-ar" dir="rtl"><tr>
                                 <td>
-                                    <div class="fs-a4-section-title fs-a4-section-title-small"><span t-out="data['a4_labels']['payments']"/></div>
-                                    <table class="fs-a4-data-table fs-payment-table fs-payment-table-ar" dir="rtl"><thead><tr><th t-out="data['a4_labels']['method']"/><th t-out="data['a4_labels']['transactions']"/><th t-out="data['a4_labels']['percentage']"/><th t-out="data['a4_labels']['amount']"/></tr></thead><tbody>
-                                        <tr t-foreach="data['payment_rows']" t-as="row">
-                                            <td><strong t-esc="row['name']"/><div class="fs-payment-track"><span t-att-style="'width: ' + str(min(max(row.get('percentage') or 0.0, 0.0), 100.0)) + '%;'"></span></div></td>
-                                            <td class="fs-col-number" t-esc="row['count']"/><td class="fs-col-number"><span t-esc="round(row.get('percentage') or 0.0, 1)"/>%</td><td class="fs-col-money" t-esc="session._flexsys_money(row['amount'], data['currency'])"/>
-                                        </tr>
-                                        <tr t-if="not data['payment_rows']" class="fs-empty-row"><td colspan="4" t-out="data['a4_labels']['no_payments']"/></tr>
+                                    <div class="fs-a4-section-title fs-a4-section-title-small"><span t-out="data['a4_labels']['cash_control']"/></div>
+                                    <table class="fs-a4-data-table fs-a4-summary-table fs-a4-summary-table-ar" dir="rtl"><tbody>
+                                        <tr><td t-esc="session._flexsys_money(data['opening_cash'], data['currency'])"/><th t-out="data['a4_labels']['opening_cash']"/></tr>
+                                        <tr><td t-esc="session._flexsys_money(data['cash_received'], data['currency'])"/><th t-out="data['a4_labels']['cash_received']"/></tr>
+                                        <tr><td t-esc="session._flexsys_money(data['expected_cash'], data['currency'])"/><th t-out="data['a4_labels']['expected_cash']"/></tr>
+                                        <tr><td t-esc="session._flexsys_money(data['actual_cash'], data['currency'])"/><th t-out="data['a4_labels']['actual_cash']"/></tr>
+                                        <tr t-att-class="'fs-cash-difference fs-cash-ok' if abs(data['cash_difference']) &lt; 0.000001 else ('fs-cash-difference fs-cash-positive' if data['cash_difference'] &gt; 0 else 'fs-cash-difference fs-cash-negative')"><td t-esc="session._flexsys_money(data['cash_difference'], data['currency'])"/><th t-out="data['a4_labels']['difference']"/></tr>
                                     </tbody></table>
                                 </td>
                                 <td>
-                                    <div class="fs-a4-section-title fs-a4-section-title-small"><span t-out="data['a4_labels']['cash_control']"/></div>
-                                    <table class="fs-a4-data-table fs-a4-summary-table fs-a4-summary-table-ar" dir="rtl"><tbody>
-                                        <tr><th t-out="data['a4_labels']['opening_cash']"/><td t-esc="session._flexsys_money(data['opening_cash'], data['currency'])"/></tr>
-                                        <tr><th t-out="data['a4_labels']['cash_received']"/><td t-esc="session._flexsys_money(data['cash_received'], data['currency'])"/></tr>
-                                        <tr><th t-out="data['a4_labels']['expected_cash']"/><td t-esc="session._flexsys_money(data['expected_cash'], data['currency'])"/></tr>
-                                        <tr><th t-out="data['a4_labels']['actual_cash']"/><td t-esc="session._flexsys_money(data['actual_cash'], data['currency'])"/></tr>
-                                        <tr t-att-class="'fs-cash-difference fs-cash-ok' if abs(data['cash_difference']) &lt; 0.000001 else ('fs-cash-difference fs-cash-positive' if data['cash_difference'] &gt; 0 else 'fs-cash-difference fs-cash-negative')"><th t-out="data['a4_labels']['difference']"/><td t-esc="session._flexsys_money(data['cash_difference'], data['currency'])"/></tr>
+                                    <div class="fs-a4-section-title fs-a4-section-title-small"><span t-out="data['a4_labels']['payments']"/></div>
+                                    <table class="fs-a4-data-table fs-payment-table fs-payment-table-ar" dir="rtl"><thead><tr><th t-out="data['a4_labels']['amount']"/><th t-out="data['a4_labels']['percentage']"/><th t-out="data['a4_labels']['transactions']"/><th t-out="data['a4_labels']['method']"/></tr></thead><tbody>
+                                        <tr t-foreach="data['payment_rows']" t-as="row">
+                                            <td class="fs-col-money" t-esc="session._flexsys_money(row['amount'], data['currency'])"/><td class="fs-col-number"><span t-esc="round(row.get('percentage') or 0.0, 1)"/>%</td><td class="fs-col-number" t-esc="row['count']"/>
+                                            <td><strong t-esc="row['name']"/><div class="fs-payment-track"><span t-att-style="'width: ' + str(min(max(row.get('percentage') or 0.0, 0.0), 100.0)) + '%;'"></span></div></td>
+                                        </tr>
+                                        <tr t-if="not data['payment_rows']" class="fs-empty-row"><td colspan="4" t-out="data['a4_labels']['no_payments']"/></tr>
                                     </tbody></table>
                                 </td>
                             </tr></table>
@@ -124,12 +124,12 @@
                             <t t-if="session.config_id.flexsys_show_cashier_performance and data['cashier_rows']">
                                 <div class="fs-a4-section-title fs-a4-section-title-small"><span t-out="data['a4_labels']['cashier_performance']"/></div>
                                 <table class="fs-a4-data-table fs-a4-cashier-table-ar" dir="rtl"><thead><tr>
-                                    <th>#</th><th t-out="data['a4_labels']['cashier']"/><th t-out="data['a4_labels']['order_count']"/><th t-out="data['a4_labels']['sales']"/><th t-out="data['a4_labels']['average_order']"/><th t-out="data['a4_labels']['average_products']"/><th><t t-out="data['a4_labels']['discounts']"/></th><th class="fs-refunds-label"><t t-out="data['a4_labels']['refunds']"/></th><th t-out="data['a4_labels']['net']"/>
+                                    <th t-out="data['a4_labels']['net']"/><th class="fs-refunds-label"><t t-out="data['a4_labels']['refunds']"/></th><th><t t-out="data['a4_labels']['discounts']"/></th><th t-out="data['a4_labels']['average_products']"/><th t-out="data['a4_labels']['average_order']"/><th t-out="data['a4_labels']['sales']"/><th t-out="data['a4_labels']['order_count']"/><th t-out="data['a4_labels']['cashier']"/><th>#</th>
                                 </tr></thead><tbody>
                                     <tr t-foreach="data['cashier_rows']" t-as="row" t-att-class="'fs-top-cashier' if row_first else ''">
-                                        <td class="fs-col-no" t-esc="row_index + 1"/><td class="fs-cashier-name" t-esc="row['name']"/><td class="fs-col-number" t-esc="row['order_count']"/>
-                                        <td class="fs-col-money" t-esc="session._flexsys_money(row['sales'], data['currency'])"/><td class="fs-col-money" t-esc="session._flexsys_money(row['average_order'], data['currency'])"/><td class="fs-col-number" t-esc="session._flexsys_qty(row['average_items'])"/>
-                                        <td class="fs-col-money" t-esc="session._flexsys_money(row['discounts'], data['currency'])"/><td class="fs-col-money fs-refunds-cell" t-esc="session._flexsys_money(row['refunds'], data['currency'])"/><td class="fs-col-money fs-cell-strong" t-esc="session._flexsys_money(row['net_sales'], data['currency'])"/>
+                                        <td class="fs-col-money fs-cell-strong" t-esc="session._flexsys_money(row['net_sales'], data['currency'])"/><td class="fs-col-money fs-refunds-cell" t-esc="session._flexsys_money(row['refunds'], data['currency'])"/><td class="fs-col-money" t-esc="session._flexsys_money(row['discounts'], data['currency'])"/>
+                                        <td class="fs-col-number" t-esc="session._flexsys_qty(row['average_items'])"/><td class="fs-col-money" t-esc="session._flexsys_money(row['average_order'], data['currency'])"/><td class="fs-col-money" t-esc="session._flexsys_money(row['sales'], data['currency'])"/>
+                                        <td class="fs-col-number" t-esc="row['order_count']"/><td class="fs-cashier-name" t-esc="row['name']"/><td class="fs-col-no" t-esc="row_index + 1"/>
                                     </tr>
                                 </tbody></table>
                             </t>

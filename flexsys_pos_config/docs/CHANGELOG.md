@@ -1,10 +1,9 @@
-## 19.0.14.2.4 — Final Centered Data Enforcement
-- Enforced centered alignment on every Arabic Executive Report table cell and its nested rendered content.
-- Centered mixed Arabic/English product names, payment methods, cash reconciliation values, and cashier names reliably in PDF output.
-- Centered payment progress bars beneath their method labels.
-- Preserved the approved session card, report header, KPI cards, colors, and overall layout without additional design changes.
-- Retained native Arabic RTL flow and native English LTR flow.
-
+# 19.0.14.2.4
+- Correct POS discount totals using the explicit line discount percentage.
+- Physically mirror Arabic report columns for wkhtmltopdf-safe RTL output.
+- Mirror Arabic payment, cash control, and cashier-performance tables.
+- Stabilize negative monetary values.
+- Keep all report-table content centered.
 
 ## 19.0.14.2.3 — Executive Report Native RTL Edition
 - Rebuilt Arabic product sales, payment methods, cash reconciliation, and cashier performance tables in true logical RTL order.

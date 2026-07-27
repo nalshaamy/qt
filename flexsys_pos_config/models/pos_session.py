@@ -16,14 +16,17 @@ class PosSession(models.Model):
     @api.model
     def _flexsys_money(self, amount, currency):
         """Format a monetary value using the session currency and user locale."""
-        value = format_amount(self.env, amount or 0.0, currency)
+        numeric_amount = amount or 0.0
+        is_negative = numeric_amount < 0
+        value = format_amount(self.env, abs(numeric_amount) if is_negative else numeric_amount, currency)
         # Remove invisible direction/BOM characters that wkhtmltopdf may expose
         # as garbled text in narrow RTL reports.
         for char in ("\u00a0", "\u202f"):
             value = value.replace(char, " ")
         for char in ("\u200e", "\u200f", "\u202a", "\u202b", "\u202c", "\u202d", "\u202e", "\u2066", "\u2067", "\u2068", "\u2069", "\ufeff"):
             value = value.replace(char, "")
-        return value.strip()
+        value = value.strip()
+        return f"-{value}" if is_negative and value else value
 
     @api.model
     def _flexsys_qty(self, quantity):
@@ -77,7 +80,7 @@ class PosSession(models.Model):
         net_untaxed = sum(lines.mapped("price_subtotal"))
         tax_total = gross_sales - net_untaxed
         discount_total = sum(
-            (line.price_unit * line.qty) - line.price_subtotal
+            line.price_unit * line.qty * ((line.discount or 0.0) / 100.0)
             for line in lines
             if line.qty > 0
         )
@@ -130,7 +133,7 @@ class PosSession(models.Model):
                 line.price_subtotal_incl for line in order_lines if line.qty < 0
             ))
             discounts = sum(
-                (line.price_unit * line.qty) - line.price_subtotal
+                line.price_unit * line.qty * ((line.discount or 0.0) / 100.0)
                 for line in order_lines if line.qty > 0
             )
             key = f"{cashier._name}:{cashier.id}"
@@ -196,7 +199,8 @@ class PosSession(models.Model):
                 row["refund_qty"] += abs(line.qty)
             line_gross = line.price_unit * line.qty
             row["gross"] += line_gross
-            row["discount"] += line_gross - line.price_subtotal
+            if line.qty > 0:
+                row["discount"] += line.price_unit * line.qty * ((line.discount or 0.0) / 100.0)
             row["net"] += line.price_subtotal_incl
             row["tax"] += line.price_subtotal_incl - line.price_subtotal
 

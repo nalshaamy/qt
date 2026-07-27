@@ -1337,62 +1337,15 @@
 .fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(8),
 .fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(9) { width: 10%; }
 
-/* FLPOS 19.0.14.2.4 — final centered-data enforcement.
- * wkhtmltopdf can preserve inherited right/left alignment on nested inline
- * elements even when the table cell itself is centered. These final rules
- * center both the cell and its rendered children, without changing the
- * approved header, session card, KPI cards, or general report layout.
- */
-.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th,
-.fs-a4-report[lang="ar"] .fs-a4-products-table-ar td,
-.fs-a4-report[lang="ar"] .fs-payment-table-ar th,
-.fs-a4-report[lang="ar"] .fs-payment-table-ar td,
+
+/* FLPOS 19.0.14.2.4 — wkhtmltopdf-safe native Arabic structure. */
+.fs-a4-report[lang="ar"] .fs-a4-section-title {
+    border-left: 0 !important;
+    border-right: 5px solid #f28c28 !important;
+    direction: rtl !important;
+    text-align: right !important;
+}
+.fs-a4-report[lang="ar"] .fs-a4-section-title span { text-align: right !important; }
+.fs-a4-report[lang="ar"] .fs-payment-track { direction: ltr !important; }
 .fs-a4-report[lang="ar"] .fs-a4-summary-table-ar th,
-.fs-a4-report[lang="ar"] .fs-a4-summary-table-ar td,
-.fs-a4-report[lang="ar"] .fs-a4-cashier-table-ar th,
-.fs-a4-report[lang="ar"] .fs-a4-cashier-table-ar td,
-.fs-a4-report[lang="ar"] .fs-a4-products-table-ar td > strong,
-.fs-a4-report[lang="ar"] .fs-a4-products-table-ar td > small,
-.fs-a4-report[lang="ar"] .fs-payment-table-ar td > strong,
-.fs-a4-report[lang="ar"] .fs-a4-cashier-table-ar td > strong {
-    text-align: center !important;
-    vertical-align: middle !important;
-}
-
-.fs-a4-report[lang="ar"] .fs-a4-products-table-ar .fs-product-cell strong,
-.fs-a4-report[lang="ar"] .fs-a4-products-table-ar .fs-product-cell small,
-.fs-a4-report[lang="ar"] .fs-payment-table-ar td:first-child > strong,
-.fs-a4-report[lang="ar"] .fs-a4-cashier-table-ar .fs-cashier-name {
-    display: block !important;
-    width: 100% !important;
-    margin-right: auto !important;
-    margin-left: auto !important;
-    text-align: center !important;
-}
-
-.fs-a4-report[lang="ar"] .fs-payment-table-ar .fs-payment-track {
-    width: 88%;
-    margin-right: auto !important;
-    margin-left: auto !important;
-}
-
-/* Apply the same centered data policy to the English tabular report while
- * retaining its native LTR column flow. */
-.fs-a4-report[lang="en"] .fs-a4-data-table th,
-.fs-a4-report[lang="en"] .fs-a4-data-table td,
-.fs-a4-report[lang="en"] .fs-a4-data-table td > strong,
-.fs-a4-report[lang="en"] .fs-a4-data-table td > small {
-    text-align: center !important;
-    vertical-align: middle !important;
-}
-
-.fs-a4-report[lang="en"] .fs-a4-products-table .fs-product-cell strong,
-.fs-a4-report[lang="en"] .fs-a4-products-table .fs-product-cell small,
-.fs-a4-report[lang="en"] .fs-payment-table td:first-child > strong,
-.fs-a4-report[lang="en"] .fs-a4-data-table .fs-cashier-name {
-    display: block !important;
-    width: 100% !important;
-    margin-right: auto !important;
-    margin-left: auto !important;
-    text-align: center !important;
-}
+.fs-a4-report[lang="ar"] .fs-a4-summary-table-ar td { width: 50% !important; }
