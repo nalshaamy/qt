@@ -1349,3 +1349,32 @@
 .fs-a4-report[lang="ar"] .fs-payment-track { direction: ltr !important; }
 .fs-a4-report[lang="ar"] .fs-a4-summary-table-ar th,
 .fs-a4-report[lang="ar"] .fs-a4-summary-table-ar td { width: 50% !important; }
+
+/* FLPOS 19.0.14.2.5 — Final Arabic product-table header polish.
+   Match widths to the physical QWeb column order used by wkhtmltopdf and
+   keep compact Arabic headings, especially "الإجمالي", on one line. */
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(1),
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar td:nth-child(1),
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(2),
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar td:nth-child(2),
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(3),
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar td:nth-child(3),
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(4),
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar td:nth-child(4) { width: 10.5% !important; }
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(5),
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar td:nth-child(5) { width: 7% !important; }
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(6),
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar td:nth-child(6),
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(7),
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar td:nth-child(7) { width: 10.5% !important; }
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(8),
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar td:nth-child(8) { width: 26% !important; }
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar th:nth-child(9),
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar td:nth-child(9) { width: 4% !important; }
+
+.fs-a4-report[lang="ar"] .fs-a4-products-table-ar thead th {
+    white-space: nowrap !important;
+    overflow-wrap: normal !important;
+    word-break: normal !important;
+    font-size: 6.8px !important;
+}

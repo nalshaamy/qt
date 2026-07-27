@@ -1,3 +1,8 @@
+# 19.0.14.2.5
+- Corrected Arabic product-table column widths to match the physical QWeb order used by wkhtmltopdf.
+- Prevented the Arabic total header (الإجمالي) and other compact column headings from splitting across lines.
+- Preserved the approved RTL layout, centered data, calculations, branding, and session card without other visual changes.
+
 # 19.0.14.2.4
 - Correct POS discount totals using the explicit line discount percentage.
 - Physically mirror Arabic report columns for wkhtmltopdf-safe RTL output.
