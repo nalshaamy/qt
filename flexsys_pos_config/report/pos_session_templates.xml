@@ -69,7 +69,8 @@
                             </tr>
                         </table>
 
-                        <div class="fs-a4-section-title"><span t-out="data['a4_labels']['product_sales']"/></div>
+                        <div t-if="data['report_language'] == 'ar'" class="fs-a4-section-title fs-ar-section-title" dir="rtl" style="direction: rtl !important; text-align: right !important; border-left: 0 !important; border-right: 5px solid #f28c28 !important;"><span style="display: block; width: 100%; direction: rtl !important; text-align: right !important;" t-out="data['a4_labels']['product_sales']"/></div>
+                        <div t-else="" class="fs-a4-section-title"><span t-out="data['a4_labels']['product_sales']"/></div>
 
                         <!-- Arabic-native RTL layout: semantic column order starts at the
                              right edge (# / name / details) and flows naturally to the left. -->
