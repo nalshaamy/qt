@@ -1,3 +1,14 @@
+
+## 19.0.15.2.0
+- Reduced the thermal closing report logo to a maximum of 70 px × 35 px.
+- Kept the logo proportional, centered, and isolated from the A4 report styling.
+# 19.0.15.1.0
+
+- Switched the thermal closing report from the embedded FLPOS Cairo font to an Odoo-compatible font stack.
+- Thermal font order: Inter, Noto Sans Arabic, Noto Sans, Lato, DejaVu Sans, Arial, sans-serif.
+- Kept the Executive A4 report typography unchanged.
+- No report calculations, layouts, sections, or automatic-closing behavior were changed.
+
 # 19.0.15.0.0
 - Added the **Print Closing Report Automatically** option under Point of Sale closing-report settings.
 - Enabled: after a successful Close Register operation, the thermal closing report opens automatically.

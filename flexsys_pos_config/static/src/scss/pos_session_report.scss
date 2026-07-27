@@ -7,7 +7,7 @@
     margin: 0 auto;
     padding: 0;
     color: #000;
-    font-family: "FLPOS Cairo", "DejaVu Sans", "Noto Naskh Arabic", "Arial", sans-serif;
+    font-family: "Inter", "Noto Sans Arabic", "Noto Sans", "Lato", "DejaVu Sans", Arial, sans-serif;
     font-size: 9px;
     direction: rtl;
     unicode-bidi: embed;
@@ -35,7 +35,7 @@
 /* Keep Arabic text shaping and numeric values stable in wkhtmltopdf. */
 .fs-thermal-report,
 .fs-thermal-report * {
-    font-family: "FLPOS Cairo", "DejaVu Sans", "Noto Naskh Arabic", Arial, sans-serif !important;
+    font-family: "Inter", "Noto Sans Arabic", "Noto Sans", "Lato", "DejaVu Sans", Arial, sans-serif !important;
 }
 .fs-thermal-report {
     text-rendering: geometricPrecision;
@@ -332,10 +332,14 @@
 
 /* FLPOS 19.0.10.0.3: wkhtmltopdf font and narrow-column hardening. */
 .fs-pos-report,
-.fs-pos-report *,
+.fs-pos-report * {
+    font-family: "FLPOS Cairo", "DejaVu Sans", Arial, sans-serif !important;
+}
+
+/* FLPOS 19.0.15.1.0: use Odoo-compatible system font stack on thermal reports. */
 .fs-thermal-report,
 .fs-thermal-report * {
-    font-family: "FLPOS Cairo", "DejaVu Sans", Arial, sans-serif !important;
+    font-family: "Inter", "Noto Sans Arabic", "Noto Sans", "Lato", "DejaVu Sans", Arial, sans-serif !important;
 }
 .fs-thermal-session-table th {
     width: 29%;
@@ -1481,4 +1485,16 @@
     direction: rtl !important;
     text-align: right !important;
     unicode-bidi: plaintext !important;
+}
+
+/* FLPOS Intelligence 19.0.15.2.0 — compact thermal report logo. */
+.fs-thermal-report .fs-thermal-logo,
+.fs-thermal-logo {
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
+    max-width: 70px !important;
+    max-height: 35px !important;
+    margin: 0 auto 5px !important;
+    object-fit: contain !important;
 }
