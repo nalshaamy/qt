@@ -54,11 +54,20 @@ class PosConfig(models.Model):
         help="Enable the FLPOS A4 session closing report.",
     )
     flexsys_auto_print_thermal_closing_report = fields.Boolean(
-        string="Print Closing Report Automatically",
+        string="Print Thermal Report Automatically",
         default=False,
         help=(
-            "When Close Register succeeds, open the thermal closing report automatically. "
-            "When disabled, the standard A4/PDF closing report is shown instead."
+            "After Close Register, use the thermal report automatically. A configured "
+            "direct-print integration can send it to the receipt printer; otherwise "
+            "Odoo opens the thermal PDF as the safe fallback."
+        ),
+    )
+    flexsys_enable_email_closing_report = fields.Boolean(
+        string="Enable Email Closing Report",
+        default=False,
+        help=(
+            "Show an Email Report button on POS sessions. The thermal closing "
+            "report is attached automatically to a reviewable Odoo email."
         ),
     )
     flexsys_show_top_selling_products = fields.Boolean(
@@ -112,6 +121,7 @@ class PosConfig(models.Model):
                 "flexsys_enable_thermal_closing_report": record.flexsys_enable_thermal_closing_report,
                 "flexsys_enable_a4_closing_report": record.flexsys_enable_a4_closing_report,
                 "flexsys_auto_print_thermal_closing_report": record.flexsys_auto_print_thermal_closing_report,
+                "flexsys_enable_email_closing_report": record.flexsys_enable_email_closing_report,
                 "flexsys_show_top_selling_products": record.flexsys_show_top_selling_products,
                 "flexsys_hide_zero_sales_top_products": record.flexsys_hide_zero_sales_top_products,
                 "flexsys_show_cashier_performance": record.flexsys_show_cashier_performance,

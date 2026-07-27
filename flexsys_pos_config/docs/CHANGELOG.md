@@ -1,3 +1,12 @@
+## 19.0.15.3.0
+
+- Removed the logo from the Thermal closing report and replaced it with the bold company name.
+- Removed the redundant Download Thermal PDF button from POS sessions.
+- Changed the Thermal Report button to a print-oriented action.
+- Added an optional Email Closing Report setting and session button.
+- Thermal PDF is generated and attached automatically to a reviewable Odoo email composer.
+- Updated automatic thermal report wording to document direct-print/fallback behavior.
+
 
 ## 19.0.15.2.0
 - Reduced the thermal closing report logo to a maximum of 70 px × 35 px.

@@ -62,10 +62,17 @@
                     </setting>
 
                     <setting id="flexsys_auto_print_thermal_closing_report_setting"
-                             string="Print Closing Report Automatically"
-                             help="When enabled, Close Register opens the thermal closing report automatically. When disabled, the A4/PDF closing report is shown."
+                             string="Print Thermal Report Automatically"
+                             help="After Close Register, use the thermal report automatically. Direct-print integrations can print it immediately; otherwise Odoo opens the Thermal PDF."
                              invisible="not flexsys_enable_thermal_closing_report">
                         <field name="flexsys_auto_print_thermal_closing_report"/>
+                    </setting>
+
+                    <setting id="flexsys_enable_email_closing_report_setting"
+                             string="Email Closing Report"
+                             help="Show an Email Report button on POS sessions and attach the Thermal PDF automatically for review before sending."
+                             invisible="not flexsys_enable_thermal_closing_report">
+                        <field name="flexsys_enable_email_closing_report"/>
                     </setting>
 
                     <setting id="flexsys_show_top_selling_products_setting"

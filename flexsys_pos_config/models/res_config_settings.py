@@ -49,6 +49,11 @@ class ResConfigSettings(models.TransientModel):
         readonly=False,
         string="Auto Print Thermal Closing Report After Closing",
     )
+    flexsys_enable_email_closing_report = fields.Boolean(
+        related="pos_config_id.flexsys_enable_email_closing_report",
+        readonly=False,
+        string="Enable Email Closing Report",
+    )
     flexsys_show_top_selling_products = fields.Boolean(
         related="pos_config_id.flexsys_show_top_selling_products",
         readonly=False,

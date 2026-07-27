@@ -4,12 +4,12 @@
 {
     "name": "FLPOS Intelligence",
     "summary": "Advanced POS Reporting, Dashboards & Business Intelligence for Odoo",
-    "version": "19.0.15.2.0",
+    "version": "19.0.15.3.0",
     "category": "Sales/Point of Sale",
     "author": "FlexSys",
     "website": "https://flexsys.sa",
     "license": "LGPL-3",
-    "depends": ["point_of_sale"],
+    "depends": ["point_of_sale", "mail"],
     "data": [
         "report/pos_session_report.xml",
         "report/pos_session_templates.xml",

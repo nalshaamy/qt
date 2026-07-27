@@ -1498,3 +1498,15 @@
     margin: 0 auto 5px !important;
     object-fit: contain !important;
 }
+
+/* FLPOS Intelligence 19.0.15.3.0 — text-only thermal header. */
+.fs-thermal-report .fs-thermal-logo { display: none !important; }
+.fs-thermal-report .fs-thermal-company {
+    display: block;
+    margin: 0 auto 1.5mm;
+    font-size: 15px;
+    line-height: 1.3;
+    font-weight: 800;
+    text-align: center;
+    overflow-wrap: anywhere;
+}

@@ -221,10 +221,7 @@
                 <t t-set="data" t-value="session._flexsys_get_closing_report_data()"/>
                 <div class="page fs-thermal-report" dir="rtl" lang="ar">
                     <div class="fs-thermal-center">
-                        <img t-if="data['report_logo']"
-                             t-att-src="image_data_uri(data['report_logo'])"
-                             class="fs-thermal-logo" alt="Logo"/>
-                        <div t-if="not data['report_logo']" class="fs-thermal-company"
+                        <div class="fs-thermal-company"
                              t-esc="session.company_id.display_name"/>
                         <div class="fs-thermal-title">تقرير إغلاق جلسة نقطة البيع</div>
                         <div class="fs-thermal-subtitle">POS SESSION CLOSING</div>

@@ -84,6 +84,7 @@
                 <field name="company_id" groups="base.group_multi_company"/>
                 <field name="flexsys_enable_thermal_closing_report"/>
                 <field name="flexsys_enable_a4_closing_report"/>
+                <field name="flexsys_enable_email_closing_report"/>
             </list>
         </field>
     </record>
@@ -101,6 +102,10 @@
                     <group string="Closing Report Formats">
                         <field name="flexsys_enable_thermal_closing_report"/>
                         <field name="flexsys_enable_a4_closing_report"/>
+                        <field name="flexsys_auto_print_thermal_closing_report"
+                               invisible="not flexsys_enable_thermal_closing_report"/>
+                        <field name="flexsys_enable_email_closing_report"
+                               invisible="not flexsys_enable_thermal_closing_report"/>
                     </group>
                 </sheet>
             </form>

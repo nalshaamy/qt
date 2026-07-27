@@ -2,6 +2,7 @@
 # FLPOS - Builds enhanced POS session closing report data.
 
 from collections import defaultdict
+import base64
 
 from odoo import api, fields, models
 from odoo.tools import format_amount
@@ -445,14 +446,41 @@ class PosSession(models.Model):
             "target": "new",
         }
 
-    def action_flexsys_download_thermal_closing_report(self):
-        """Download the 80 mm thermal closing report as a PDF file."""
+    def action_flexsys_email_thermal_closing_report(self):
+        """Open a reviewable email with the thermal closing PDF attached."""
         self.ensure_one()
+        if not self.config_id.flexsys_enable_email_closing_report:
+            return False
+
+        pdf_content, _content_type = self.env["ir.actions.report"]._render_qweb_pdf(
+            "flexsys_pos_config.report_pos_session_closing_thermal",
+            res_ids=[self.id],
+        )
+        safe_session_name = (self.name or str(self.id)).replace("/", "-")
+        attachment = self.env["ir.attachment"].create({
+            "name": f"Thermal Closing Report - {safe_session_name}.pdf",
+            "type": "binary",
+            "datas": base64.b64encode(pdf_content),
+            "mimetype": "application/pdf",
+            "res_model": self._name,
+            "res_id": self.id,
+        })
+        subject = f"Thermal Closing Report - {self.name or ''}".strip(" -")
+        body = (
+            f"<p>Please find attached the thermal closing report for "
+            f"<strong>{self.display_name}</strong>.</p>"
+        )
         return {
-            "type": "ir.actions.act_url",
-            "url": (
-                "/report/pdf/flexsys_pos_config.report_pos_session_closing_thermal/"
-                f"{self.id}?download=true"
-            ),
-            "target": "self",
+            "type": "ir.actions.act_window",
+            "res_model": "mail.compose.message",
+            "view_mode": "form",
+            "target": "new",
+            "context": {
+                "default_composition_mode": "comment",
+                "default_model": self._name,
+                "default_res_ids": self.ids,
+                "default_subject": subject,
+                "default_body": body,
+                "default_attachment_ids": [(6, 0, attachment.ids)],
+            },
         }
