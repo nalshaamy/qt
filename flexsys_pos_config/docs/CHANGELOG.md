@@ -1,3 +1,8 @@
+## 19.0.14.2.7
+- Fixed Arabic product-name alignment using direct wkhtmltopdf-safe classes.
+- Fixed Arabic section-title alignment for Payments, Cash Control, and Cashier Performance.
+- Fixed Arabic Payment Method and Amount alignment.
+
 # Changelog
 
 ## 19.0.14.2.6

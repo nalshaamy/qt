@@ -1438,3 +1438,47 @@
         display: table-row-group !important;
     }
 }
+
+
+/* FLPOS Intelligence 19.0.14.2.7 — wkhtmltopdf-safe Arabic alignment.
+   These rules use direct classes instead of language-attribute selectors,
+   because wkhtmltopdf may ignore some compound attribute selectors. */
+.fs-ar-product-align,
+.fs-ar-product-align .fs-ar-product-name,
+.fs-ar-product-align .fs-ar-product-meta {
+    direction: rtl !important;
+    text-align: right !important;
+    unicode-bidi: plaintext !important;
+}
+.fs-ar-product-align .fs-ar-product-name,
+.fs-ar-product-align .fs-ar-product-meta {
+    display: block !important;
+    width: 100% !important;
+}
+
+.fs-ar-section-title {
+    direction: rtl !important;
+    text-align: right !important;
+    border-left: 0 !important;
+    border-right: 5px solid #f28c28 !important;
+}
+.fs-ar-section-title > span {
+    display: block !important;
+    width: 100% !important;
+    direction: rtl !important;
+    text-align: right !important;
+}
+
+.fs-payment-table-ar th.fs-ar-payment-amount,
+.fs-payment-table-ar td.fs-ar-payment-amount {
+    direction: ltr !important;
+    text-align: right !important;
+    white-space: nowrap !important;
+}
+.fs-payment-table-ar th.fs-ar-payment-method,
+.fs-payment-table-ar td.fs-ar-payment-method,
+.fs-payment-table-ar td.fs-ar-payment-method strong {
+    direction: rtl !important;
+    text-align: right !important;
+    unicode-bidi: plaintext !important;
+}
