@@ -146,7 +146,7 @@
                                 <tbody>
                                     <tr t-foreach="data['variant_rows']" t-as="row">
                                         <td class="fs-col-no" t-esc="row_index + 1"/>
-                                        <td class="fs-product-cell fs-ar-product-align" dir="rtl" style="direction: rtl !important; text-align: right !important;"><strong class="fs-ar-product-name" style="display: block; width: 100%; direction: rtl !important; text-align: right !important;" t-esc="row['product']"/><small class="fs-ar-product-meta" t-if="row['barcode'] and row['barcode'] != '—'"><t t-out="data['a4_labels']['sku_barcode']"/>: <t t-esc="row['barcode']"/></small></td>
+                                        <td class="fs-product-cell fs-en-product-align" dir="ltr" style="direction: ltr !important; text-align: left !important;"><strong class="fs-en-product-name" dir="auto" style="display: block; width: 100%; text-align: left !important;" t-esc="row['product']"/><small class="fs-en-product-meta" dir="auto" t-if="row['barcode'] and row['barcode'] != '—'"><t t-out="data['a4_labels']['sku_barcode']"/>: <t t-esc="row['barcode']"/></small></td>
                                         <td class="fs-product-category" t-esc="row['category']"/><td class="fs-product-attributes" t-esc="row['attributes']"/>
                                         <td class="fs-col-number"><t t-esc="session._flexsys_qty(row['qty'])"/><small t-if="row['refund_qty']"><t t-out="data['a4_labels']['refund']"/>: <t t-esc="session._flexsys_qty(row['refund_qty'])"/></small></td>
                                         <td class="fs-col-money" t-esc="session._flexsys_money(row['unit_price'], data['currency'])"/>

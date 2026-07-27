@@ -62,8 +62,8 @@
                     </setting>
 
                     <setting id="flexsys_auto_print_thermal_closing_report_setting"
-                             string="Auto Print After Close Register"
-                             help="After a successful Close Register operation, automatically open the thermal closing report for printing."
+                             string="Print Closing Report Automatically"
+                             help="When enabled, Close Register opens the thermal closing report automatically. When disabled, the A4/PDF closing report is shown."
                              invisible="not flexsys_enable_thermal_closing_report">
                         <field name="flexsys_auto_print_thermal_closing_report"/>
                     </setting>

@@ -54,11 +54,11 @@ class PosConfig(models.Model):
         help="Enable the FLPOS A4 session closing report.",
     )
     flexsys_auto_print_thermal_closing_report = fields.Boolean(
-        string="Auto Print Thermal Closing Report After Closing",
+        string="Print Closing Report Automatically",
         default=False,
         help=(
-            "Automatically open the thermal closing report for printing only "
-            "after the POS session has been closed successfully."
+            "When Close Register succeeds, open the thermal closing report automatically. "
+            "When disabled, the standard A4/PDF closing report is shown instead."
         ),
     )
     flexsys_show_top_selling_products = fields.Boolean(

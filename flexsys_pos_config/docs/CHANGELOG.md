@@ -1,3 +1,13 @@
+# 19.0.15.0.0
+- Added the **Print Closing Report Automatically** option under Point of Sale closing-report settings.
+- Enabled: after a successful Close Register operation, the thermal closing report opens automatically.
+- Disabled: the approved A4/PDF closing report is displayed instead.
+- Preserved the approved Arabic and English Executive Report layouts.
+
+# 19.0.14.3.0
+- Fixed English Executive Report product-name cells so Arabic RTL alignment rules no longer leak into the English LTR template.
+- Preserved the approved Arabic report layout unchanged.
+
 # Changelog
 
 ## 19.0.14.2.8

@@ -98,23 +98,32 @@ patch(ClosePosPopup.prototype, {
 
             if (
                 sessionClosed &&
-                this.flexsysAutoPrintThermalClosingReportEnabled &&
-                !this._flexsysAutoPrintInProgress &&
-                !this._flexsysAutoPrintCompleted
+                !this._flexsysClosingReportInProgress &&
+                !this._flexsysClosingReportCompleted
             ) {
-                this._flexsysAutoPrintInProgress = true;
+                this._flexsysClosingReportInProgress = true;
                 try {
-                    await this.flexsysOpenThermalClosingReport(sessionId);
-                    this._flexsysAutoPrintCompleted = true;
+                    if (this.flexsysAutoPrintThermalClosingReportEnabled) {
+                        // Automatic mode: use the compact thermal report action.
+                        await this.flexsysOpenThermalClosingReport(sessionId);
+                    } else if (this.flexsysA4ClosingReportEnabled) {
+                        // Manual/PDF mode: preserve the established A4 closing
+                        // report flow when automatic thermal printing is disabled.
+                        await this.report.doAction(
+                            "flexsys_pos_config.action_report_pos_session_closing",
+                            [sessionId]
+                        );
+                    }
+                    this._flexsysClosingReportCompleted = true;
                 } catch (error) {
-                    // Closing has already succeeded. Printing errors must never
-                    // roll back or block the original Odoo closing workflow.
+                    // Closing has already succeeded. A report-display error must
+                    // not roll back or block the original Odoo closing workflow.
                     console.error(
-                        "FLPOS: The POS session closed successfully, but automatic printing failed.",
+                        "FLPOS: The POS session closed successfully, but the closing report could not be opened.",
                         error
                     );
                 } finally {
-                    this._flexsysAutoPrintInProgress = false;
+                    this._flexsysClosingReportInProgress = false;
                 }
             }
 
