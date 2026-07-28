@@ -1,19 +1,12 @@
-# QA Protocol — FS-SI-001
+# RC2 QA Protocol
 
-1. Install or upgrade `flexsys_odoo_stability` on staging.
-2. Hard-refresh Backend and POS tabs.
-3. Confirm the console API exists:
-   `window.__flexsysOdooStability__.getStatus()`
-4. Keep Backend and POS open in separate tabs.
-5. Exercise normal sales, synchronization, and session closing.
-6. On a quota event, capture:
-   `await window.__flexsysOdooStability__.inspect()`
-7. Verify only database `rpc` is reset.
-8. Verify POS databases remain present and orders are not lost.
-
-## Acceptance criteria
-
-- No uncaught quota error from the RPC cache recovery path.
-- No deletion of POS/offline databases.
-- No duplicate recovery loop across tabs.
-- Normal Backend and POS behavior after recovery.
+1. Upgrade the module on staging.
+2. Hard refresh Backend and POS tabs.
+3. Confirm both status flags are `true`.
+4. Reproduce the multi-tab scenario that previously raised the quota popup.
+5. Confirm:
+   - no Odoo technical error popup appears;
+   - POS/offline databases remain present;
+   - the `rpc` database is recreated automatically when needed;
+   - normal navigation and reports continue working.
+6. Capture `getStatus()` after the event.

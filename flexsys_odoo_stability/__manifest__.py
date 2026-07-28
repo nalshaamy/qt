@@ -1,7 +1,7 @@
 {
     "name": "FlexSys Odoo Stability",
-    "summary": "Browser storage resilience and diagnostics for Odoo 19",
-    "version": "19.0.1.0.0",
+    "summary": "Preventive RPC cache quota recovery for Odoo 19",
+    "version": "19.0.1.1.0",
     "category": "Technical",
     "author": "FlexSys",
     "website": "https://flexsys.sa",

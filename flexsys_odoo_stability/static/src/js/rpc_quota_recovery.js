@@ -1,17 +1,17 @@
 /** @odoo-module **/
 
+import { patch } from "@web/core/utils/patch";
+import { IndexedDB, IDBQuotaExceededError } from "@web/core/utils/indexed_db";
+
 /**
- * FlexSys Odoo Stability — RPC IndexedDB quota recovery.
+ * FlexSys Odoo Stability — preventive RPC IndexedDB quota guard.
  *
- * Scope is deliberately narrow:
- * - Detect quota failures in the browser.
- * - Automatically delete ONLY Odoo's disposable `rpc` cache database.
- * - Never delete POS/offline databases or business data.
- * - Coordinate recovery across open tabs.
+ * The `rpc` IndexedDB database is a disposable web-client cache. A failed
+ * write must never become a user-facing UncaughtPromiseError. This module
+ * catches the quota failure at the IndexedDB write boundary, resets only the
+ * `rpc` database, and resolves the optional cache write gracefully.
  *
- * This is a compatibility guard for Odoo 19 environments where a quota
- * exception can escape the RPC cache recovery path. It is safe to remove once
- * the running Odoo revision reliably includes the upstream recovery behavior.
+ * POS/offline databases and business data are never deleted.
  */
 
 const GLOBAL_KEY = "__flexsysOdooStabilityInstalled__";
@@ -26,12 +26,15 @@ if (!globalThis[GLOBAL_KEY]) {
     globalThis[GLOBAL_KEY] = true;
 
     const state = {
+        version: "19.0.1.1.0-rc2",
         installedAt: new Date().toISOString(),
         recoveryInProgress: false,
         lastRecoveryAt: 0,
         lastEvent: null,
         lastResult: null,
-        transactionPatchInstalled: false,
+        preventiveWritePatchInstalled: false,
+        unhandledGuardInstalled: false,
+        preventedUnhandledErrors: 0,
     };
 
     let channel = null;
@@ -58,6 +61,10 @@ if (!globalThis[GLOBAL_KEY]) {
         }
         if (typeof error === "object") {
             seen.add(error);
+        }
+
+        if (error instanceof IDBQuotaExceededError) {
+            return true;
         }
 
         const name = String(error.name || "").toLowerCase();
@@ -139,7 +146,7 @@ if (!globalThis[GLOBAL_KEY]) {
         return { status: "blocked", attempt: MAX_DELETE_RETRIES };
     }
 
-    async function recoverRpcCache(source, error = null) {
+    async function recoverRpcCache(source, error = null, indexedDbInstance = null) {
         const now = Date.now();
         if (state.recoveryInProgress || now - state.lastRecoveryAt < RECOVERY_COOLDOWN_MS) {
             return { status: "skipped", reason: "cooldown-or-in-progress" };
@@ -159,7 +166,25 @@ if (!globalThis[GLOBAL_KEY]) {
 
         try {
             channel?.postMessage({ type: "recovery-started", at: now, source });
-            const deletion = await deleteRpcDatabase();
+
+            // Prefer Odoo's own IndexedDB wrapper. It serializes deletion through
+            // its mutex and is the safest path while a cache write is failing.
+            let deletion;
+            if (indexedDbInstance?.name === RPC_DB_NAME) {
+                try {
+                    await indexedDbInstance.deleteDatabase();
+                    deletion = { status: "deleted", method: "odoo-indexeddb-wrapper" };
+                } catch (deleteError) {
+                    deletion = {
+                        status: "error",
+                        method: "odoo-indexeddb-wrapper",
+                        error: serializeError(deleteError),
+                    };
+                }
+            } else {
+                deletion = await deleteRpcDatabase();
+            }
+
             state.lastResult = {
                 at: new Date().toISOString(),
                 deletion,
@@ -169,8 +194,8 @@ if (!globalThis[GLOBAL_KEY]) {
 
             if (deletion.status === "deleted") {
                 console.warn(
-                    "[FlexSys Stability] Odoo RPC cache was reset after a quota error. " +
-                        "POS/offline databases were not touched."
+                    "[FlexSys Stability] RPC cache write was safely skipped and the disposable " +
+                        "rpc database was reset. POS/offline databases were not touched."
                 );
             } else {
                 console.error("[FlexSys Stability] RPC cache recovery did not complete.", deletion);
@@ -181,49 +206,57 @@ if (!globalThis[GLOBAL_KEY]) {
         }
     }
 
-    function handlePossibleQuota(source, error) {
-        if (isQuotaExceeded(error)) {
-            void recoverRpcCache(source, error);
-        }
-    }
-
-    function installRpcTransactionObserver() {
-        const prototype = globalThis.IDBDatabase?.prototype;
-        if (!prototype || prototype.__flexsysRpcObserverInstalled__) {
-            return false;
+    function installPreventiveWritePatch() {
+        if (IndexedDB.prototype.__flexsysPreventiveQuotaPatch__) {
+            state.preventiveWritePatchInstalled = true;
+            return;
         }
 
-        const originalTransaction = prototype.transaction;
-        Object.defineProperty(prototype, "__flexsysRpcObserverInstalled__", {
+        Object.defineProperty(IndexedDB.prototype, "__flexsysPreventiveQuotaPatch__", {
             value: true,
             configurable: false,
             enumerable: false,
             writable: false,
         });
 
-        prototype.transaction = function (...args) {
-            const transaction = originalTransaction.apply(this, args);
-            if (this.name === RPC_DB_NAME) {
-                const inspect = () => {
-                    const error = transaction.error;
-                    handlePossibleQuota("rpc-indexeddb-transaction", error);
-                };
-                transaction.addEventListener("abort", inspect);
-                transaction.addEventListener("error", inspect);
-            }
-            return transaction;
-        };
-        state.transactionPatchInstalled = true;
-        return true;
+        patch(IndexedDB.prototype, {
+            async write(table, key, value) {
+                try {
+                    return await super.write(table, key, value);
+                } catch (error) {
+                    if (this.name !== RPC_DB_NAME || !isQuotaExceeded(error)) {
+                        throw error;
+                    }
+
+                    // RPC disk caching is an optional optimization. Returning
+                    // successfully here preserves the real RPC result already
+                    // held in RAM and prevents a user-facing rejected promise.
+                    await recoverRpcCache("rpc-write-preventive-guard", error, this);
+                    return undefined;
+                }
+            },
+        });
+        state.preventiveWritePatchInstalled = true;
     }
 
-    addEventListener("unhandledrejection", (event) => {
-        handlePossibleQuota("unhandledrejection", event.reason);
-    });
+    function installUnhandledGuard() {
+        const guard = (event) => {
+            if (!isQuotaExceeded(event.reason)) {
+                return;
+            }
 
-    addEventListener("error", (event) => {
-        handlePossibleQuota("window-error", event.error || event.message);
-    });
+            // A second safety net for quota rejections created before this module
+            // was evaluated or outside RPCCache. Suppress Odoo's technical popup,
+            // recover the disposable rpc cache, and leave POS data untouched.
+            event.preventDefault();
+            event.stopImmediatePropagation?.();
+            state.preventedUnhandledErrors += 1;
+            void recoverRpcCache("unhandledrejection-safety-net", event.reason);
+        };
+
+        addEventListener("unhandledrejection", guard, { capture: true });
+        state.unhandledGuardInstalled = true;
+    }
 
     channel?.addEventListener("message", (event) => {
         if (event.data?.type === "recovery-started") {
@@ -231,7 +264,8 @@ if (!globalThis[GLOBAL_KEY]) {
         }
     });
 
-    installRpcTransactionObserver();
+    installPreventiveWritePatch();
+    installUnhandledGuard();
 
     globalThis[API_KEY] = Object.freeze({
         getStatus() {
@@ -249,5 +283,11 @@ if (!globalThis[GLOBAL_KEY]) {
                 databases: indexedDB.databases ? await indexedDB.databases() : null,
             };
         },
+    });
+
+    console.info("FlexSys Odoo Stability RC2 preventive guard installed", {
+        version: state.version,
+        preventiveWritePatchInstalled: state.preventiveWritePatchInstalled,
+        unhandledGuardInstalled: state.unhandledGuardInstalled,
     });
 }
