@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+    <!--
+        FLPOS Receipt Engine - foundation.
+
+        The extension stays inside OrderReceipt where the current order and
+        its POS configuration are available. It deliberately avoids patching
+        ReceiptHeader, POS loaders, stores, and JavaScript services.
+    -->
+    <t t-name="flexsys_pos_config.OrderReceipt"
+       t-inherit="point_of_sale.OrderReceipt"
+       t-inherit-mode="extension">
+
+        <!--
+            Add feature classes to the receipt root. CSS uses these classes to
+            control Odoo's default receipt logo without touching ReceiptHeader.
+        -->
+        <xpath expr="//div[hasclass('pos-receipt')]" position="attributes">
+            <attribute name="t-att-class">{
+                'flexsys-receipt-engine': true,
+                'flexsys-hide-default-receipt-logo': order.config.flexsys_enable_custom_receipt_logo and order.config.flexsys_has_receipt_logo and order.config.flexsys_hide_company_logo,
+            }</attribute>
+        </xpath>
+
+        <!-- Dedicated logo for this Point of Sale. -->
+        <xpath expr="//ReceiptHeader" position="before">
+            <div t-if="order.config.flexsys_enable_custom_receipt_logo and order.config.flexsys_has_receipt_logo"
+                 class="flexsys-receipt-logo text-center">
+                <img t-att-src="'/web/image/pos.config/' + order.config.id + '/flexsys_receipt_logo'"
+                     alt="Receipt Logo"/>
+            </div>
+        </xpath>
+
+        <!-- Odoo branding remains available unless this POS explicitly hides it. -->
+        <xpath expr="//div[contains(@class, 'footer-powered-by')]" position="attributes">
+            <attribute name="t-if">!order.config.flexsys_hide_powered_by_odoo</attribute>
+        </xpath>
+    </t>
+</templates>
