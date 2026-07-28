@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+    <t t-name="flexsys_pos_config.ClosePosPopupThermalReport"
+       t-inherit="point_of_sale.ClosePosPopup"
+       t-inherit-mode="extension">
+        <xpath expr="//button[@t-on-click='downloadSalesReport']" position="after">
+            <div t-if="flexsysClosingReportMenuEnabled"
+                 class="btn-group position-relative"
+                 t-att-class="this.ui.isSmall ? 'w-100' : ''">
+                <button type="button"
+                        class="button icon btn btn-secondary dropdown-toggle"
+                        t-att-class="this.ui.isSmall ? 'w-100' : 'btn-lg'"
+                        t-on-click="flexsysToggleClosingReportMenu"
+                        aria-haspopup="true"
+                        t-att-aria-expanded="flexsysClosingReportMenuOpen ? 'true' : 'false'"
+                        title="Print closing report">
+                    Print
+                    <i t-if="!this.ui.isSmall" class="fa fa-print ms-1" role="img"/>
+                </button>
+
+                <div t-if="flexsysClosingReportMenuOpen"
+                     class="dropdown-menu show position-absolute end-0 bottom-100 mb-2 p-1 shadow"
+                     style="display:block; min-width: 250px; z-index: 1100;">
+                    <button t-if="flexsysA4ClosingReportEnabled"
+                            type="button"
+                            class="dropdown-item d-flex align-items-center gap-2 py-2"
+                            t-on-click="flexsysOpenA4ClosingReport">
+                        <i class="fa fa-file-pdf-o" role="img"/>
+                        <span>Closing Report (A4)</span>
+                    </button>
+                    <button t-if="flexsysThermalClosingReportEnabled"
+                            type="button"
+                            class="dropdown-item d-flex align-items-center gap-2 py-2"
+                            t-on-click="flexsysOpenThermalClosingReport">
+                        <i class="fa fa-print" role="img"/>
+                        <span>Closing Report (Thermal)</span>
+                    </button>
+                </div>
+            </div>
+        </xpath>
+    </t>
+</templates>
