@@ -75,7 +75,7 @@
         <field name="model">flexsys.platform.user</field>
         <field name="inherit_id" ref="flexsys_platform.view_flexsys_platform_user_form"/>
         <field name="arch" type="xml">
-            <xpath expr="//page[@string='Access']" position="after">
+            <xpath expr="//field[@name='default_branch_id']/ancestor::page[1]" position="after">
                 <page string="Operations">
                     <group>
                         <field name="operations_pos_config_ids" widget="many2many_tags" readonly="1"/>
