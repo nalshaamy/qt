@@ -1,0 +1,7 @@
+FlexSys Platform 19.0.1.2.0
+- Independent multi-device platform sessions.
+- Session-scoped company and branch context.
+- Secure company/branch switching from Mission Control.
+- Application access is permission checked, logged, and redirected through /flexsys/open/<code>.
+- Failed login, denied context, denied application, and application-open events are recorded.
+- Platform session administration list added.
