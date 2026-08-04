@@ -1,0 +1,7 @@
+FlexSys Command Palette v1.0
+
+- Open with Ctrl+K / Command+K or the visible command bar.
+- Lists applications allowed for the active independent FlexSys user.
+- Searches registered application providers through Universal Search.
+- Respects company, branch, application permissions, and internal-route safety.
+- Supports keyboard navigation, Enter, Escape, RTL/LTR, and mobile layouts.
