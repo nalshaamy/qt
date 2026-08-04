@@ -1,0 +1,26 @@
+{
+    'name': 'FlexSys Platform',
+    'version': '19.0.1.7.1',
+    'summary': 'Platform identity, application registry, Mission Control, context and shared design system for FlexSys applications',
+    'category': 'Productivity',
+    'author': 'FlexSys',
+    'license': 'LGPL-3',
+    'depends': ['base', 'web', 'mail'],
+    'data': [
+        'security/ir.model.access.csv',
+        'data/platform_data.xml',
+        'views/platform_views.xml',
+        'views/platform_templates.xml',
+    ],
+    'assets': {
+        'web.assets_frontend': [
+            'flexsys_platform/static/src/css/platform.css',
+            'flexsys_platform/static/src/js/command_palette.js',
+        ],
+        'web.assets_backend': [
+            'flexsys_platform/static/src/css/platform.css',
+        ],
+    },
+    'application': True,
+    'installable': True,
+}

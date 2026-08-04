@@ -1,0 +1,8 @@
+FlexSys Platform 19.0.1.3.0 — Application Registry Foundation
+
+- Stable application code and module identity.
+- Application version, category, workspace and search capability metadata.
+- Central permission availability check used by Mission Control and secure open route.
+- Controlled register_application() API for future applications.
+- Internal route validation and unique module protection.
+- Health metadata foundation without application-specific logic.
