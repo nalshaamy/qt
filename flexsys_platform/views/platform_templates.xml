@@ -19,7 +19,7 @@
     </template>
 
     <template id="login_page" name="FlexSys Platform Login">
-        <t t-call="web.layout">
+        <t t-call="web.frontend_layout">
             <div class="fs-platform-page fs-login-page">
                 <div class="fs-login-card">
                     <div class="fs-brand">
@@ -41,7 +41,7 @@
     </template>
 
     <template id="launcher_page" name="FlexSys Mission Control">
-        <t t-call="web.layout">
+        <t t-call="web.frontend_layout">
             <div class="fs-platform-page fs-launcher">
                 <div class="fs-shell">
                     <header class="fs-launcher-header">
@@ -177,7 +177,7 @@
     </template>
 
     <template id="workspace_page" name="FlexSys Workspace">
-        <t t-call="web.layout">
+        <t t-call="web.frontend_layout">
             <div class="fs-platform-page fs-workspace-page">
                 <div class="fs-shell">
                     <header class="fs-launcher-header">
@@ -211,7 +211,7 @@
     </template>
 
     <template id="search_page" name="FlexSys Universal Search">
-        <t t-call="web.layout">
+        <t t-call="web.frontend_layout">
             <div class="fs-platform-page fs-search-page">
                 <div class="fs-shell fs-launcher">
                     <header class="fs-launcher-header">
