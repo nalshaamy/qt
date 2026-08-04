@@ -17,7 +17,7 @@
     <field name="summary">Orders, execution tasks, stations and mission control</field>
     <field name="icon">fa-diagram-project</field>
     <field name="url">/flexsys/workspace/operations</field>
-    <field name="version">19.0.2.20.1</field>
+    <field name="version">19.0.3.0.1</field>
     <field name="module_name">flexsys_operations</field>
     <field name="category">operations</field>
     <field name="workspace_enabled">1</field>
