@@ -1,6 +1,6 @@
 {
     'name': 'FlexSys Platform',
-    'version': '19.0.2.0.0',
+    'version': '19.0.2.1.0',
     'summary': 'Platform identity, application registry, Mission Control, context and shared design system for FlexSys applications',
     'category': 'Productivity',
     'author': 'FlexSys',

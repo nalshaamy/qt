@@ -1,10 +1,10 @@
 /** @odoo-module **/
 
 const SELECTORS = {
-    open: "[data-fl-command-open]",
-    backdrop: "[data-fl-command-backdrop]",
-    input: "[data-fl-command-input]",
-    results: "[data-fl-command-results]",
+    open: "[data-fs-command-open]",
+    backdrop: "[data-fs-command-backdrop]",
+    input: "[data-fs-command-input]",
+    results: "[data-fs-command-results]",
 };
 
 class FlexSysCommandPalette {
@@ -30,7 +30,7 @@ class FlexSysCommandPalette {
 
     async open() {
         this.backdrop.hidden = false;
-        document.documentElement.classList.add("fl-command-open");
+        document.documentElement.classList.add("fs-command-open");
         this.input.value = "";
         this.input.focus();
         await this.load("");
@@ -38,12 +38,12 @@ class FlexSysCommandPalette {
 
     close() {
         this.backdrop.hidden = true;
-        document.documentElement.classList.remove("fl-command-open");
+        document.documentElement.classList.remove("fs-command-open");
     }
 
     async load(query) {
         const currentRequest = ++this.requestId;
-        this.results.innerHTML = '<div class="fl-command-state"><span class="fa fa-spinner fa-spin"/> Loading…</div>';
+        this.results.innerHTML = '<div class="fs-command-state"><span class="fa fa-spinner fa-spin"/> Loading…</div>';
         try {
             const response = await fetch(`/flexsys/command?q=${encodeURIComponent(query || "")}`, {
                 headers: {Accept: "application/json"},
@@ -61,7 +61,7 @@ class FlexSysCommandPalette {
         } catch (_error) {
             if (currentRequest !== this.requestId) return;
             this.items = [];
-            this.results.innerHTML = '<div class="fl-command-state">Unable to load commands.</div>';
+            this.results.innerHTML = '<div class="fs-command-state">Unable to load commands.</div>';
         }
     }
 
@@ -69,7 +69,7 @@ class FlexSysCommandPalette {
         this.results.replaceChildren();
         if (!this.items.length) {
             const empty = document.createElement("div");
-            empty.className = "fl-command-state";
+            empty.className = "fs-command-state";
             empty.textContent = "No matching commands.";
             this.results.appendChild(empty);
             return;
@@ -77,20 +77,20 @@ class FlexSysCommandPalette {
         this.items.forEach((item, index) => {
             const button = document.createElement("button");
             button.type = "button";
-            button.className = `fl-command-item${index === this.activeIndex ? " is-active" : ""}`;
+            button.className = `fs-command-item${index === this.activeIndex ? " is-active" : ""}`;
             button.setAttribute("role", "option");
             button.setAttribute("aria-selected", index === this.activeIndex ? "true" : "false");
 
             const icon = document.createElement("span");
-            icon.className = `fl-command-item-icon fa ${item.icon || "fa-file"}`;
+            icon.className = `fs-command-item-icon fa ${item.icon || "fa-file"}`;
             const content = document.createElement("span");
-            content.className = "fl-command-item-content";
+            content.className = "fs-command-item-content";
             const title = document.createElement("strong");
             title.textContent = item.title || "Untitled";
             const subtitle = document.createElement("small");
             subtitle.textContent = [item.application, item.subtitle].filter(Boolean).join(" · ");
             const arrow = document.createElement("span");
-            arrow.className = "fa fa-arrow-right fl-command-item-arrow";
+            arrow.className = "fa fa-arrow-right fs-command-item-arrow";
             content.append(title, subtitle);
             button.append(icon, content, arrow);
             button.addEventListener("mouseenter", () => { this.activeIndex = index; this.syncActive(); });
@@ -100,7 +100,7 @@ class FlexSysCommandPalette {
     }
 
     syncActive() {
-        [...this.results.querySelectorAll(".fl-command-item")].forEach((node, index) => {
+        [...this.results.querySelectorAll(".fs-command-item")].forEach((node, index) => {
             const active = index === this.activeIndex;
             node.classList.toggle("is-active", active);
             node.setAttribute("aria-selected", active ? "true" : "false");
@@ -134,7 +134,7 @@ class FlexSysCommandPalette {
 }
 
 function initialize() {
-    document.querySelectorAll(".fl-platform-page").forEach((page) => {
+    document.querySelectorAll(".fs-platform-page").forEach((page) => {
         if (page.querySelector(SELECTORS.backdrop)) new FlexSysCommandPalette(page);
     });
     document.addEventListener("keydown", (event) => {
