@@ -19,6 +19,40 @@ class FlexSysPlatformPermission(models.Model):
 
     _code_unique = models.Constraint('UNIQUE(code)', 'Permission code must be unique.')
 
+    @api.model
+    def _bootstrap_seed_xmlids(self):
+        """Bind existing seed records to their stable XML IDs before data import.
+
+        This keeps installation idempotent when a previous failed or removed
+        installation left business records in the database without ir.model.data
+        bindings.
+        """
+        xmlids = self.env['ir.model.data'].sudo()
+        seeds = (
+            ('permission_platform_access', 'flexsys.platform.permission', 'code', 'platform.access'),
+            ('permission_operations_access', 'flexsys.platform.permission', 'code', 'operations.access'),
+            ('role_platform_admin', 'flexsys.platform.role', 'code', 'platform_admin'),
+        )
+        for xml_name, model_name, key_field, key_value in seeds:
+            existing_xmlid = xmlids.search([
+                ('module', '=', 'flexsys_platform'),
+                ('name', '=', xml_name),
+            ], limit=1)
+            if existing_xmlid:
+                continue
+            record = self.env[model_name].sudo().search([
+                (key_field, '=', key_value),
+            ], limit=1)
+            if record:
+                xmlids.create({
+                    'module': 'flexsys_platform',
+                    'name': xml_name,
+                    'model': model_name,
+                    'res_id': record.id,
+                    'noupdate': True,
+                })
+        return True
+
 
 class FlexSysPlatformRole(models.Model):
     _name = 'flexsys.platform.role'

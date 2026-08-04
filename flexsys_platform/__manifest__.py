@@ -1,6 +1,6 @@
 {
     'name': 'FlexSys Platform',
-    'version': '19.0.1.7.1',
+    'version': '19.0.1.7.2',
     'summary': 'Platform identity, application registry, Mission Control, context and shared design system for FlexSys applications',
     'category': 'Productivity',
     'author': 'FlexSys',
@@ -8,6 +8,7 @@
     'depends': ['base', 'web', 'mail'],
     'data': [
         'security/ir.model.access.csv',
+        'data/platform_bootstrap.xml',
         'data/platform_data.xml',
         'views/platform_views.xml',
         'views/platform_templates.xml',
