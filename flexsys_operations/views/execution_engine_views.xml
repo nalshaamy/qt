@@ -272,16 +272,16 @@
         <field name="context">{'search_default_group_by_station': 1}</field>
     </record>
 
-    <menuitem id="menu_flexsys_execution" name="Execution" parent="menu_qtcafe_root" sequence="15"/>
+    <menuitem id="menu_flexsys_execution" name="Execution" parent="menu_operations_root" sequence="15"/>
     <menuitem id="menu_flexsys_execution_tasks" name="Tasks" parent="menu_flexsys_execution" action="action_flexsys_execution_task" sequence="5"/>
     <menuitem id="menu_flexsys_execution_stations" name="Stations" parent="menu_flexsys_execution" action="action_flexsys_execution_station" sequence="10"/>
     <menuitem id="menu_flexsys_execution_resources" name="Resources" parent="menu_flexsys_execution" action="action_flexsys_execution_resource" sequence="15"/>
-    <menuitem id="menu_flexsys_execution_routes" name="Routing" parent="menu_qtcafe_config" action="action_flexsys_execution_route" sequence="20"/>
+    <menuitem id="menu_flexsys_execution_routes" name="Routing" parent="menu_operations_config" action="action_flexsys_execution_route" sequence="20"/>
 
-    <record id="view_qtcafe_qr_order_form_execution" model="ir.ui.view">
-        <field name="name">qtcafe.qr.order.form.execution</field>
-        <field name="model">qtcafe.qr.order</field>
-        <field name="inherit_id" ref="view_qtcafe_qr_order_form"/>
+    <record id="view_operations_qr_order_form_execution" model="ir.ui.view">
+        <field name="name">flexsys.operations.order.form.execution</field>
+        <field name="model">flexsys.operations.order</field>
+        <field name="inherit_id" ref="view_operations_qr_order_form"/>
         <field name="arch" type="xml">
             <xpath expr="//notebook" position="inside">
                 <page string="Execution Tasks">

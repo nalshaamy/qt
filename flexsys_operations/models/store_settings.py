@@ -2,12 +2,12 @@
 from odoo import api, fields, models
 
 
-class QtCafeStoreSettings(models.Model):
-    _name = 'qtcafe.store.settings'
-    _description = 'QT Cafe Store Settings'
+class FlexSysOperationsStoreSettings(models.Model):
+    _name = 'flexsys.operations.store.settings'
+    _description = 'FlexSys Store Settings'
     _rec_name = 'name'
 
-    name = fields.Char(default='QT Cafe Store', required=True)
+    name = fields.Char(default='FlexSys Store', required=True)
     is_open = fields.Boolean(string='Store Open', default=True)
     closed_message = fields.Char(
         string='Closed Message',

@@ -10,8 +10,8 @@ function money(value) { return Number(value || 0).toFixed(2); }
 function formatDateTime(value) { return value ? String(value).replace("T", " ").slice(0, 16) : "-"; }
 
 function activateDashboardTab(tabName) {
-    document.querySelectorAll(".qt-manager-tab").forEach((button) => button.classList.toggle("active", button.dataset.dashboardTab === tabName));
-    document.querySelectorAll(".qt-dashboard-page").forEach((page) => page.classList.toggle("active", page.dataset.dashboardPage === tabName));
+    document.querySelectorAll(".fs-manager-tab").forEach((button) => button.classList.toggle("active", button.dataset.dashboardTab === tabName));
+    document.querySelectorAll(".fs-dashboard-page").forEach((page) => page.classList.toggle("active", page.dataset.dashboardPage === tabName));
     window.scrollTo({top: 0, behavior: "smooth"});
 }
 
@@ -43,19 +43,19 @@ function renderMissionControl(data) {
     ];
     const kpiBox = document.querySelector("#mission-control-kpis");
     if (kpiBox) kpiBox.innerHTML = kpis.map(([label,value,css]) => `
-        <article class="qt-mission-kpi qt-mission-kpi-${css}"><span>${label}</span><strong>${value}</strong></article>`).join("");
+        <article class="fs-mission-kpi fs-mission-kpi-${css}"><span>${label}</span><strong>${value}</strong></article>`).join("");
 
     const stationBox = document.querySelector("#mission-stations");
     const stations = data?.stations || [];
     if (stationBox) stationBox.innerHTML = stations.length ? stations.map((station) => {
         const load = Number(station.active_tasks || 0) + Number(station.waiting_tasks || 0);
         const capacityText = Number(station.capacity || 0) > 0 ? `${load}/${station.capacity}` : `${load}`;
-        return `<div class="qt-station-health-row">
-            <span class="qt-station-dot is-${station.status}"></span>
+        return `<div class="fs-station-health-row">
+            <span class="fs-station-dot is-${station.status}"></span>
             <div><strong>${station.name}</strong><small>${station.waiting_tasks || 0} انتظار · ${station.active_tasks || 0} تنفيذ</small></div>
             <b>${capacityText}</b>
         </div>`;
-    }).join("") : '<div class="qt-manager-empty">لم تتم إضافة محطات تنفيذ بعد.</div>';
+    }).join("") : '<div class="fs-manager-empty">لم تتم إضافة محطات تنفيذ بعد.</div>';
 
     const eventLabels = {
         "order.created": "تم إنشاء طلب",
@@ -66,11 +66,11 @@ function renderMissionControl(data) {
     const eventBox = document.querySelector("#mission-events");
     const events = data?.events || [];
     if (eventBox) eventBox.innerHTML = events.length ? events.map((event) => `
-        <div class="qt-mission-event">
-            <span class="qt-event-pulse"></span>
+        <div class="fs-mission-event">
+            <span class="fs-event-pulse"></span>
             <div><strong>${eventLabels[event.type] || event.type}</strong><small>${event.reference || "-"} · ${event.actor || "System"}</small></div>
             <time>${formatDateTime(event.occurred_at)}</time>
-        </div>`).join("") : '<div class="qt-manager-empty">لا توجد أحداث تشغيلية بعد.</div>';
+        </div>`).join("") : '<div class="fs-manager-empty">لا توجد أحداث تشغيلية بعد.</div>';
 }
 
 function renderKpis(summary) {
@@ -86,19 +86,19 @@ function renderKpis(summary) {
     ];
     const box = document.querySelector("#dashboard-kpis");
     box.innerHTML = cards.map(([label,value,css,icon]) => `
-        <article class="qt-kpi-card qt-kpi-${css}">
-            <div class="qt-kpi-icon">${icon}</div><span>${label}</span><strong>${value}</strong>
+        <article class="fs-kpi-card fs-kpi-${css}">
+            <div class="fs-kpi-icon">${icon}</div><span>${label}</span><strong>${value}</strong>
         </article>`).join("");
 }
 
 function renderTopProducts(products) {
     const box = document.querySelector("#top-products");
-    if (!products.length) { box.innerHTML = '<div class="qt-manager-empty">لا توجد بيانات.</div>'; return; }
+    if (!products.length) { box.innerHTML = '<div class="fs-manager-empty">لا توجد بيانات.</div>'; return; }
     const maxQty = Math.max(...products.map((item) => Number(item.qty || 0)), 1);
     box.innerHTML = products.map((item,index) => `
-        <div class="qt-product-rank">
-            <div class="qt-product-rank-head"><span>${index+1}. ${item.name}</span><strong>${Number(item.qty||0).toFixed(0)} طلب</strong></div>
-            <div class="qt-product-bar"><span style="width:${(Number(item.qty||0)/maxQty)*100}%"></span></div>
+        <div class="fs-product-rank">
+            <div class="fs-product-rank-head"><span>${index+1}. ${item.name}</span><strong>${Number(item.qty||0).toFixed(0)} طلب</strong></div>
+            <div class="fs-product-bar"><span style="width:${(Number(item.qty||0)/maxQty)*100}%"></span></div>
             <small>${money(item.sales)} ر.س</small>
         </div>`).join("");
 }
@@ -108,9 +108,9 @@ function renderBreakdown(selector, values, labels) {
     const entries = Object.entries(values || {});
     const total = entries.reduce((sum,[,value]) => sum + Number(value || 0), 0) || 1;
     box.innerHTML = entries.map(([key,value]) => `
-        <div class="qt-breakdown-row">
+        <div class="fs-breakdown-row">
             <div><span>${labels[key] || key}</span><strong>${value}</strong></div>
-            <div class="qt-breakdown-bar"><span style="width:${Number(value||0)/total*100}%"></span></div>
+            <div class="fs-breakdown-bar"><span style="width:${Number(value||0)/total*100}%"></span></div>
         </div>`).join("");
 }
 
@@ -124,7 +124,7 @@ function renderDailyComparison(highlights) {
         ["الأقل طلبًا", highlights?.lowest_orders_day, "orders-low"],
     ];
     box.innerHTML = items.map(([label,item,css]) => `
-        <article class="qt-day-compare-card ${css}">
+        <article class="fs-day-compare-card ${css}">
             <span>${label}</span>
             <strong>${item?.date || "-"}</strong>
             <small>${css.includes("sales") ? `${money(item?.sales || 0)} ر.س` : `${item?.orders || 0} طلب`}</small>
@@ -134,37 +134,37 @@ function renderDailyComparison(highlights) {
 
 function renderTopCustomers(customers) {
     const box = document.querySelector("#top-customers");
-    if (!customers.length) { box.innerHTML = '<div class="qt-manager-empty">لا توجد بيانات عملاء منفذة ضمن الفترة.</div>'; return; }
+    if (!customers.length) { box.innerHTML = '<div class="fs-manager-empty">لا توجد بيانات عملاء منفذة ضمن الفترة.</div>'; return; }
     box.innerHTML = customers.map((customer,index) => `
-        <article class="qt-vip-customer-card ${index < 3 ? `top-${index+1}` : ""}">
-            <div class="qt-vip-rank">${index+1}</div>
-            <div class="qt-vip-avatar">${(customer.name || "ع").trim().charAt(0)}</div>
-            <div class="qt-vip-info"><strong>${customer.name || "عميل"}</strong><span>${customer.mobile || "بدون جوال"}</span><small>آخر طلب: ${formatDateTime(customer.last_order)}</small></div>
-            <div class="qt-vip-stats"><span><b>${customer.orders}</b> زيارة</span><span><b>${money(customer.spent)}</b> ر.س</span><span>متوسط ${money(customer.average_order)} ر.س</span></div>
+        <article class="fs-vip-customer-card ${index < 3 ? `top-${index+1}` : ""}">
+            <div class="fs-vip-rank">${index+1}</div>
+            <div class="fs-vip-avatar">${(customer.name || "ع").trim().charAt(0)}</div>
+            <div class="fs-vip-info"><strong>${customer.name || "عميل"}</strong><span>${customer.mobile || "بدون جوال"}</span><small>آخر طلب: ${formatDateTime(customer.last_order)}</small></div>
+            <div class="fs-vip-stats"><span><b>${customer.orders}</b> زيارة</span><span><b>${money(customer.spent)}</b> ر.س</span><span>متوسط ${money(customer.average_order)} ر.س</span></div>
         </article>`).join("");
     const best = document.querySelector("#best-customer-card");
     const customer = customers[0];
-    best.innerHTML = `<div class="qt-best-customer"><div class="qt-vip-avatar">${(customer.name||"ع").charAt(0)}</div><strong>${customer.name}</strong><span>${customer.orders} زيارة</span><b>${money(customer.spent)} ر.س</b></div>`;
+    best.innerHTML = `<div class="fs-best-customer"><div class="fs-vip-avatar">${(customer.name||"ع").charAt(0)}</div><strong>${customer.name}</strong><span>${customer.orders} زيارة</span><b>${money(customer.spent)} ر.س</b></div>`;
 }
 
 function renderOrders(orders) {
     const body = document.querySelector("#recent-orders-body");
     if (!orders.length) {
-        body.innerHTML = '<tr><td colspan="9" class="qt-manager-empty">لا توجد طلبات.</td></tr>';
+        body.innerHTML = '<tr><td colspan="9" class="fs-manager-empty">لا توجد طلبات.</td></tr>';
         return;
     }
 
     body.innerHTML = orders.map((order) => `
-        <tr class="qt-clickable-order-row" data-order-id="${order.id}" tabindex="0">
+        <tr class="fs-clickable-order-row" data-order-id="${order.id}" tabindex="0">
             <td><strong>${order.name || "-"}</strong></td>
             <td>${order.customer_name || "-"}</td>
-            <td><span class="qt-order-chip">${order.order_type_label || typeLabels[order.order_type] || "-"}</span></td>
+            <td><span class="fs-order-chip">${order.order_type_label || typeLabels[order.order_type] || "-"}</span></td>
             <td>${order.payment_method_label || paymentLabels[order.payment_method] || "-"}</td>
-            <td><span class="qt-manager-status qt-manager-status-${order.state}">${order.state_label || stateLabels[order.state] || order.state}</span></td>
+            <td><span class="fs-manager-status fs-manager-status-${order.state}">${order.state_label || stateLabels[order.state] || order.state}</span></td>
             <td>${order.pos_name || "-"}</td>
             <td>${money(order.amount_total)} ر.س</td>
             <td>${formatDateTime(order.create_date)}</td>
-            <td><button type="button" class="qt-view-order-details" data-order-id="${order.id}">عرض التفاصيل</button></td>
+            <td><button type="button" class="fs-view-order-details" data-order-id="${order.id}">عرض التفاصيل</button></td>
         </tr>`).join("");
 
     const orderMap = new Map(orders.map((order) => [Number(order.id), order]));
@@ -179,14 +179,14 @@ function renderOrders(orders) {
         activateDashboardTab("order-details");
     };
 
-    body.querySelectorAll(".qt-view-order-details").forEach((button) => {
+    body.querySelectorAll(".fs-view-order-details").forEach((button) => {
         button.addEventListener("click", (event) => {
             event.stopPropagation();
             showOrder(button.dataset.orderId);
         });
     });
 
-    body.querySelectorAll(".qt-clickable-order-row").forEach((row) => {
+    body.querySelectorAll(".fs-clickable-order-row").forEach((row) => {
         row.addEventListener("click", () => showOrder(row.dataset.orderId));
         row.addEventListener("keydown", (event) => {
             if (event.key === "Enter" || event.key === " ") {
@@ -218,8 +218,8 @@ function renderOrderDetails(order) {
         </tr>`).join("");
 
     box.innerHTML = `
-        <div class="qt-order-details-summary">
-            <div><span>الحالة</span><strong class="qt-manager-status qt-manager-status-${order.state}">${order.state_label || stateLabels[order.state] || order.state}</strong></div>
+        <div class="fs-order-details-summary">
+            <div><span>الحالة</span><strong class="fs-manager-status fs-manager-status-${order.state}">${order.state_label || stateLabels[order.state] || order.state}</strong></div>
             <div><span>نقطة البيع</span><strong>${order.pos_name || "-"}</strong></div>
             <div><span>التاريخ</span><strong>${formatDateTime(order.create_date)}</strong></div>
             <div><span>نوع العميل</span><strong>${order.customer_type || "-"}</strong></div>
@@ -229,14 +229,14 @@ function renderOrderDetails(order) {
             <div><span>طريقة الدفع</span><strong>${order.payment_method_label || paymentLabels[order.payment_method] || "-"}</strong></div>
             ${extraDetails.join("")}
         </div>
-        <div class="qt-order-details-note">
+        <div class="fs-order-details-note">
             <span>ملاحظات الطلب</span>
             <p>${order.note || "لا توجد ملاحظات."}</p>
         </div>
-        <div class="qt-table-wrap qt-order-lines-table">
+        <div class="fs-table-wrap fs-order-lines-table">
             <table>
                 <thead><tr><th>المنتج</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th><th>ملاحظة</th></tr></thead>
-                <tbody>${lines || '<tr><td colspan="5" class="qt-manager-empty">لا توجد منتجات.</td></tr>'}</tbody>
+                <tbody>${lines || '<tr><td colspan="5" class="fs-manager-empty">لا توجد منتجات.</td></tr>'}</tbody>
                 <tfoot><tr><td colspan="3">إجمالي الطلب</td><td colspan="2"><strong>${money(order.amount_total)} ر.س</strong></td></tr></tfoot>
             </table>
         </div>`;
@@ -259,17 +259,17 @@ function renderStore(store) {
 
 function renderBranches(branches) {
     const box = document.querySelector("#manager-branches");
-    if (!branches.length) { box.innerHTML = '<div class="qt-manager-empty">لا توجد فروع مرتبطة.</div>'; return; }
+    if (!branches.length) { box.innerHTML = '<div class="fs-manager-empty">لا توجد فروع مرتبطة.</div>'; return; }
     box.innerHTML = branches.map((branch) => `
-        <article class="qt-manager-branch-card ${branch.is_open ? "" : "is-closed"}">
-            <div class="qt-manager-branch-head">
+        <article class="fs-manager-branch-card ${branch.is_open ? "" : "is-closed"}">
+            <div class="fs-manager-branch-head">
                 <div><strong>${branch.name}</strong><span>${branch.address || "العنوان غير مضاف"}</span></div>
-                <button class="qt-branch-open-toggle ${branch.is_open ? "is-open":"is-closed"}" data-branch-id="${branch.id}" data-open="${branch.is_open ? "1":"0"}">${branch.is_open ? "مفتوح":"مغلق"}</button>
+                <button class="fs-branch-open-toggle ${branch.is_open ? "is-open":"is-closed"}" data-branch-id="${branch.id}" data-open="${branch.is_open ? "1":"0"}">${branch.is_open ? "مفتوح":"مغلق"}</button>
             </div>
-            <div class="qt-manager-branch-meta">
-                <label>نطاق التوصيل (كم)<input class="qt-branch-distance-input" type="number" min="0" step="0.5" value="${branch.max_distance_km || 0}" data-branch-id="${branch.id}"/></label>
+            <div class="fs-manager-branch-meta">
+                <label>نطاق التوصيل (كم)<input class="fs-branch-distance-input" type="number" min="0" step="0.5" value="${branch.max_distance_km || 0}" data-branch-id="${branch.id}"/></label>
             </div>
-            <div class="qt-branch-settings-grid">
+            <div class="fs-branch-settings-grid">
                 ${[
                     ["enable_dine_in","محلي",branch.enabled_order_types?.dine_in],
                     ["enable_takeaway","سفري",branch.enabled_order_types?.takeaway],
@@ -279,7 +279,7 @@ function renderBranches(branches) {
                     ["enable_card","بطاقة",branch.enabled_payment_methods?.card],
                     ["enable_wallet","محفظة إلكترونية",branch.enabled_payment_methods?.wallet],
                 ].map(([key,label,enabled]) => `
-                    <label class="qt-setting-toggle">
+                    <label class="fs-setting-toggle">
                         <input type="checkbox" data-branch-id="${branch.id}" data-setting="${key}" ${enabled ? "checked" : ""}/>
                         <span>${label}</span>
                     </label>
@@ -287,7 +287,7 @@ function renderBranches(branches) {
             </div>
         </article>`).join("");
 
-    box.querySelectorAll(".qt-branch-open-toggle").forEach((button) => button.addEventListener("click", async () => {
+    box.querySelectorAll(".fs-branch-open-toggle").forEach((button) => button.addEventListener("click", async () => {
         button.disabled = true;
         try {
             const result = await rpc("/operations/api/branches/update", {branch_id:Number(button.dataset.branchId), is_open:button.dataset.open !== "1"});
@@ -296,7 +296,7 @@ function renderBranches(branches) {
         } catch (error) { alert(error.message); } finally { button.disabled = false; }
     }));
 
-    box.querySelectorAll(".qt-setting-toggle input").forEach((input) => input.addEventListener("change", async () => {
+    box.querySelectorAll(".fs-setting-toggle input").forEach((input) => input.addEventListener("change", async () => {
         const payload = {branch_id:Number(input.dataset.branchId)};
         payload[input.dataset.setting] = input.checked;
         const result = await rpc("/operations/api/branches/update", payload);
@@ -306,7 +306,7 @@ function renderBranches(branches) {
         }
     }));
 
-    box.querySelectorAll(".qt-branch-distance-input").forEach((input) => input.addEventListener("change", async () => {
+    box.querySelectorAll(".fs-branch-distance-input").forEach((input) => input.addEventListener("change", async () => {
         const result = await rpc("/operations/api/branches/update", {
             branch_id:Number(input.dataset.branchId),
             max_distance_km:Number(input.value || 0),
@@ -318,16 +318,16 @@ function renderBranches(branches) {
 function renderMenuProducts(products, selectedPosConfigId) {
     const box = document.querySelector("#manager-menu-products");
     if (!selectedPosConfigId) {
-        box.innerHTML = '<div class="qt-manager-empty">اختر نقطة البيع من القائمة أعلاه لعرض وتعديل توفر المنتجات.</div>';
+        box.innerHTML = '<div class="fs-manager-empty">اختر نقطة البيع من القائمة أعلاه لعرض وتعديل توفر المنتجات.</div>';
         return;
     }
-    if (!products.length) { box.innerHTML = '<div class="qt-manager-empty">لا توجد أصناف.</div>'; return; }
+    if (!products.length) { box.innerHTML = '<div class="fs-manager-empty">لا توجد أصناف.</div>'; return; }
     box.innerHTML = products.map((product) => `
-        <article class="qt-manager-product-card ${product.available ? "" : "is-sold-out"}">
-            <img src="${product.image_url}" alt="${product.name}"/><div class="qt-manager-product-info"><strong>${product.name}</strong><span>${product.category || "بدون تصنيف"}</span><small>${money(product.price)} ر.س</small></div>
-            <button class="qt-product-availability-btn ${product.available ? "is-available":"is-unavailable"}" data-product-id="${product.id}" data-available="${product.available ? "1":"0"}">${product.available ? "متوفر":"نفذت الكمية"}</button>
+        <article class="fs-manager-product-card ${product.available ? "" : "is-sold-out"}">
+            <img src="${product.image_url}" alt="${product.name}"/><div class="fs-manager-product-info"><strong>${product.name}</strong><span>${product.category || "بدون تصنيف"}</span><small>${money(product.price)} ر.س</small></div>
+            <button class="fs-product-availability-btn ${product.available ? "is-available":"is-unavailable"}" data-product-id="${product.id}" data-available="${product.available ? "1":"0"}">${product.available ? "متوفر":"نفذت الكمية"}</button>
         </article>`).join("");
-    box.querySelectorAll(".qt-product-availability-btn").forEach((button) => button.addEventListener("click", async () => {
+    box.querySelectorAll(".fs-product-availability-btn").forEach((button) => button.addEventListener("click", async () => {
         button.disabled = true;
         try {
             const result = await rpc("/operations/api/products/availability", {product_template_id:Number(button.dataset.productId), pos_config_id:Number(selectedPosConfigId), available:button.dataset.available !== "1"});
@@ -339,11 +339,11 @@ function renderMenuProducts(products, selectedPosConfigId) {
 
 function renderTables(tables) {
     const box = document.querySelector("#manager-tables");
-    if (!tables.length) { box.innerHTML = '<div class="qt-manager-empty">لم تتم إضافة طاولات بعد.</div>'; return; }
+    if (!tables.length) { box.innerHTML = '<div class="fs-manager-empty">لم تتم إضافة طاولات بعد.</div>'; return; }
     box.innerHTML = tables.map((table) => `
-        <article class="qt-table-admin-card"><div><strong>${table.name}</strong><span>${table.branch_name}</span></div>
-        <button class="qt-delete-table" data-table-id="${table.id}">حذف</button></article>`).join("");
-    box.querySelectorAll(".qt-delete-table").forEach((button) => button.addEventListener("click", async () => {
+        <article class="fs-table-admin-card"><div><strong>${table.name}</strong><span>${table.branch_name}</span></div>
+        <button class="fs-delete-table" data-table-id="${table.id}">حذف</button></article>`).join("");
+    box.querySelectorAll(".fs-delete-table").forEach((button) => button.addEventListener("click", async () => {
         if (!confirm("حذف الطاولة؟")) return;
         const result = await rpc("/operations/api/tables/delete", {table_id:Number(button.dataset.tableId)});
         if (!result?.success) alert(result?.error || "تعذر حذف الطاولة"); else await loadDashboard();
@@ -404,7 +404,7 @@ async function updateStore(values) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-    document.querySelectorAll(".qt-manager-tab").forEach((button) => button.addEventListener("click", () => activateDashboardTab(button.dataset.dashboardTab)));
+    document.querySelectorAll(".fs-manager-tab").forEach((button) => button.addEventListener("click", () => activateDashboardTab(button.dataset.dashboardTab)));
     document.querySelectorAll("[data-open-tab]").forEach((item) => item.addEventListener("click", () => activateDashboardTab(item.dataset.openTab)));
     document.querySelector("#back-to-orders").addEventListener("click", () => activateDashboardTab("orders"));
     const today = new Date(), prior = new Date(); prior.setDate(today.getDate()-6);

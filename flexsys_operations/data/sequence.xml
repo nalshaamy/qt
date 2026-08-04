@@ -1,7 +1,7 @@
 <odoo>
-    <record id="seq_qtcafe_qr_order" model="ir.sequence">
+    <record id="seq_operations_qr_order" model="ir.sequence">
         <field name="name">Operations Order</field>
-        <field name="code">qtcafe.qr.order</field>
+        <field name="code">flexsys.operations.order</field>
         <field name="prefix">D</field>
         <field name="padding">4</field>
     </record>

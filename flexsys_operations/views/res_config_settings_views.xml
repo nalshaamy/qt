@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <record id="action_qtcafe_pos_configurations" model="ir.actions.act_window">
+    <record id="action_operations_pos_configurations" model="ir.actions.act_window">
         <field name="name">FlexSys POS Branches</field>
         <field name="res_model">pos.config</field>
         <field name="view_mode">list,form</field>
     </record>
 
-    <record id="res_config_settings_view_form_qtcafe_qr_order" model="ir.ui.view">
-        <field name="name">res.config.settings.view.form.qtcafe.qr.order</field>
+    <record id="res_config_settings_view_form_operations_qr_order" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.flexsys.operations.order</field>
         <field name="model">res.config.settings</field>
         <field name="inherit_id" ref="base.res_config_settings_view_form"/>
         <field name="arch" type="xml">
@@ -17,7 +17,7 @@
                            help="الإعدادات الأساسية لتوجيه طلبات FlexSys.">
                         <setting string="نقطة البيع الاحتياطية"
                                  help="تستخدم عندما لا يحدد العميل فرعًا أو نقطة بيع.">
-                            <field name="qtcafe_default_pos_config_id"
+                            <field name="operations_default_pos_config_id"
                                    options="{'no_create': True}"/>
                         </setting>
                     </block>
@@ -26,7 +26,7 @@
                            help="إدارة نقاط البيع والفروع وطرق الطلب والدفع والتوصيل.">
                         <setting string="إعدادات الفروع ونقاط البيع"
                                  help="فتح نقاط البيع لإدارة بيانات الفرع، أنواع الطلب، طرق الدفع والمسافة.">
-                            <button name="%(action_qtcafe_pos_configurations)d"
+                            <button name="%(action_operations_pos_configurations)d"
                                     type="action"
                                     string="فتح إعدادات الفروع"
                                     class="btn-link text-success fw-bold"
@@ -38,7 +38,7 @@
                            help="إدارة المستخدمين والطاولات والطابعة.">
                         <setting string="المديرون المستقلون"
                                  help="إدارة حسابات مديري الفروع وصلاحياتهم.">
-                            <button name="%(action_qtcafe_manager_accounts)d"
+                            <button name="%(action_operations_manager_accounts)d"
                                     type="action"
                                     string="إدارة المديرين"
                                     class="btn-link text-success fw-bold"
@@ -47,7 +47,7 @@
 
                         <setting string="الطاولات"
                                  help="إدارة الطاولات وربطها بنقاط البيع.">
-                            <button name="%(action_qtcafe_tables)d"
+                            <button name="%(action_operations_tables)d"
                                     type="action"
                                     string="إدارة الطاولات"
                                     class="btn-link text-success fw-bold"
@@ -56,7 +56,7 @@
 
                         <setting string="طابعة الكاشير"
                                  help="إعداد طابعة الشبكة واختبار الاتصال بها.">
-                            <button name="%(action_qtcafe_qr_printer_config)d"
+                            <button name="%(action_operations_qr_printer_config)d"
                                     type="action"
                                     string="إعدادات الطابعة"
                                     class="btn-link text-success fw-bold"
@@ -68,7 +68,7 @@
                            help="إعداد التوجيه الاحتياطي للطلبات.">
                         <setting string="توجيه نقاط البيع"
                                  help="فتح إعدادات Fallback POS والتوجيه.">
-                            <button name="%(action_qtcafe_routing_settings)d"
+                            <button name="%(action_operations_routing_settings)d"
                                     type="action"
                                     string="إعدادات التوجيه"
                                     class="btn-link text-success fw-bold"

@@ -18,7 +18,7 @@
 
 - Adopted customer-facing business routes under `/operations` and `/self-order`.
 - Added clean API namespaces: `/operations/api/...` and `/self-order/api/...`.
-- Preserved legacy `/qtcafe` and `/qr-menu` routes as compatibility aliases.
+- Preserved legacy `/flexsys_operations` and `/qr-menu` routes as compatibility aliases.
 - Updated frontend links and JavaScript calls to use the new routes.
 - Renamed visible QR-order alerts to generic order terminology.
 

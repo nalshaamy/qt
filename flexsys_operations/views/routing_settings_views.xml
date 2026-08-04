@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <record id="view_qtcafe_routing_settings_form" model="ir.ui.view">
-        <field name="name">qtcafe.routing.settings.form</field>
-        <field name="model">qtcafe.routing.settings</field>
+    <record id="view_operations_routing_settings_form" model="ir.ui.view">
+        <field name="name">flexsys.operations.routing.settings.form</field>
+        <field name="model">flexsys.operations.routing.settings</field>
         <field name="arch" type="xml">
             <form string="Operations Order Routing">
                 <sheet>
@@ -25,9 +25,9 @@
         </field>
     </record>
 
-    <record id="action_qtcafe_routing_settings" model="ir.actions.act_window">
+    <record id="action_operations_routing_settings" model="ir.actions.act_window">
         <field name="name">Order Routing</field>
-        <field name="res_model">qtcafe.routing.settings</field>
+        <field name="res_model">flexsys.operations.routing.settings</field>
         <field name="view_mode">form</field>
         <field name="target">new</field>
     </record>

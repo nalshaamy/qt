@@ -31,15 +31,15 @@ class OrderService(BaseService):
         "cancelled": "ملغي",
     }
     _PAYMENT_FIELDS = {
-        "cash": "qtcafe_enable_cash",
-        "card": "qtcafe_enable_card",
-        "wallet": "qtcafe_enable_wallet",
+        "cash": "operations_enable_cash",
+        "card": "operations_enable_card",
+        "wallet": "operations_enable_wallet",
     }
     _ORDER_TYPE_FIELDS = {
-        "dine_in": "qtcafe_enable_dine_in",
-        "takeaway": "qtcafe_enable_takeaway",
-        "car": "qtcafe_enable_car_order",
-        "delivery": "qtcafe_enable_delivery",
+        "dine_in": "operations_enable_dine_in",
+        "takeaway": "operations_enable_takeaway",
+        "car": "operations_enable_car_order",
+        "delivery": "operations_enable_delivery",
     }
 
     @classmethod
@@ -177,10 +177,10 @@ class OrderService(BaseService):
             "line_ids": order_lines,
             **delivery_values,
         }
-        return self.env["qtcafe.qr.order"].sudo().create(values)
+        return self.env["flexsys.operations.order"].sudo().create(values)
 
     def _ensure_store_open(self):
-        settings = self.env["qtcafe.store.settings"].sudo().get_settings()
+        settings = self.env["flexsys.operations.store.settings"].sudo().get_settings()
         if not settings.is_open:
             raise FlexSysValidationError(
                 settings.closed_message or "المتجر مغلق حاليًا ولا يمكن استقبال طلبات جديدة.",
@@ -189,7 +189,7 @@ class OrderService(BaseService):
             )
 
     def _resolve_pos_config(self, pos_config_id, fallback_pos_config):
-        branches = self.env["pos.config"].sudo().search([("qtcafe_branch_enabled", "=", True)])
+        branches = self.env["pos.config"].sudo().search([("operations_branch_enabled", "=", True)])
         if len(branches) > 1 and not pos_config_id:
             raise FlexSysValidationError("اختر الفرع قبل إرسال الطلب.", code="branch_required")
 
@@ -231,11 +231,11 @@ class OrderService(BaseService):
 
     @staticmethod
     def _ensure_branch_available(pos_config):
-        if pos_config and not pos_config.qtcafe_branch_enabled:
+        if pos_config and not pos_config.operations_branch_enabled:
             raise FlexSysValidationError("نقطة البيع المختارة غير متاحة للطلبات.", code="branch_disabled")
-        if pos_config and not pos_config.qtcafe_branch_is_open:
+        if pos_config and not pos_config.operations_branch_is_open:
             raise FlexSysValidationError(
-                pos_config.qtcafe_branch_closed_message or "هذا الفرع مغلق حاليًا.",
+                pos_config.operations_branch_closed_message or "هذا الفرع مغلق حاليًا.",
                 code="branch_closed",
             )
 
@@ -243,7 +243,7 @@ class OrderService(BaseService):
         templates = products.mapped("product_tmpl_id")
         availability = {template.id: bool(template.available_in_qr_menu) for template in templates}
         if pos_config and templates:
-            overrides = self.env["qtcafe.branch.product.availability"].sudo().search([
+            overrides = self.env["flexsys.operations.product.availability"].sudo().search([
                 ("pos_config_id", "=", pos_config.id),
                 ("product_tmpl_id", "in", templates.ids),
             ])
@@ -273,13 +273,13 @@ class OrderService(BaseService):
                 raise FlexSysValidationError("نوع الطلب المختار غير متاح في هذا الفرع.", code="order_type_disabled")
 
     def _validate_table(self, order_type, table_id, pos_config):
-        table = self.env["qtcafe.table"].sudo().browse()
+        table = self.env["flexsys.operations.table"].sudo().browse()
         if order_type != "dine_in":
             return table
         try:
-            table = self.env["qtcafe.table"].sudo().browse(int(table_id or 0)).exists()
+            table = self.env["flexsys.operations.table"].sudo().browse(int(table_id or 0)).exists()
         except (TypeError, ValueError):
-            table = self.env["qtcafe.table"].sudo().browse()
+            table = self.env["flexsys.operations.table"].sudo().browse()
         if not table or table.pos_config_id != pos_config or not table.active:
             raise FlexSysValidationError("اختر طاولة صحيحة للطلب المحلي.", code="invalid_table")
         return table
@@ -298,12 +298,12 @@ class OrderService(BaseService):
             customer_lon = float(longitude)
         except (TypeError, ValueError):
             raise FlexSysValidationError("شارك موقع التوصيل أولًا.", code="delivery_location_required")
-        if not pos_config or not pos_config.qtcafe_latitude or not pos_config.qtcafe_longitude:
+        if not pos_config or not pos_config.operations_latitude or not pos_config.operations_longitude:
             raise FlexSysValidationError("موقع الفرع غير محدد، تواصل مع المتجر.", code="branch_location_missing")
         distance = self._distance_km(
-            pos_config.qtcafe_latitude, pos_config.qtcafe_longitude, customer_lat, customer_lon
+            pos_config.operations_latitude, pos_config.operations_longitude, customer_lat, customer_lon
         )
-        max_distance = pos_config.qtcafe_max_order_distance_km or 0.0
+        max_distance = pos_config.operations_max_order_distance_km or 0.0
         if max_distance and distance > max_distance:
             raise FlexSysValidationError(
                 "موقع التوصيل خارج النطاق المسموح (%.1f كم)." % max_distance,

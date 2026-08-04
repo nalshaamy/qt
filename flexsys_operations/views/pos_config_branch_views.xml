@@ -1,44 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <record id="view_pos_config_form_qtcafe_branch" model="ir.ui.view">
-        <field name="name">pos.config.form.qtcafe.branch</field>
+    <record id="view_pos_config_form_operations_branch" model="ir.ui.view">
+        <field name="name">pos.config.form.flexsys.operations.branch</field>
         <field name="model">pos.config</field>
         <field name="inherit_id" ref="point_of_sale.pos_config_view_form"/>
         <field name="arch" type="xml">
             <xpath expr="//form/sheet" position="inside">
                 <group string="FlexSys QR Branch">
                     <group>
-                        <field name="qtcafe_branch_enabled"/>
-                        <field name="qtcafe_branch_name" required="qtcafe_branch_enabled"/>
-                        <field name="qtcafe_branch_address"/>
-                        <field name="qtcafe_branch_is_open"/>
-                        <field name="qtcafe_branch_closed_message" invisible="qtcafe_branch_is_open"/>
+                        <field name="operations_branch_enabled"/>
+                        <field name="operations_branch_name" required="operations_branch_enabled"/>
+                        <field name="operations_branch_address"/>
+                        <field name="operations_branch_is_open"/>
+                        <field name="operations_branch_closed_message" invisible="operations_branch_is_open"/>
                     </group>
                     <group>
-                        <field name="qtcafe_latitude"/>
-                        <field name="qtcafe_longitude"/>
-                        <field name="qtcafe_max_order_distance_km"/>
+                        <field name="operations_latitude"/>
+                        <field name="operations_longitude"/>
+                        <field name="operations_max_order_distance_km"/>
                     </group>
                 </group>
 
                 <group string="FlexSys Order Types">
                     <group>
-                        <field name="qtcafe_enable_dine_in"/>
-                        <field name="qtcafe_enable_takeaway"/>
+                        <field name="operations_enable_dine_in"/>
+                        <field name="operations_enable_takeaway"/>
                     </group>
                     <group>
-                        <field name="qtcafe_enable_car_order"/>
-                        <field name="qtcafe_enable_delivery"/>
+                        <field name="operations_enable_car_order"/>
+                        <field name="operations_enable_delivery"/>
                     </group>
                 </group>
 
                 <group string="FlexSys Payment Methods">
                     <group>
-                        <field name="qtcafe_enable_cash"/>
-                        <field name="qtcafe_enable_card"/>
+                        <field name="operations_enable_cash"/>
+                        <field name="operations_enable_card"/>
                     </group>
                     <group>
-                        <field name="qtcafe_enable_wallet"/>
+                        <field name="operations_enable_wallet"/>
                     </group>
                 </group>
 

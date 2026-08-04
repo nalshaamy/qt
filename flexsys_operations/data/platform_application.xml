@@ -22,13 +22,13 @@
     <field name="category">operations</field>
     <field name="workspace_enabled">1</field>
     <field name="search_enabled">1</field>
-    <field name="search_provider_model">qtcafe.qr.order</field>
+    <field name="search_provider_model">flexsys.operations.order</field>
     <field name="search_provider_method">_flexsys_search_results</field>
     <field name="sequence">10</field>
     <field name="required_permission_code">operations.access</field>
     <field name="workspace_title">Operations</field>
     <field name="workspace_subtitle">Orders, execution tasks, stations and live operational status</field>
-    <field name="workspace_provider_model">qtcafe.qr.order</field>
+    <field name="workspace_provider_model">flexsys.operations.order</field>
   </record>
 
   <record id="workspace_operations_active_orders" model="flexsys.platform.workspace.item"><field name="application_id" ref="application_operations"/><field name="item_type">metric</field><field name="code">active_orders</field><field name="title">Active Orders</field><field name="icon">fa-bolt</field><field name="metric_key">active_orders</field><field name="sequence">10</field></record>

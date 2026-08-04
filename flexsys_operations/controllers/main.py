@@ -16,10 +16,10 @@ from ..services import OrderService
 _logger = logging.getLogger(__name__)
 
 
-class QtCafeQrMenuController(http.Controller):
+class FlexSysOperationsQrMenuController(http.Controller):
 
     def _get_manager_cookie_name(self):
-        return 'qtcafe_manager_session'
+        return 'operations_manager_session'
 
     def _get_platform_session(self):
         session_id = request.session.get('flexsys_platform_session_id')
@@ -44,21 +44,21 @@ class QtCafeQrMenuController(http.Controller):
 
         raw_token = request.httprequest.cookies.get(self._get_manager_cookie_name())
         if not raw_token:
-            return request.env['qtcafe.manager.account'].sudo().browse()
-        managers = request.env['qtcafe.manager.account'].sudo().search([
+            return request.env['flexsys.operations.manager'].sudo().browse()
+        managers = request.env['flexsys.operations.manager'].sudo().search([
             ('active', '=', True),
             ('session_expires_at', '>', fields.Datetime.now()),
         ])
         for manager in managers:
             if manager.verify_session(raw_token):
                 return manager._ensure_branch_migration()
-        return request.env['qtcafe.manager.account'].sudo().browse()
+        return request.env['flexsys.operations.manager'].sudo().browse()
 
-    def _is_qtcafe_manager(self):
+    def _is_operations_manager(self):
         return bool(self._get_independent_manager())
 
     def _get_store_settings(self):
-        return request.env['qtcafe.store.settings'].sudo().get_settings()
+        return request.env['flexsys.operations.store.settings'].sudo().get_settings()
 
 
     def _normalize_phone_login(self, phone):
@@ -134,10 +134,10 @@ class QtCafeQrMenuController(http.Controller):
         if not partner or not partner.exists() or not products:
             return []
         order_domain = self._customer_order_domain(partner)
-        orders = request.env['qtcafe.qr.order'].sudo().search(order_domain)
+        orders = request.env['flexsys.operations.order'].sudo().search(order_domain)
         if not orders:
             return []
-        lines = request.env['qtcafe.qr.order.line'].sudo().search([
+        lines = request.env['flexsys.operations.order.line'].sudo().search([
             ('order_id', 'in', orders.ids),
             ('product_id', 'in', products.ids),
         ])
@@ -180,21 +180,21 @@ class QtCafeQrMenuController(http.Controller):
             })
         return {'lines': lines, 'unavailable': unavailable, 'source_order': order.name}
 
-    def _serialize_qtcafe_branch(self, pos_config):
+    def _serialize_operations_branch(self, pos_config):
         return {
             'id': pos_config.id,
-            'name': pos_config.qtcafe_branch_name or pos_config.display_name,
-            'address': pos_config.qtcafe_branch_address or '',
-            'latitude': pos_config.qtcafe_latitude or 0.0,
-            'longitude': pos_config.qtcafe_longitude or 0.0,
-            'is_open': bool(pos_config.qtcafe_branch_is_open),
-            'closed_message': pos_config.qtcafe_branch_closed_message or '',
-            'max_distance_km': pos_config.qtcafe_max_order_distance_km or 0.0,
+            'name': pos_config.operations_branch_name or pos_config.display_name,
+            'address': pos_config.operations_branch_address or '',
+            'latitude': pos_config.operations_latitude or 0.0,
+            'longitude': pos_config.operations_longitude or 0.0,
+            'is_open': bool(pos_config.operations_branch_is_open),
+            'closed_message': pos_config.operations_branch_closed_message or '',
+            'max_distance_km': pos_config.operations_max_order_distance_km or 0.0,
         }
 
-    def _get_qtcafe_branches(self):
+    def _get_operations_branches(self):
         return request.env['pos.config'].sudo().search([
-            ('qtcafe_branch_enabled', '=', True),
+            ('operations_branch_enabled', '=', True),
         ], order='name')
 
     def _get_pos_config_from_request(self):
@@ -205,12 +205,12 @@ class QtCafeQrMenuController(http.Controller):
         if raw_pos_config_id:
             try:
                 pos_config = PosConfig.browse(int(raw_pos_config_id)).exists()
-                if pos_config and not pos_config.qtcafe_branch_enabled:
+                if pos_config and not pos_config.operations_branch_enabled:
                     pos_config = PosConfig.browse()
             except Exception:
                 pos_config = PosConfig.browse()
         if not pos_config:
-            default_id = request.env['ir.config_parameter'].sudo().get_param('qtcafe_qr_order.default_pos_config_id')
+            default_id = request.env['ir.config_parameter'].sudo().get_param('operations_qr_order.default_pos_config_id')
             if default_id:
                 try:
                     pos_config = PosConfig.browse(int(default_id)).exists()
@@ -228,7 +228,7 @@ class QtCafeQrMenuController(http.Controller):
         defaults = {template.id: bool(template.available_in_qr_menu) for template in templates}
         if not pos_config or not templates:
             return defaults
-        records = request.env['qtcafe.branch.product.availability'].sudo().search([
+        records = request.env['flexsys.operations.product.availability'].sudo().search([
             ('pos_config_id', '=', pos_config.id),
             ('product_tmpl_id', 'in', templates.ids),
         ])
@@ -237,7 +237,7 @@ class QtCafeQrMenuController(http.Controller):
         return defaults
 
     def _get_menu_values(self):
-        Category = request.env['qtcafe.qr.menu.category'].sudo()
+        Category = request.env['flexsys.operations.menu.category'].sudo()
         Product = request.env['product.product'].sudo()
         categories = Category.search([('active', '=', True)], order='sequence, name')
         products = Product.search([
@@ -257,7 +257,7 @@ class QtCafeQrMenuController(http.Controller):
         raw_reorder_id = request.params.get('reorder') or request.httprequest.args.get('reorder')
         if registered and raw_reorder_id:
             try:
-                reorder_order = request.env['qtcafe.qr.order'].sudo().search(
+                reorder_order = request.env['flexsys.operations.order'].sudo().search(
                     [('id', '=', int(raw_reorder_id))] + self._customer_order_domain(partner), limit=1
                 )
                 if reorder_order:
@@ -265,11 +265,11 @@ class QtCafeQrMenuController(http.Controller):
             except (TypeError, ValueError):
                 reorder_payload = False
         store_settings = self._get_store_settings()
-        branches = self._get_qtcafe_branches()
-        tables = request.env['qtcafe.table'].sudo().search([
+        branches = self._get_operations_branches()
+        tables = request.env['flexsys.operations.table'].sudo().search([
             ('active', '=', True),
             ('pos_config_id', '=', pos_config.id if pos_config else 0),
-        ], order='sequence, name') if pos_config else request.env['qtcafe.table'].sudo().browse()
+        ], order='sequence, name') if pos_config else request.env['flexsys.operations.table'].sudo().browse()
         return {
             'categories': categories,
             'products': products,
@@ -289,32 +289,32 @@ class QtCafeQrMenuController(http.Controller):
             'store_reopen_at': store_settings.reopen_at,
             'allow_browse_when_closed': bool(store_settings.allow_browse_when_closed),
             'branches': branches,
-            'branch_values': [self._serialize_qtcafe_branch(branch) for branch in branches],
+            'branch_values': [self._serialize_operations_branch(branch) for branch in branches],
             'selected_branch': pos_config,
-            'selected_branch_name': (pos_config.qtcafe_branch_name or pos_config.display_name) if pos_config else '',
+            'selected_branch_name': (pos_config.operations_branch_name or pos_config.display_name) if pos_config else '',
             'tables': tables,
-            'delivery_limit_km': pos_config.qtcafe_max_order_distance_km if pos_config else 15.0,
-            'branch_latitude': pos_config.qtcafe_latitude if pos_config else 0.0,
-            'branch_longitude': pos_config.qtcafe_longitude if pos_config else 0.0,
+            'delivery_limit_km': pos_config.operations_max_order_distance_km if pos_config else 15.0,
+            'branch_latitude': pos_config.operations_latitude if pos_config else 0.0,
+            'branch_longitude': pos_config.operations_longitude if pos_config else 0.0,
             'enabled_order_types': {
-                'dine_in': bool(pos_config.qtcafe_enable_dine_in) if pos_config else True,
-                'takeaway': bool(pos_config.qtcafe_enable_takeaway) if pos_config else True,
-                'car': bool(pos_config.qtcafe_enable_car_order) if pos_config else True,
-                'delivery': bool(pos_config.qtcafe_enable_delivery) if pos_config else True,
+                'dine_in': bool(pos_config.operations_enable_dine_in) if pos_config else True,
+                'takeaway': bool(pos_config.operations_enable_takeaway) if pos_config else True,
+                'car': bool(pos_config.operations_enable_car_order) if pos_config else True,
+                'delivery': bool(pos_config.operations_enable_delivery) if pos_config else True,
             },
             'enabled_payment_methods': {
-                'cash': bool(pos_config.qtcafe_enable_cash) if pos_config else True,
-                'card': bool(pos_config.qtcafe_enable_card) if pos_config else True,
-                'wallet': bool(pos_config.qtcafe_enable_wallet) if pos_config else True,
+                'cash': bool(pos_config.operations_enable_cash) if pos_config else True,
+                'card': bool(pos_config.operations_enable_card) if pos_config else True,
+                'wallet': bool(pos_config.operations_enable_wallet) if pos_config else True,
             },
         }
 
-    @http.route(['/self-order/api/branches', '/qtcafe/branches/list'], type='jsonrpc', auth='public', csrf=False)
-    def qtcafe_branches_list(self):
-        branches = self._get_qtcafe_branches()
+    @http.route(['/self-order/api/branches', '/flexsys_operations/branches/list'], type='jsonrpc', auth='public', csrf=False)
+    def operations_branches_list(self):
+        branches = self._get_operations_branches()
         return {
             'success': True,
-            'branches': [self._serialize_qtcafe_branch(branch) for branch in branches],
+            'branches': [self._serialize_operations_branch(branch) for branch in branches],
         }
 
     @http.route(['/self-order', '/qr-menu'], type='http', auth='public', website=True, csrf=False)
@@ -403,7 +403,7 @@ class QtCafeQrMenuController(http.Controller):
                 except Exception:
                     # Do not reveal whether an account exists for this email.
                     # The technical failure remains available in Odoo logs.
-                    _logger.exception("QT Cafe password reset request failed for email %s", email)
+                    _logger.exception("FlexSys password reset request failed for email %s", email)
 
                 values['message'] = (
                     'إذا كان البريد مرتبطًا بحساب، فسيصلك رابط إعادة تعيين كلمة المرور خلال دقائق.'
@@ -506,7 +506,7 @@ class QtCafeQrMenuController(http.Controller):
         values['login_url'] = '/qr-menu/login?' + urlencode({'redirect': values['redirect']})
         return request.render('flexsys_operations.qr_phone_register_page', values)
 
-    @http.route(['/self-order/menu', '/qtcafe/menu', '/qr-menu/shop'], type='http', auth='public', website=True, csrf=False)
+    @http.route(['/self-order/menu', '/flexsys_operations/menu', '/qr-menu/shop'], type='http', auth='public', website=True, csrf=False)
     def menu(self, **kwargs):
         store_settings = self._get_store_settings()
         if not store_settings.is_open and not store_settings.allow_browse_when_closed:
@@ -526,11 +526,11 @@ class QtCafeQrMenuController(http.Controller):
                 'branch_values': values.get('branch_values', []),
             })
 
-        if selected_branch and not selected_branch.qtcafe_branch_is_open:
+        if selected_branch and not selected_branch.operations_branch_is_open:
             return request.render('flexsys_operations.qr_branch_closed_page', {
                 'branch': selected_branch,
-                'branch_name': selected_branch.qtcafe_branch_name or selected_branch.display_name,
-                'branch_closed_message': selected_branch.qtcafe_branch_closed_message or 'هذا الفرع مغلق حاليًا.',
+                'branch_name': selected_branch.operations_branch_name or selected_branch.display_name,
+                'branch_closed_message': selected_branch.operations_branch_closed_message or 'هذا الفرع مغلق حاليًا.',
             })
 
         return request.render('flexsys_operations.qr_menu_page', values)
@@ -538,7 +538,7 @@ class QtCafeQrMenuController(http.Controller):
     @http.route(['/self-order/orders', '/qr-menu/my-orders'], type='http', auth='user', website=True)
     def my_orders(self, **kwargs):
         partner = request.env.user.partner_id
-        Order = request.env['qtcafe.qr.order'].sudo()
+        Order = request.env['flexsys.operations.order'].sudo()
 
         domain = self._customer_order_domain(partner)
 
@@ -578,7 +578,7 @@ class QtCafeQrMenuController(http.Controller):
 
     @http.route('/qr-menu/manager/login', type='http', auth='public', website=True, methods=['GET', 'POST'], csrf=True)
     def manager_independent_login(self, **post):
-        if self._is_qtcafe_manager():
+        if self._is_operations_manager():
             return request.redirect('/operations/dashboard')
 
         values = {
@@ -589,7 +589,7 @@ class QtCafeQrMenuController(http.Controller):
         if request.httprequest.method == 'POST':
             login = (post.get('login') or '').strip().lower()
             password = post.get('password') or ''
-            manager = request.env['qtcafe.manager.account'].sudo().search([
+            manager = request.env['flexsys.operations.manager'].sudo().search([
                 ('login', '=', login),
                 ('active', '=', True),
             ], limit=1)
@@ -622,9 +622,9 @@ class QtCafeQrMenuController(http.Controller):
     @http.route('/qr-menu/manager/logout', type='http', auth='public', website=True, csrf=False)
     def manager_independent_logout(self, **kwargs):
         raw_token = request.httprequest.cookies.get(self._get_manager_cookie_name())
-        manager = request.env['qtcafe.manager.account'].sudo().browse()
+        manager = request.env['flexsys.operations.manager'].sudo().browse()
         if raw_token:
-            candidates = request.env['qtcafe.manager.account'].sudo().search([
+            candidates = request.env['flexsys.operations.manager'].sudo().search([
                 ('active', '=', True),
                 ('session_expires_at', '>', fields.Datetime.now()),
             ])
@@ -659,7 +659,7 @@ class QtCafeQrMenuController(http.Controller):
                 else '/web/image/product.product/%s/image_512' % product.id,
         } for product in products]
 
-    @http.route(['/operations/api/dashboard', '/qtcafe/manager/dashboard/data'], type='jsonrpc', auth='public', csrf=False)
+    @http.route(['/operations/api/dashboard', '/flexsys_operations/manager/dashboard/data'], type='jsonrpc', auth='public', csrf=False)
     def manager_dashboard_data(
         self,
         date_from=None,
@@ -676,7 +676,7 @@ class QtCafeQrMenuController(http.Controller):
         if not assigned_pos_configs:
             return {'success': False, 'error': 'No POS branches assigned to this manager'}
 
-        Order = request.env['qtcafe.qr.order'].sudo()
+        Order = request.env['flexsys.operations.order'].sudo()
         domain = [('pos_config_id', 'in', assigned_pos_configs.ids)]
 
         if date_from:
@@ -862,13 +862,13 @@ class QtCafeQrMenuController(http.Controller):
                 'name': pos.display_name,
             } for pos in pos_configs],
             'store': {
-                'is_open': all(assigned_pos_configs.mapped('qtcafe_branch_is_open')),
+                'is_open': all(assigned_pos_configs.mapped('operations_branch_is_open')),
                 'closed_message': '',
                 'reopen_at': '',
                 'allow_browse_when_closed': True,
             },
             'branches': [{
-                **self._serialize_qtcafe_branch(branch),
+                **self._serialize_operations_branch(branch),
                 'pos_name': branch.display_name,
             } for branch in assigned_pos_configs],
             'tables': [{
@@ -876,14 +876,14 @@ class QtCafeQrMenuController(http.Controller):
                 'name': table.name,
                 'active': bool(table.active),
                 'pos_config_id': table.pos_config_id.id,
-                'branch_name': table.pos_config_id.qtcafe_branch_name or table.pos_config_id.display_name,
-            } for table in request.env['qtcafe.table'].sudo().search([
+                'branch_name': table.pos_config_id.operations_branch_name or table.pos_config_id.display_name,
+            } for table in request.env['flexsys.operations.table'].sudo().search([
                 ('pos_config_id', 'in', assigned_pos_configs.ids),
             ], order='pos_config_id, sequence, name')],
             'selected_pos_config_id': int(pos_config_id) if pos_config_id else False,
         }
 
-    @http.route(['/operations/api/products', '/qtcafe/manager/products/data'], type='jsonrpc', auth='public', csrf=False)
+    @http.route(['/operations/api/products', '/flexsys_operations/manager/products/data'], type='jsonrpc', auth='public', csrf=False)
     def manager_products_data(self, pos_config_id=None):
         manager = self._get_independent_manager()
         if not manager or not manager.can_view_dashboard:
@@ -916,7 +916,7 @@ class QtCafeQrMenuController(http.Controller):
             'menu_products': self._manager_menu_products(products, selected_pos),
         }
 
-    @http.route(['/operations/api/branches/update', '/qtcafe/manager/branch/update'], type='jsonrpc', auth='public', csrf=False)
+    @http.route(['/operations/api/branches/update', '/flexsys_operations/manager/branch/update'], type='jsonrpc', auth='public', csrf=False)
     def manager_branch_update(
         self,
         branch_id=None,
@@ -940,36 +940,36 @@ class QtCafeQrMenuController(http.Controller):
         branch = request.env['pos.config'].sudo().browse(branch_id).exists()
         if (
             not branch
-            or not branch.qtcafe_branch_enabled
+            or not branch.operations_branch_enabled
             or branch.id not in manager.pos_config_ids.ids
         ):
             return {'success': False, 'error': 'Access denied for this branch'}
 
         vals = {}
         if is_open is not None:
-            vals['qtcafe_branch_is_open'] = bool(is_open)
+            vals['operations_branch_is_open'] = bool(is_open)
         if branch_name is not None:
-            vals['qtcafe_branch_name'] = (branch_name or '').strip()
+            vals['operations_branch_name'] = (branch_name or '').strip()
         if address is not None:
-            vals['qtcafe_branch_address'] = (address or '').strip()
+            vals['operations_branch_address'] = (address or '').strip()
         if latitude is not None:
-            vals['qtcafe_latitude'] = float(latitude or 0.0)
+            vals['operations_latitude'] = float(latitude or 0.0)
         if longitude is not None:
-            vals['qtcafe_longitude'] = float(longitude or 0.0)
+            vals['operations_longitude'] = float(longitude or 0.0)
         if max_distance_km is not None:
-            vals['qtcafe_max_order_distance_km'] = max(float(max_distance_km or 0.0), 0.0)
+            vals['operations_max_order_distance_km'] = max(float(max_distance_km or 0.0), 0.0)
         if closed_message is not None:
-            vals['qtcafe_branch_closed_message'] = (closed_message or '').strip()
+            vals['operations_branch_closed_message'] = (closed_message or '').strip()
 
         if vals:
             branch.write(vals)
 
         return {
             'success': True,
-            'branch': self._serialize_qtcafe_branch(branch),
+            'branch': self._serialize_operations_branch(branch),
         }
 
-    @http.route(['/operations/api/tables/save', '/qtcafe/manager/table/save'], type='jsonrpc', auth='public', csrf=False)
+    @http.route(['/operations/api/tables/save', '/flexsys_operations/manager/table/save'], type='jsonrpc', auth='public', csrf=False)
     def manager_table_save(self, table_id=None, name=None, pos_config_id=None, active=True):
         manager = self._get_independent_manager()
         if not manager or not manager.can_manage_store:
@@ -984,7 +984,7 @@ class QtCafeQrMenuController(http.Controller):
         if not table_name:
             return {'success': False, 'error': 'اسم الطاولة مطلوب.'}
 
-        Table = request.env['qtcafe.table'].sudo()
+        Table = request.env['flexsys.operations.table'].sudo()
         if table_id:
             table = Table.browse(int(table_id)).exists()
             if not table or table.pos_config_id.id not in manager.pos_config_ids.ids:
@@ -994,18 +994,18 @@ class QtCafeQrMenuController(http.Controller):
             table = Table.create({'name': table_name, 'pos_config_id': pos_id, 'active': bool(active)})
         return {'success': True, 'table': {'id': table.id}}
 
-    @http.route(['/operations/api/tables/delete', '/qtcafe/manager/table/delete'], type='jsonrpc', auth='public', csrf=False)
+    @http.route(['/operations/api/tables/delete', '/flexsys_operations/manager/table/delete'], type='jsonrpc', auth='public', csrf=False)
     def manager_table_delete(self, table_id=None):
         manager = self._get_independent_manager()
         if not manager or not manager.can_manage_store:
             return {'success': False, 'error': 'Access denied'}
-        table = request.env['qtcafe.table'].sudo().browse(int(table_id or 0)).exists()
+        table = request.env['flexsys.operations.table'].sudo().browse(int(table_id or 0)).exists()
         if not table or table.pos_config_id.id not in manager.pos_config_ids.ids:
             return {'success': False, 'error': 'Access denied'}
         table.unlink()
         return {'success': True}
 
-    @http.route(['/operations/api/products/availability', '/qtcafe/manager/product/availability'], type='jsonrpc', auth='public', csrf=False)
+    @http.route(['/operations/api/products/availability', '/flexsys_operations/manager/product/availability'], type='jsonrpc', auth='public', csrf=False)
     def manager_product_availability(self, product_template_id=None, available=None, pos_config_id=None):
         manager = self._get_independent_manager()
         if not manager or not manager.can_manage_store:
@@ -1024,7 +1024,7 @@ class QtCafeQrMenuController(http.Controller):
         if not product or not product.show_in_qr_menu:
             return {'success': False, 'error': 'Product not found'}
 
-        Availability = request.env['qtcafe.branch.product.availability'].sudo()
+        Availability = request.env['flexsys.operations.product.availability'].sudo()
         record = Availability.search([
             ('pos_config_id', '=', pos_config_id),
             ('product_tmpl_id', '=', product.id),
@@ -1047,7 +1047,7 @@ class QtCafeQrMenuController(http.Controller):
             },
         }
 
-    @http.route(['/operations/api/orders/details', '/qtcafe/manager/order/details'], type='jsonrpc', auth='public', csrf=False)
+    @http.route(['/operations/api/orders/details', '/flexsys_operations/manager/order/details'], type='jsonrpc', auth='public', csrf=False)
     def manager_order_details(self, order_id=None):
         manager = self._get_independent_manager()
         if not manager or not manager.can_view_dashboard:
@@ -1058,7 +1058,7 @@ class QtCafeQrMenuController(http.Controller):
         except (TypeError, ValueError):
             return {'success': False, 'error': 'Invalid order'}
 
-        order = request.env['qtcafe.qr.order'].sudo().browse(order_id).exists()
+        order = request.env['flexsys.operations.order'].sudo().browse(order_id).exists()
         if not order or order.pos_config_id.id not in manager.pos_config_ids.ids:
             return {'success': False, 'error': 'Order not found or access denied'}
 
@@ -1069,7 +1069,7 @@ class QtCafeQrMenuController(http.Controller):
         })
         return {'success': True, 'order': values}
 
-    @http.route(['/operations/api/store/update', '/qtcafe/manager/store/update'], type='jsonrpc', auth='public', csrf=False)
+    @http.route(['/operations/api/store/update', '/flexsys_operations/manager/store/update'], type='jsonrpc', auth='public', csrf=False)
     def manager_store_update(
         self,
         is_open=None,
@@ -1094,36 +1094,36 @@ class QtCafeQrMenuController(http.Controller):
 
         vals = {}
         if is_open is not None:
-            vals['qtcafe_branch_is_open'] = bool(is_open)
+            vals['operations_branch_is_open'] = bool(is_open)
         if closed_message is not None:
-            vals['qtcafe_branch_closed_message'] = (closed_message or '').strip()
+            vals['operations_branch_closed_message'] = (closed_message or '').strip()
 
         if vals:
             target_branches.sudo().write(vals)
 
-        all_open = all(target_branches.mapped('qtcafe_branch_is_open'))
+        all_open = all(target_branches.mapped('operations_branch_is_open'))
         first_branch = target_branches[:1]
         return {
             'success': True,
             'store': {
                 'is_open': bool(all_open),
-                'closed_message': first_branch.qtcafe_branch_closed_message or '',
+                'closed_message': first_branch.operations_branch_closed_message or '',
                 'reopen_at': '',
                 'allow_browse_when_closed': True,
             },
         }
 
-    @http.route(['/operations/cashier', '/qtcafe/cashier'], type='http', auth='user')
+    @http.route(['/operations/cashier', '/flexsys_operations/cashier'], type='http', auth='user')
     def cashier_dashboard(self, **kwargs):
         return request.render('flexsys_operations.cashier_dashboard_page', {})
 
-    @http.route(['/operations/kitchen', '/qtcafe/kds'], type='http', auth='user')
+    @http.route(['/operations/kitchen', '/flexsys_operations/kds'], type='http', auth='user')
     def kds_dashboard(self, **kwargs):
         return request.render('flexsys_operations.kds_dashboard_page', {})
 
     @http.route('/self-order/track/<string:token>', type='http', auth='public', website=True, sitemap=False)
     def customer_order_tracking(self, token, lang='ar', **kwargs):
-        order = request.env['qtcafe.qr.order'].sudo().search([('tracking_token', '=', token)], limit=1)
+        order = request.env['flexsys.operations.order'].sudo().search([('tracking_token', '=', token)], limit=1)
         if not order:
             return request.not_found()
         language = 'en' if lang == 'en' else 'ar'
@@ -1135,13 +1135,13 @@ class QtCafeQrMenuController(http.Controller):
 
     @http.route('/self-order/api/track/<string:token>', type='jsonrpc', auth='public', csrf=False)
     def customer_order_tracking_api(self, token, language='ar'):
-        order = request.env['qtcafe.qr.order'].sudo().search([('tracking_token', '=', token)], limit=1)
+        order = request.env['flexsys.operations.order'].sudo().search([('tracking_token', '=', token)], limit=1)
         if not order:
             return {'success': False, 'error': 'Order not found'}
         language = 'en' if language == 'en' else 'ar'
         return {'success': True, 'tracking': order._customer_tracking_payload(language=language)}
 
-    @http.route(['/self-order/api/orders', '/qtcafe/order/create'], type='jsonrpc', auth='public', csrf=False)
+    @http.route(['/self-order/api/orders', '/flexsys_operations/order/create'], type='jsonrpc', auth='public', csrf=False)
     def create_order(self, lines=None, customer_name=None, customer_mobile=None, note=None, pos_config_id=None,
                      payment_method=None, order_type=None, table_id=None, car_details=None,
                      delivery_latitude=None, delivery_longitude=None, requested_time=None):
@@ -1172,18 +1172,18 @@ class QtCafeQrMenuController(http.Controller):
             return response
         return {'success': True, 'order': self._serialize_order(order)}
 
-    @http.route(['/operations/api/orders', '/qtcafe/orders/list'], type='jsonrpc', auth='user')
+    @http.route(['/operations/api/orders', '/flexsys_operations/orders/list'], type='jsonrpc', auth='user')
     def list_orders(self, states=None):
         domain = []
         if states:
             domain.append(('state', 'in', states))
         else:
             domain.append(('state', 'in', ['new', 'accepted', 'preparing']))
-        orders = request.env['qtcafe.qr.order'].search(domain, limit=80, order='create_date desc')
+        orders = request.env['flexsys.operations.order'].search(domain, limit=80, order='create_date desc')
         return {'success': True, 'orders': [self._serialize_order(order) for order in orders]}
 
 
-    @http.route(['/operations/api/orders/pending-count', '/qtcafe/orders/pending_count'], type='http', auth='user', csrf=False)
+    @http.route(['/operations/api/orders/pending-count', '/flexsys_operations/orders/pending_count'], type='http', auth='user', csrf=False)
     def pending_count(self, **kwargs):
         try:
             pos_config_id = int(kwargs.get('pos_config_id') or 0)
@@ -1197,14 +1197,14 @@ class QtCafeQrMenuController(http.Controller):
                 headers=[('Content-Type', 'application/json')]
             )
         domain.append(('pos_config_id', '=', pos_config_id))
-        orders = request.env['qtcafe.qr.order'].search(domain, limit=50, order='create_date desc')
+        orders = request.env['flexsys.operations.order'].search(domain, limit=50, order='create_date desc')
         import json
         return request.make_response(
             json.dumps({'count': len(orders), 'ids': orders.ids}),
             headers=[('Content-Type', 'application/json')]
         )
 
-    @http.route(['/operations/api/orders/action', '/qtcafe/order/action'], type='jsonrpc', auth='user')
+    @http.route(['/operations/api/orders/action', '/flexsys_operations/order/action'], type='jsonrpc', auth='user')
     def order_action(self, order_id=None, action=None):
         try:
             order_id = int(order_id or 0)
@@ -1214,13 +1214,13 @@ class QtCafeQrMenuController(http.Controller):
         if action not in ('accept', 'prepare', 'ready', 'cancel'):
             return {'success': False, 'error': 'Invalid action'}
 
-        Order = request.env['qtcafe.qr.order'].sudo()
+        Order = request.env['flexsys.operations.order'].sudo()
 
         try:
             request.env.cr.execute(
                 """
                 SELECT id
-                  FROM qtcafe_qr_order
+                  FROM operations_qr_order
                  WHERE id = %s
                  FOR UPDATE NOWAIT
                 """,
@@ -1277,26 +1277,26 @@ class QtCafeQrMenuController(http.Controller):
 
     
 
-    @http.route(['/operations/api/pos/pending-count', '/qtcafe/qr_orders/pending_count'], type='jsonrpc', auth='user')
+    @http.route(['/operations/api/pos/pending-count', '/flexsys_operations/qr_orders/pending_count'], type='jsonrpc', auth='user')
     def pos_pending_count(self, pos_config_id=False):
         domain = [('state', '=', 'new')]
         if pos_config_id:
             domain.append(('pos_config_id', '=', int(pos_config_id)))
-        return {'count': request.env['qtcafe.qr.order'].sudo().search_count(domain)}
+        return {'count': request.env['flexsys.operations.order'].sudo().search_count(domain)}
 
-    @http.route(['/operations/api/pos/pending-url', '/qtcafe/qr_orders/pending_url'], type='jsonrpc', auth='user')
+    @http.route(['/operations/api/pos/pending-url', '/flexsys_operations/qr_orders/pending_url'], type='jsonrpc', auth='user')
     def pos_pending_url(self, pos_config_id=False):
         url = '/odoo/action-qr-orders'
         if pos_config_id:
             url += '?pos_config_id=%s' % int(pos_config_id)
         return {'url': url}
 
-    @http.route(['/operations/api/pos/pending-orders', '/qtcafe/qr_orders/pending_orders'], type='jsonrpc', auth='user')
+    @http.route(['/operations/api/pos/pending-orders', '/flexsys_operations/qr_orders/pending_orders'], type='jsonrpc', auth='user')
     def pos_pending_orders(self, pos_config_id=False):
         domain = [('state', '=', 'new')]
         if pos_config_id:
             domain.append(('pos_config_id', '=', int(pos_config_id)))
-        orders = request.env['qtcafe.qr.order'].sudo().search(domain, order='id desc', limit=20)
+        orders = request.env['flexsys.operations.order'].sudo().search(domain, order='id desc', limit=20)
         result = []
         for order in orders:
             lines = []
@@ -1323,7 +1323,7 @@ class QtCafeQrMenuController(http.Controller):
             })
         return {'orders': result}
 
-    @http.route(['/operations/api/pos/cancel-order', '/qtcafe/pos/cancel_qr_order'], type='jsonrpc', auth='user')
+    @http.route(['/operations/api/pos/cancel-order', '/flexsys_operations/pos/cancel_qr_order'], type='jsonrpc', auth='user')
     def pos_cancel_qr_order(
         self,
         pos_order_id=None,
@@ -1339,7 +1339,7 @@ class QtCafeQrMenuController(http.Controller):
         called explicitly by the POS model patch.
         """
         PosOrder = request.env['pos.order'].sudo()
-        QrOrder = request.env['qtcafe.qr.order'].sudo()
+        QrOrder = request.env['flexsys.operations.order'].sudo()
 
         qr_order = QrOrder.browse()
 
@@ -1372,8 +1372,8 @@ class QtCafeQrMenuController(http.Controller):
                 ref_domain = current if not ref_domain else ['|'] + ref_domain + current
             pos_order = PosOrder.search(ref_domain, limit=1)
 
-        if not qr_order and pos_order and pos_order.qtcafe_qr_order_id:
-            qr_order = pos_order.qtcafe_qr_order_id
+        if not qr_order and pos_order and pos_order.operations_qr_order_id:
+            qr_order = pos_order.operations_qr_order_id
 
         if not qr_order and pos_order:
             qr_order = QrOrder.search([('pos_order_id', '=', pos_order.id)], limit=1)
@@ -1404,20 +1404,20 @@ class QtCafeQrMenuController(http.Controller):
             'state': qr_order.state,
         }
 
-    @http.route(['/operations/api/pos/mark-loaded', '/qtcafe/qr_orders/mark_loaded'], type='jsonrpc', auth='user')
+    @http.route(['/operations/api/pos/mark-loaded', '/flexsys_operations/qr_orders/mark_loaded'], type='jsonrpc', auth='user')
     def pos_mark_loaded(self, order_id):
         try:
             order_id = int(order_id or 0)
         except (TypeError, ValueError):
             return {'ok': False, 'error': 'Invalid order ID'}
 
-        Order = request.env['qtcafe.qr.order'].sudo()
+        Order = request.env['flexsys.operations.order'].sudo()
 
         try:
             request.env.cr.execute(
                 """
                 SELECT id
-                  FROM qtcafe_qr_order
+                  FROM operations_qr_order
                  WHERE id = %s
                  FOR UPDATE NOWAIT
                 """,
@@ -1435,7 +1435,7 @@ class QtCafeQrMenuController(http.Controller):
             return {'ok': True, 'already_loaded': True}
 
         # Only mark as loaded. Do not change state here.
-        # State changes are owned by /qtcafe/order/action.
+        # State changes are owned by /flexsys_operations/order/action.
         order.write({'loaded_to_pos': True})
         request.env.flush_all()
 

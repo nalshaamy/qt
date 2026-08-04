@@ -8,9 +8,9 @@ from odoo.tools.misc import DEFAULT_SERVER_DATETIME_FORMAT
 from werkzeug.security import check_password_hash, generate_password_hash
 
 
-class QtCafeManagerAccount(models.Model):
-    _name = 'qtcafe.manager.account'
-    _description = 'QT Cafe Independent Manager Account'
+class FlexSysOperationsManagerAccount(models.Model):
+    _name = 'flexsys.operations.manager'
+    _description = 'FlexSys Independent Manager Account'
     _rec_name = 'name'
     _order = 'name'
 
@@ -22,17 +22,17 @@ class QtCafeManagerAccount(models.Model):
     pos_config_id = fields.Many2one(
         'pos.config',
         string='Legacy Assigned POS Branch',
-        domain=[('qtcafe_branch_enabled', '=', True)],
+        domain=[('operations_branch_enabled', '=', True)],
         ondelete='set null',
         copy=False,
     )
     pos_config_ids = fields.Many2many(
         'pos.config',
-        'qtcafe_manager_pos_config_rel',
+        'operations_manager_pos_config_rel',
         'manager_id',
         'pos_config_id',
         string='Assigned POS Branches',
-        domain=[('qtcafe_branch_enabled', '=', True)],
+        domain=[('operations_branch_enabled', '=', True)],
         help='The manager can view and manage only these POS branches.',
     )
     active = fields.Boolean(default=True)
@@ -52,7 +52,7 @@ class QtCafeManagerAccount(models.Model):
         for record in self:
             if record.active and not record.pos_config_ids:
                 raise ValidationError(_('An active manager account must be linked to at least one POS branch.'))
-            if record.pos_config_ids.filtered(lambda pos: not pos.qtcafe_branch_enabled):
+            if record.pos_config_ids.filtered(lambda pos: not pos.operations_branch_enabled):
                 raise ValidationError(_('All assigned POS records must be enabled as QR branches.'))
 
     @api.constrains('login')
@@ -139,7 +139,7 @@ class FlexSysPlatformBranchOperations(models.Model):
         'branch_id',
         'pos_config_id',
         string='Operations POS Branches',
-        domain=[('qtcafe_branch_enabled', '=', True)],
+        domain=[('operations_branch_enabled', '=', True)],
         help='POS configurations available in Operations when this platform branch is active.',
     )
 

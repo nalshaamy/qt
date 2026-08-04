@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <record id="view_qtcafe_manager_account_list" model="ir.ui.view">
-        <field name="name">qtcafe.manager.account.list</field>
-        <field name="model">qtcafe.manager.account</field>
+    <record id="view_operations_manager_account_list" model="ir.ui.view">
+        <field name="name">flexsys.operations.manager.list</field>
+        <field name="model">flexsys.operations.manager</field>
         <field name="arch" type="xml">
             <list string="Independent Managers">
                 <field name="name"/>
@@ -17,9 +17,9 @@
         </field>
     </record>
 
-    <record id="view_qtcafe_manager_account_form" model="ir.ui.view">
-        <field name="name">qtcafe.manager.account.form</field>
-        <field name="model">qtcafe.manager.account</field>
+    <record id="view_operations_manager_account_form" model="ir.ui.view">
+        <field name="name">flexsys.operations.manager.form</field>
+        <field name="model">flexsys.operations.manager</field>
         <field name="arch" type="xml">
             <form string="Independent Manager">
                 <sheet>
@@ -45,9 +45,9 @@
         </field>
     </record>
 
-    <record id="action_qtcafe_manager_accounts" model="ir.actions.act_window">
+    <record id="action_operations_manager_accounts" model="ir.actions.act_window">
         <field name="name">Independent Managers</field>
-        <field name="res_model">qtcafe.manager.account</field>
+        <field name="res_model">flexsys.operations.manager</field>
         <field name="view_mode">list,form</field>
     </record>
 

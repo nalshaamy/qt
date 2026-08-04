@@ -346,10 +346,10 @@ class FlexSysExecutionTask(models.Model):
     name = fields.Char(default=lambda self: _('New'), required=True, copy=False, readonly=True)
     sequence = fields.Integer(default=10)
     order_id = fields.Many2one(
-        'qtcafe.qr.order', required=True, ondelete='cascade', index=True
+        'flexsys.operations.order', required=True, ondelete='cascade', index=True
     )
     order_line_id = fields.Many2one(
-        'qtcafe.qr.order.line', required=True, ondelete='cascade', index=True
+        'flexsys.operations.order.line', required=True, ondelete='cascade', index=True
     )
     station_id = fields.Many2one(
         'flexsys.execution.station', ondelete='restrict', index=True
