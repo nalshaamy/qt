@@ -1,6 +1,0 @@
-FlexSys Workspace Framework v1.0
-- Dynamic workspace route: /flexsys/workspace/<application_code>
-- Permission-aware metrics, actions and widgets
-- Safe provider contract using _flexsys_workspace_* methods
-- Optional per-user saved layout foundation
-- Operations is the first registered workspace
