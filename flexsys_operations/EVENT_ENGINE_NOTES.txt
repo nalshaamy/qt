@@ -1,9 +1,0 @@
-FlexSys Operations 19.0.2.2.0
-
-Event Engine foundation:
-- Added append-only flexsys.operation.event model.
-- Added centralized EventService.
-- Emits order.created, order.state_changed, and order_line.state_changed.
-- Events are company-scoped and optionally branch/POS-scoped.
-- Actor is stored as neutral text to support independent FlexSys users.
-- No direct application-to-application calls were introduced.
