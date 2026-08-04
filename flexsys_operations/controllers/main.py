@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 from werkzeug.utils import redirect
 from odoo import http, Command, fields
 from odoo.http import request
-from odoo.exceptions import AccessDenied
+from odoo.exceptions import AccessDenied, UserError, ValidationError
 
 from ..common.exceptions import FlexSysValidationError
 from ..services import OrderService
@@ -98,7 +98,16 @@ class FlexSysOperationsQrMenuController(http.Controller):
         return bool(user and not user._is_public() and user.partner_id)
 
     def _registered_partner(self):
-        return request.env.user.partner_id if self._is_registered_customer() else request.env['res.partner']
+        """Return the authenticated customer's partner without portal record-rule side effects.
+
+        Public order creation is intentionally handled through controlled sudo()
+        service calls.  Keeping the partner record in the portal user's environment
+        can make field reads or relational validation fail only for signed-in
+        customers, while guest orders continue to work.
+        """
+        if not self._is_registered_customer():
+            return request.env['res.partner']
+        return request.env.user.sudo().partner_id.sudo().exists()
 
     def _customer_state_label(self, state):
         return {
@@ -1170,6 +1179,21 @@ class FlexSysOperationsQrMenuController(http.Controller):
             if error.code:
                 response['error_code'] = error.code
             return response
+        except (ValidationError, UserError) as error:
+            # Normalize expected Odoo business errors into the public JSON contract.
+            return {
+                'success': False,
+                'error': str(error),
+                'error_code': 'business_validation_error',
+            }
+        except Exception:
+            # Keep the full traceback in Odoo logs while returning a safe customer message.
+            _logger.exception('Unexpected error while creating a Self Order')
+            return {
+                'success': False,
+                'error': 'تعذر إرسال الطلب بسبب خطأ داخلي. حاول مرة أخرى أو تواصل مع المتجر.',
+                'error_code': 'internal_order_error',
+            }
         return {'success': True, 'order': self._serialize_order(order)}
 
     @http.route(['/operations/api/orders', '/flexsys_operations/orders/list'], type='jsonrpc', auth='user')

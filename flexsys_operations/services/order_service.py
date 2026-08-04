@@ -156,7 +156,7 @@ class OrderService(BaseService):
         requested_dt = self._parse_requested_time(requested_time)
         state = "scheduled" if requested_dt and requested_dt > fields.Datetime.now() else "new"
 
-        partner = partner if partner and partner.exists() else self.env["res.partner"]
+        partner = partner.sudo().exists() if partner and partner.exists() else self.env["res.partner"].sudo().browse()
         if partner:
             customer_name = partner.name or ""
             customer_mobile = partner.mobile or partner.phone or ""

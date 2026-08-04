@@ -236,20 +236,36 @@ async function submitOrder() {
     sendBtn.disabled = true;
     result.innerText = 'جاري إرسال الطلب...';
     try {
+        const orderType = selectedValue('order_type');
+        const paymentMethod = selectedValue('payment_method');
+        if (!orderType) {
+            result.innerText = 'اختر نوع الطلب.';
+            return;
+        }
+        if (!paymentMethod) {
+            result.innerText = 'اختر طريقة الدفع.';
+            return;
+        }
+
         const response = await fetch('/self-order/api/orders', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            },
+            credentials: 'same-origin',
             body: JSON.stringify({
                 jsonrpc: '2.0',
                 method: 'call',
+                id: Date.now(),
                 params: {
                     lines: cart,
                     customer_name: document.querySelector('#customer-name')?.value || '',
                     customer_mobile: document.querySelector('#customer-mobile')?.value || '',
                     note: document.querySelector('#customer-note')?.value || '',
                     pos_config_id: document.querySelector('#flexsys-operations-pos-config-id')?.value || new URLSearchParams(window.location.search).get('pos_config_id') || '',
-                    payment_method: selectedValue('payment_method'),
-                    order_type: selectedValue('order_type'),
+                    payment_method: paymentMethod,
+                    order_type: orderType,
                     table_id: document.querySelector('#order-table-id')?.value || '',
                     car_details: document.querySelector('#car-details')?.value || '',
                     delivery_latitude: document.querySelector('#delivery-latitude')?.value || '',
@@ -257,13 +273,21 @@ async function submitOrder() {
                 },
             }),
         });
-        const data = await response.json();
-        if (data.result && data.result.success) {
-            const orderName = data.result.order.name;
+
+        let data = {};
+        try {
+            data = await response.json();
+        } catch (_parseError) {
+            throw new Error(`Invalid server response (${response.status})`);
+        }
+
+        const payload = data.result || {};
+        if (response.ok && payload.success) {
+            const orderName = payload.order.name;
             document.querySelector('#success-order-name').innerText = orderName;
             const trackingLink = document.querySelector('#success-tracking-link');
-            if (trackingLink && data.result.order && data.result.order.tracking_url) {
-                trackingLink.href = data.result.order.tracking_url;
+            if (trackingLink && payload.order && payload.order.tracking_url) {
+                trackingLink.href = payload.order.tracking_url;
                 trackingLink.hidden = false;
             }
             const orderTypeLabels = {dine_in: 'محلي', takeaway: 'سفري', car: 'طلب سيارة', delivery: 'توصيل'};
@@ -285,9 +309,12 @@ async function submitOrder() {
             if (customerNoteInput) customerNoteInput.value = '';
             result.innerText = '';
         } else {
-            result.innerText = (data.result && data.result.error) || 'تعذر إرسال الطلب';
+            const rpcMessage = data?.error?.data?.message || data?.error?.message;
+            result.innerText = payload.error || rpcMessage || `تعذر إرسال الطلب (${response.status})`;
+            console.error('FlexSys Self Order submission failed', data);
         }
     } catch (error) {
+        console.error('FlexSys Self Order request failed', error);
         result.innerText = 'تعذر الاتصال بالخادم، حاول مرة أخرى';
     } finally {
         sendBtn.disabled = false;
