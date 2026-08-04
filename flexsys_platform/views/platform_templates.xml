@@ -169,7 +169,7 @@
                     </main>
 
                     <footer class="fs-platform-footer">
-                        <span>FlexSys Platform · 19.0.1.7.0</span><span>Stable core. Flexible experience.</span>
+                        <span>FlexSys Platform · 19.0.2.1.2</span><span>Stable core. Flexible experience.</span>
                     </footer>
                 </div>
             </div>
@@ -204,7 +204,7 @@
                             <div class="fs-widget-grid"><article t-foreach="widget_items" t-as="item" t-attf-class="fs-panel fs-widget fs-widget-#{item.size}"><div class="fs-widget-head"><span t-attf-class="fa #{item.icon}"/><div><h3 t-esc="item.title"/><p t-esc="item.description"/></div></div><div class="fs-widget-value" t-esc="metrics.get(item.metric_key or item.code, '—')"/></article></div>
                         </section>
                     </main>
-                    <footer class="fs-platform-footer"><span>FlexSys Platform · 19.0.1.7.0</span><span>Workspace Framework v1.0</span></footer>
+                    <footer class="fs-platform-footer"><span>FlexSys Platform · 19.0.2.1.2</span><span>Workspace Framework v1.0</span></footer>
                 </div>
             </div>
         </t>
@@ -241,7 +241,7 @@
                             <div t-else="" class="fs-empty-state"><span class="fa fa-keyboard"/><h3>Start typing</h3><p>Universal Search respects your permissions, company, and branch context.</p></div>
                         </section>
                     </main>
-                    <footer class="fs-platform-footer"><span>FlexSys Platform · 19.0.1.7.0</span><span>Universal Search v1.0</span></footer>
+                    <footer class="fs-platform-footer"><span>FlexSys Platform · 19.0.2.1.2</span><span>Universal Search v1.0</span></footer>
                 </div>
             </div>
         </t>
