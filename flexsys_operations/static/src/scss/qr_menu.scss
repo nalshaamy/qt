@@ -1972,7 +1972,7 @@ textarea {
 
 /* FlexSys customer order timeline */
 .fs-customer-track { margin: 0; min-height: 100vh; background: #f4f7fb; color: #17324d; font-family: Cairo, sans-serif; }
-.fs-track-shell { width: min(720px, calc(100% - 28px)); margin-inline: auto; padding-block: 28px 48px; }
+.fs-track-shell { width: calc(100% - 28px); max-width: 720px; margin-inline: auto; padding-block: 28px 48px; }
 .fs-track-header, .fs-track-status, .fs-track-timeline { background: #fff; border: 1px solid #e6edf4; border-radius: 20px; box-shadow: 0 12px 30px rgba(20, 55, 85, .07); }
 .fs-track-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 22px; }
 .fs-track-header h1 { margin: 4px 0 0; font-size: 1.45rem; }
@@ -1990,7 +1990,7 @@ textarea {
 .fs-track-event time { color: #72879a; font-size: .86rem; }
 .fs-track-empty { padding: 28px 0; text-align: center; color: #72879a; }
 .fs-track-back { display: block; width: fit-content; margin: 20px auto 0; color: #2e6f9e; text-decoration: none; font-weight: 800; }
-@media (max-width: 560px) { .fs-track-shell { width: min(100% - 18px, 720px); padding-block-start: 12px; } .fs-track-header, .fs-track-status, .fs-track-timeline { border-radius: 16px; } }
+@media (max-width: 560px) { .fs-track-shell { width: calc(100% - 18px); max-width: 720px; padding-block-start: 12px; } .fs-track-header, .fs-track-status, .fs-track-timeline { border-radius: 16px; } }
 
 /* Customer favorites and quick reorder */
 .fs-customer-favorites {
