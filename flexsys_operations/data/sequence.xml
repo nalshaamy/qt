@@ -1,8 +1,0 @@
-<odoo>
-    <record id="seq_qtcafe_qr_order" model="ir.sequence">
-        <field name="name">QT Cafe QR Order</field>
-        <field name="code">qtcafe.qr.order</field>
-        <field name="prefix">D</field>
-        <field name="padding">4</field>
-    </record>
-</odoo>
