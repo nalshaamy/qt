@@ -1,0 +1,15 @@
+<odoo>
+    <record id="seq_qtcafe_qr_order" model="ir.sequence">
+        <field name="name">Operations Order</field>
+        <field name="code">qtcafe.qr.order</field>
+        <field name="prefix">D</field>
+        <field name="padding">4</field>
+    </record>
+
+    <record id="seq_flexsys_execution_task" model="ir.sequence">
+        <field name="name">Execution Task</field>
+        <field name="code">flexsys.execution.task</field>
+        <field name="prefix">T</field>
+        <field name="padding">6</field>
+    </record>
+</odoo>

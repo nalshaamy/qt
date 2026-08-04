@@ -1,0 +1,9 @@
+Operations 19.0.2.9.0 - Order Service Refactor
+
+- Public order creation moved out of controllers/main.py into OrderService.
+- Controller now acts only as HTTP/JSON transport adapter.
+- Centralized validation for store, branch, products, payment, order type, table, car and delivery.
+- Requested Time is now persisted and future requests start as Scheduled.
+- Self Order source is written explicitly.
+- Controlled domain errors return stable error codes and customer-facing messages.
+- Legacy routes and model names remain unchanged for backward compatibility.

@@ -1,0 +1,8 @@
+Operations 19.0.2.11.0
+
+- FlexSys Platform sessions are now the primary Operations identity.
+- /operations/login and /operations/logout use the Platform authentication flow.
+- Legacy manager routes remain under /qr-menu/manager/* only for upgrades.
+- Platform branches can map to one or more Operations POS configurations.
+- Platform users derive their Operations POS scope from allowed branches.
+- Added operations.manage_store permission while preserving operations.access.
