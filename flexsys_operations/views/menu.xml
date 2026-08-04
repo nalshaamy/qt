@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="menu_qtcafe_root" name="Operations" sequence="10"/>
+
+    <menuitem id="menu_qtcafe_qr_orders"
+              name="Orders"
+              parent="menu_qtcafe_root"
+              action="action_qtcafe_qr_order"
+              sequence="5"/>
+
+    <menuitem id="menu_qtcafe_products"
+              name="Products"
+              parent="menu_qtcafe_root"
+              sequence="20"/>
+
+    <menuitem id="menu_qtcafe_qr_products"
+              name="Menu Products"
+              parent="menu_qtcafe_products"
+              action="action_qtcafe_qr_menu_products"
+              sequence="5"/>
+
+    <menuitem id="menu_qtcafe_qr_categories"
+              name="Menu Categories"
+              parent="menu_qtcafe_products"
+              action="action_qtcafe_qr_menu_category"
+              sequence="10"/>
+
+    <menuitem id="menu_qtcafe_config"
+              name="Configuration"
+              parent="menu_qtcafe_root"
+              sequence="90"/>
+</odoo>

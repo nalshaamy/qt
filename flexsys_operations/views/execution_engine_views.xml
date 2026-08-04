@@ -1,0 +1,308 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_flexsys_execution_station_list" model="ir.ui.view">
+        <field name="name">flexsys.execution.station.list</field>
+        <field name="model">flexsys.execution.station</field>
+        <field name="arch" type="xml">
+            <list string="Stations">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="code"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="pos_config_ids" widget="many2many_tags"/>
+                <field name="status"/>
+                <field name="health" widget="badge" decoration-success="health == 'healthy'" decoration-warning="health == 'warning'" decoration-danger="health == 'critical'" decoration-muted="health == 'offline'"/>
+                <field name="capacity"/>
+                <field name="effective_capacity"/>
+                <field name="available_resource_count"/>
+                <field name="busy_resource_count"/>
+                <field name="queue_mode"/>
+                <field name="waiting_task_count"/>
+                <field name="active_task_count"/>
+                <field name="delayed_task_count"/>
+                <field name="load_percent" widget="progressbar"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_flexsys_execution_station_form" model="ir.ui.view">
+        <field name="name">flexsys.execution.station.form</field>
+        <field name="model">flexsys.execution.station</field>
+        <field name="arch" type="xml">
+            <form string="Station">
+                <header>
+                    <button name="action_activate" type="object" string="Activate" class="btn-primary" invisible="status == 'active'"/>
+                    <button name="action_pause" type="object" string="Pause" invisible="status != 'active'"/>
+                    <button name="action_offline" type="object" string="Set Offline" invisible="status == 'offline'"/>
+                    <button name="action_rebuild_queue" type="object" string="Rebuild Queue"/>
+                    <field name="status" widget="statusbar" statusbar_visible="active,paused,offline"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="code"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="pos_config_ids" widget="many2many_tags"/>
+                        </group>
+                        <group>
+                            <field name="health" widget="badge" readonly="1"/>
+                            <field name="capacity"/>
+                            <field name="effective_capacity" readonly="1"/>
+                            <field name="queue_mode"/>
+                            <field name="default_estimated_minutes"/>
+                            <field name="sequence"/>
+                            <field name="active"/>
+                        </group>
+                    </group>
+                    <group string="Live Metrics">
+                        <field name="waiting_task_count" readonly="1"/>
+                        <field name="active_task_count" readonly="1"/>
+                        <field name="delayed_task_count" readonly="1"/>
+                        <field name="completed_task_count" readonly="1"/>
+                        <field name="load_percent" widget="progressbar" readonly="1"/>
+                        <field name="average_duration_minutes" readonly="1"/>
+                        <field name="available_resource_count" readonly="1"/>
+                        <field name="busy_resource_count" readonly="1"/>
+                    </group>
+                    <notebook>
+                        <page string="Experience">
+                            <group>
+                                <group string="Station Workspace">
+                                    <field name="enable_kds"/>
+                                </group>
+                                <group string="Station Printing">
+                                    <field name="enable_printing"/>
+                                    <field name="auto_print" invisible="not enable_printing"/>
+                                    <field name="print_copies" invisible="not enable_printing"/>
+                                    <field name="ticket_template" invisible="not enable_printing"/>
+                                    <field name="ticket_show_customer" invisible="not enable_printing"/>
+                                    <field name="ticket_show_notes" invisible="not enable_printing"/>
+                                    <field name="ticket_show_qr" invisible="not enable_printing"/>
+                                </group>
+                            </group>
+                            <div class="text-muted" invisible="not enable_printing">
+                                Automatic printing creates a traceable print request. A printer connector may consume it; task execution never stops if printing is unavailable.
+                            </div>
+                        </page>
+                        <page string="Resources">
+                            <field name="resource_ids" context="{'default_company_id': company_id}">
+                                <list editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="name"/>
+                                    <field name="code"/>
+                                    <field name="resource_type"/>
+                                    <field name="platform_user_id" optional="show"/>
+                                    <field name="status" widget="badge"/>
+                                    <field name="capacity"/>
+                                    <field name="active_task_count" readonly="1"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Assigned Users">
+                            <field name="assigned_user_ids" widget="many2many_tags"/>
+                        </page>
+                        <page string="Tasks">
+                            <field name="task_ids" readonly="1">
+                                <list>
+                                    <field name="name"/>
+                                    <field name="order_id"/>
+                                    <field name="product_id"/>
+                                    <field name="qty"/>
+                                    <field name="priority"/>
+                                    <field name="queue_position"/>
+                                    <field name="waiting_minutes"/>
+                                    <field name="state"/>
+                                    <field name="estimated_minutes"/>
+                                    <field name="deadline_at"/>
+                                    <field name="is_delayed"/>
+                                    <field name="requested_time"/>
+                                    <field name="print_status" widget="badge" optional="show"/>
+                                    <field name="print_count" optional="hide"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_flexsys_execution_resource_list" model="ir.ui.view">
+        <field name="name">flexsys.execution.resource.list</field>
+        <field name="model">flexsys.execution.resource</field>
+        <field name="arch" type="xml">
+            <list string="Resources" decoration-success="status == 'available'" decoration-warning="status == 'busy'" decoration-muted="status in ('break','offline','maintenance')">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="code"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="station_id"/>
+                <field name="resource_type"/>
+                <field name="platform_user_id" optional="show"/>
+                <field name="status" widget="badge"/>
+                <field name="capacity"/>
+                <field name="active_task_count"/>
+                <field name="skills" optional="hide"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_flexsys_execution_resource_form" model="ir.ui.view">
+        <field name="name">flexsys.execution.resource.form</field>
+        <field name="model">flexsys.execution.resource</field>
+        <field name="arch" type="xml">
+            <form string="Resource">
+                <header>
+                    <button name="action_available" type="object" string="Available" class="btn-primary" invisible="status == 'available'"/>
+                    <button name="action_break" type="object" string="Break" invisible="status == 'break'"/>
+                    <button name="action_offline" type="object" string="Offline" invisible="status == 'offline'"/>
+                    <button name="action_maintenance" type="object" string="Maintenance" invisible="status == 'maintenance'"/>
+                    <field name="status" widget="statusbar" statusbar_visible="available,busy,break,offline,maintenance"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="code"/>
+                            <field name="resource_type"/>
+                            <field name="platform_user_id" invisible="resource_type != 'employee'"/>
+                        </group>
+                        <group>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="station_id"/>
+                            <field name="capacity"/>
+                            <field name="active_task_count" readonly="1"/>
+                            <field name="active"/>
+                        </group>
+                    </group>
+                    <group string="Skills">
+                        <field name="skills" placeholder="Espresso, latte art, packing"/>
+                    </group>
+                    <field name="task_ids" readonly="1">
+                        <list create="0" delete="0">
+                            <field name="name"/>
+                            <field name="order_id"/>
+                            <field name="product_id"/>
+                            <field name="state"/>
+                            <field name="started_at"/>
+                            <field name="ready_at"/>
+                        </list>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_flexsys_execution_route_list" model="ir.ui.view">
+        <field name="name">flexsys.execution.route.list</field>
+        <field name="model">flexsys.execution.route</field>
+        <field name="arch" type="xml">
+            <list string="Execution Routing" editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="pos_config_id"/>
+                <field name="product_tmpl_id"/>
+                <field name="station_id"/>
+                <field name="estimated_minutes"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_flexsys_execution_task_list" model="ir.ui.view">
+        <field name="name">flexsys.execution.task.list</field>
+        <field name="model">flexsys.execution.task</field>
+        <field name="arch" type="xml">
+            <list string="Execution Tasks" create="0" delete="0" decoration-info="state == 'new'" decoration-warning="state == 'preparing'" decoration-success="state == 'ready'" decoration-danger="state in ('unavailable','cancelled')">
+                <field name="name"/>
+                <field name="order_id"/>
+                <field name="station_id"/>
+                <field name="assigned_resource_id" optional="show"/>
+                <field name="product_id"/>
+                <field name="qty"/>
+                <field name="priority"/>
+                <field name="queue_position"/>
+                <field name="waiting_minutes" optional="show"/>
+                <field name="can_start" optional="show"/>
+                <field name="state"/>
+                <field name="estimated_minutes"/>
+                <field name="deadline_at" optional="show"/>
+                <field name="actual_minutes" optional="hide"/>
+                <field name="is_delayed" optional="show"/>
+                <field name="requested_time"/>
+                <field name="started_at" optional="hide"/>
+                <field name="ready_at" optional="hide"/>
+                <field name="print_status" optional="show" widget="badge" decoration-info="print_status == 'pending'" decoration-success="print_status == 'printed'" decoration-danger="print_status == 'failed'"/>
+                <field name="print_count" optional="hide"/>
+                <button name="action_print_station_ticket" type="object" icon="fa-print" title="Print Station Ticket" invisible="not station_id or print_status == 'not_required'"/>
+                <button name="action_mark_print_failed" type="object" icon="fa-exclamation-triangle" title="Mark Print Failed" invisible="print_status not in ('pending','printed')"/>
+                <button name="action_start" type="object" icon="fa-play" title="Start" invisible="not can_start"/>
+                <button name="action_ready" type="object" icon="fa-check" title="Ready" invisible="state not in ('new','preparing')"/>
+                <button name="action_unavailable" type="object" icon="fa-times" title="Unavailable" invisible="state in ('ready','unavailable','cancelled')"/>
+                <button name="action_reset" type="object" icon="fa-undo" title="Reset" invisible="state == 'new'"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="action_flexsys_execution_station" model="ir.actions.act_window">
+        <field name="name">Stations</field>
+        <field name="res_model">flexsys.execution.station</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <record id="action_flexsys_execution_resource" model="ir.actions.act_window">
+        <field name="name">Resources</field>
+        <field name="res_model">flexsys.execution.resource</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <record id="action_flexsys_execution_route" model="ir.actions.act_window">
+        <field name="name">Execution Routing</field>
+        <field name="res_model">flexsys.execution.route</field>
+        <field name="view_mode">list</field>
+    </record>
+
+    <record id="action_flexsys_execution_task" model="ir.actions.act_window">
+        <field name="name">Execution Tasks</field>
+        <field name="res_model">flexsys.execution.task</field>
+        <field name="view_mode">list</field>
+        <field name="context">{'search_default_group_by_station': 1}</field>
+    </record>
+
+    <menuitem id="menu_flexsys_execution" name="Execution" parent="menu_qtcafe_root" sequence="15"/>
+    <menuitem id="menu_flexsys_execution_tasks" name="Tasks" parent="menu_flexsys_execution" action="action_flexsys_execution_task" sequence="5"/>
+    <menuitem id="menu_flexsys_execution_stations" name="Stations" parent="menu_flexsys_execution" action="action_flexsys_execution_station" sequence="10"/>
+    <menuitem id="menu_flexsys_execution_resources" name="Resources" parent="menu_flexsys_execution" action="action_flexsys_execution_resource" sequence="15"/>
+    <menuitem id="menu_flexsys_execution_routes" name="Routing" parent="menu_qtcafe_config" action="action_flexsys_execution_route" sequence="20"/>
+
+    <record id="view_qtcafe_qr_order_form_execution" model="ir.ui.view">
+        <field name="name">qtcafe.qr.order.form.execution</field>
+        <field name="model">qtcafe.qr.order</field>
+        <field name="inherit_id" ref="view_qtcafe_qr_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Execution Tasks">
+                    <field name="task_ids" readonly="1">
+                        <list create="0" delete="0">
+                            <field name="name"/>
+                            <field name="station_id"/>
+                            <field name="assigned_resource_id" optional="show"/>
+                            <field name="product_id"/>
+                            <field name="qty"/>
+                            <field name="priority"/>
+                            <field name="state"/>
+                            <field name="estimated_minutes"/>
+                            <field name="deadline_at" optional="show"/>
+                            <field name="is_delayed" optional="show"/>
+                            <field name="started_at" optional="hide"/>
+                            <field name="ready_at" optional="hide"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>

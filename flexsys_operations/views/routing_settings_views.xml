@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_qtcafe_routing_settings_form" model="ir.ui.view">
+        <field name="name">qtcafe.routing.settings.form</field>
+        <field name="model">qtcafe.routing.settings</field>
+        <field name="arch" type="xml">
+            <form string="Operations Order Routing">
+                <sheet>
+                    <field name="name" invisible="1"/>
+                    <div class="oe_title">
+                        <h1>Operations Order Routing</h1>
+                        <p>إعداد نقطة البيع الاحتياطية فقط. اختيار العميل للفرع له الأولوية دائمًا.</p>
+                    </div>
+                    <group>
+                        <field name="fallback_pos_config_id"
+                               options="{'no_create': True}"
+                               placeholder="Select fallback POS"/>
+                    </group>
+                    <footer>
+                        <button name="action_save" type="object" string="Save" class="btn-primary"/>
+                        <button string="Discard" special="cancel" class="btn-secondary"/>
+                    </footer>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_qtcafe_routing_settings" model="ir.actions.act_window">
+        <field name="name">Order Routing</field>
+        <field name="res_model">qtcafe.routing.settings</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

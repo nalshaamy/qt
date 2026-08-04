@@ -1,0 +1,173 @@
+<odoo>
+    <record id="view_qtcafe_qr_menu_category_tree" model="ir.ui.view">
+        <field name="name">qtcafe.qr.menu.category.tree</field>
+        <field name="model">qtcafe.qr.menu.category</field>
+        <field name="arch" type="xml">
+            <list string="Menu Categories" editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_qtcafe_qr_order_tree" model="ir.ui.view">
+        <field name="name">qtcafe.qr.order.tree</field>
+        <field name="model">qtcafe.qr.order</field>
+        <field name="arch" type="xml">
+            <list string="Orders" create="0" decoration-info="state == 'new'" decoration-success="state in ('ready','completed')" decoration-warning="state == 'partially_ready'" decoration-danger="state in ('cancelled','rejected')">
+                <field name="name"/>
+                <field name="partner_id" readonly="id"/>
+                <field name="customer_name" readonly="id"/>
+                <field name="customer_mobile" readonly="id"/>
+                <field name="pos_config_id"/>
+                <field name="order_type" readonly="id"/>
+                <field name="source"/>
+                <field name="priority"/>
+                <field name="requested_time"/>
+                <field name="payment_method" readonly="id"/>
+                        <field name="pos_order_id" readonly="1"/>
+                        <field name="state"/>
+                <field name="amount_total"/>
+                <field name="create_date"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_qtcafe_qr_order_form" model="ir.ui.view">
+        <field name="name">qtcafe.qr.order.form</field>
+        <field name="model">qtcafe.qr.order</field>
+        <field name="arch" type="xml">
+            <form string="Order" create="0">
+                <header>
+                    <button name="action_create_pos_order" type="object" string="Create POS Order" class="btn-primary"/>
+                    <button name="action_accept" type="object" string="Accept" class="btn-primary" invisible="state not in ('scheduled','new')"/>
+                    <button name="action_print_receipt" type="object" string="Print Receipt"/>
+                    <button name="action_prepare" type="object" string="Start Preparation" invisible="state not in ('accepted','partially_ready')"/>
+                    <button name="action_ready" type="object" string="Mark All Ready" invisible="state not in ('preparing','partially_ready')"/>
+                    <button name="action_complete" type="object" string="Complete" class="btn-primary" invisible="state != 'ready'"/>
+                    <button name="action_reject" type="object" string="Reject" invisible="state not in ('new','accepted')"/>
+                    <button name="action_cancel" type="object" string="Cancel" invisible="state in ('ready','completed','cancelled','rejected')"/>
+                    <field name="state" widget="statusbar" statusbar_visible="scheduled,new,accepted,preparing,partially_ready,ready,completed"/>
+                </header>
+                <sheet>
+                    <h1><field name="name" readonly="1"/></h1>
+                    <group>
+                        <group>
+                            <field name="partner_id" readonly="id"/>
+                            <field name="customer_name" readonly="id"/>
+                            <field name="customer_mobile" readonly="id"/>
+                            <field name="source" readonly="1"/>
+                            <field name="priority"/>
+                            <field name="requested_time"/>
+                            <field name="pos_config_id" required="1"/>
+                            <field name="order_type" readonly="id"/>
+                            <field name="payment_method" readonly="id"/>
+                            <field name="table_id" invisible="order_type != 'dine_in'"/>
+                            <field name="car_details" readonly="1" invisible="order_type != 'car'"/>
+                        </group>
+                        <group>
+                            <field name="amount_total" readonly="1"/>
+                            <field name="accepted_user_id" readonly="1"/>
+                            <field name="accepted_date" readonly="1"/>
+                            <field name="ready_date" readonly="1"/>
+                            <field name="completed_date" readonly="1"/>
+                            <field name="preparation_progress" widget="progressbar" readonly="1"/>
+                            <field name="unavailable_line_count" readonly="1"/>
+                            <field name="delivery_distance_km" invisible="order_type != 'delivery'"/>
+                            <field name="delivery_google_maps_url" widget="url" invisible="order_type != 'delivery'"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Order Lines">
+                            <field name="line_ids">
+                                <list editable="bottom">
+                                    <field name="product_id"/>
+                                    <field name="qty"/>
+                                    <field name="price_unit"/>
+                                    <field name="note"/>
+                                    <field name="preparation_state"/>
+                                    <field name="unavailable_reason" optional="hide"/>
+                                    <field name="kitchen_note" optional="hide"/>
+                                    <button name="action_start_preparation" type="object" icon="fa-play" title="Start" invisible="preparation_state != 'new'"/>
+                                    <button name="action_mark_ready" type="object" icon="fa-check" title="Ready" invisible="preparation_state not in ('new','preparing')"/>
+                                    <button name="action_mark_unavailable" type="object" icon="fa-times" title="Unavailable" invisible="preparation_state in ('ready','cancelled','unavailable')"/>
+                                    <button name="action_reset_preparation" type="object" icon="fa-undo" title="Reset" invisible="preparation_state == 'new'"/>
+                                    <field name="subtotal" readonly="1"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Notes">
+                            <field name="note"/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_product_template_qr_order_form" model="ir.ui.view">
+        <field name="name">product.template.qr.order.form</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Self Order Menu">
+                    <group>
+                        <group>
+                            <field name="show_in_qr_menu"/>
+                            <field name="available_in_qr_menu"/>
+                            <field name="qr_menu_category_id"/>
+                            <field name="qr_display_order"/>
+                        </group>
+                        <group>
+                            <field name="qr_image" widget="image"/>
+                        </group>
+                    </group>
+                    <field name="qr_menu_description" placeholder="وصف مختصر يظهر للعميل في قائمة الطلب الذاتي"/>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="action_qtcafe_qr_order" model="ir.actions.act_window">
+        <field name="name">Orders</field>
+        <field name="res_model">qtcafe.qr.order</field>
+        <field name="view_mode">list,form</field>
+        <field name="context">{'create': False}</field>
+    </record>
+
+
+    <record id="action_qtcafe_qr_menu_products" model="ir.actions.act_window">
+        <field name="name">Menu Products</field>
+        <field name="res_model">product.template</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('show_in_qr_menu','=',True)]</field>
+        <field name="context">{'default_show_in_qr_menu': True, 'default_available_in_qr_menu': True}</field>
+    </record>
+
+    <record id="action_qtcafe_customer_menu" model="ir.actions.act_url">
+        <field name="name">Open Self Order Menu</field>
+        <field name="url">/self-order</field>
+        <field name="target">new</field>
+    </record>
+
+    <record id="action_qtcafe_qr_menu_category" model="ir.actions.act_window">
+        <field name="name">Menu Categories</field>
+        <field name="res_model">qtcafe.qr.menu.category</field>
+        <field name="view_mode">list</field>
+    </record>
+
+    <record id="action_qtcafe_cashier_dashboard" model="ir.actions.act_url">
+        <field name="name">Cashier Dashboard</field>
+        <field name="url">/operations/cashier</field>
+        <field name="target">self</field>
+    </record>
+
+    <record id="action_qtcafe_kds_dashboard" model="ir.actions.act_url">
+        <field name="name">KDS Screen</field>
+        <field name="url">/operations/kitchen</field>
+        <field name="target">self</field>
+    </record>
+</odoo>
