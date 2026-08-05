@@ -22,8 +22,8 @@ class FlexSysPlatformPermission(models.Model):
     @api.model
     def _ensure_seed_data(self):
         """Create or update stable platform seed data without duplicates."""
-        permission_model = self.sudo()
-        role_model = self.env['flexsys.platform.role'].sudo()
+        permission_model = self.sudo().with_context(active_test=False)
+        role_model = self.env['flexsys.platform.role'].sudo().with_context(active_test=False)
         xmlid_model = self.env['ir.model.data'].sudo()
 
         seed_permissions = (

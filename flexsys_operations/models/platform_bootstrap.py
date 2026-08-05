@@ -39,10 +39,10 @@ class FlexSysPlatformApplication(models.Model):
         The method is safe to run repeatedly and preserves permissions added to
         the administrator role by other applications.
         """
-        Permission = self.env['flexsys.platform.permission'].sudo()
-        Role = self.env['flexsys.platform.role'].sudo()
-        Workspace = self.env['flexsys.platform.workspace.item'].sudo()
-        PlatformUser = self.env['flexsys.platform.user'].sudo()
+        Permission = self.env['flexsys.platform.permission'].sudo().with_context(active_test=False)
+        Role = self.env['flexsys.platform.role'].sudo().with_context(active_test=False)
+        Workspace = self.env['flexsys.platform.workspace.item'].sudo().with_context(active_test=False)
+        PlatformUser = self.env['flexsys.platform.user'].sudo().with_context(active_test=False)
 
         permission_values = {
             'name': 'Manage Operations Settings',
@@ -65,7 +65,7 @@ class FlexSysPlatformApplication(models.Model):
             'summary': 'Orders, execution tasks, stations and mission control',
             'icon': 'fa-diagram-project',
             'url': '/flexsys/workspace/operations',
-            'version': '19.0.3.1.3',
+            'version': '19.0.3.1.4',
             'module_name': 'flexsys_operations',
             'category': 'operations',
             'workspace_enabled': True,
@@ -81,7 +81,7 @@ class FlexSysPlatformApplication(models.Model):
             'health_message': 'Operations workspace is registered and available.',
             'active': True,
         }
-        application = self.sudo().search([('code', '=', 'operations')], limit=1)
+        application = self.sudo().with_context(active_test=False).search([('code', '=', 'operations')], limit=1)
         if application:
             application.write(application_values)
         else:
