@@ -31,7 +31,7 @@ class FlexSysPlatformController(http.Controller):
             requested
             or request.session.get('flexsys_lang')
             or (user.language if user else False)
-            or request.env.lang
+            or 'en_US'
         )
         request.session['flexsys_lang'] = language
         request.update_context(lang=language)
@@ -159,6 +159,20 @@ class FlexSysPlatformController(http.Controller):
         return bool(url and not parsed.scheme and not parsed.netloc and url.startswith('/'))
 
     @staticmethod
+    def _clean_flexsys_path(path):
+        """Remove Odoo website language prefixes from FlexSys-owned routes."""
+        clean = re.sub(r'^/(?:en|ar)(?=/flexsys(?:/|$))', '', path or '')
+        return clean or '/flexsys'
+
+    def _redirect_clean_flexsys_url(self):
+        current_path = request.httprequest.path or ''
+        clean_path = self._clean_flexsys_path(current_path)
+        if clean_path != current_path:
+            query = request.httprequest.query_string.decode('utf-8', errors='ignore')
+            return request.redirect(clean_path + (('?' + query) if query else ''))
+        return False
+
+    @staticmethod
     def _branch_label(branch):
         """Return the operational branch name when available, otherwise the platform branch name."""
         pos_configs = getattr(branch, 'operations_pos_config_ids', False)
@@ -173,8 +187,11 @@ class FlexSysPlatformController(http.Controller):
         role_codes = set(user.role_ids.filtered('active').mapped('code'))
         return bool(role_codes.intersection({'platform_admin', 'platform_auditor', 'branch_manager'}))
 
-    @http.route('/flexsys/login', type='http', auth='public', website=True, methods=['GET', 'POST'])
+    @http.route('/flexsys/login', type='http', auth='public', website=False, methods=['GET', 'POST'])
     def login(self, **post):
+        canonical = self._redirect_clean_flexsys_url()
+        if canonical:
+            return canonical
         requested_language = post.get('lang') or request.params.get('lang')
         active_session = self._current_session()
         if active_session and request.httprequest.method == 'GET':
@@ -218,7 +235,7 @@ class FlexSysPlatformController(http.Controller):
             requested=requested_language,
         )
 
-    @http.route('/flexsys/language', type='http', auth='public', website=True, methods=['POST'])
+    @http.route('/flexsys/language', type='http', auth='public', website=False, methods=['POST'])
     def switch_language(self, **post):
         """Switch FlexSys language without ending the active session."""
         session = self._current_session()
@@ -245,7 +262,7 @@ class FlexSysPlatformController(http.Controller):
             next_url = '/flexsys/login'
         return request.redirect(next_url)
 
-    @http.route('/flexsys/logout', type='http', auth='public', website=True, methods=['POST'])
+    @http.route('/flexsys/logout', type='http', auth='public', website=False, methods=['POST'])
     def logout(self, **post):
         session = self._current_session()
         if session:
@@ -260,7 +277,7 @@ class FlexSysPlatformController(http.Controller):
         request.session.pop(SESSION_TOKEN_KEY, None)
         return request.redirect('/flexsys/login')
 
-    @http.route('/flexsys/context', type='http', auth='public', website=True, methods=['POST'])
+    @http.route('/flexsys/context', type='http', auth='public', website=False, methods=['POST'])
     def switch_context(self, **post):
         session = self._current_session()
         if not session:
@@ -303,7 +320,7 @@ class FlexSysPlatformController(http.Controller):
         )
         return request.redirect('/flexsys')
 
-    @http.route('/flexsys/open/<string:application_code>', type='http', auth='public', website=True, csrf=False)
+    @http.route('/flexsys/open/<string:application_code>', type='http', auth='public', website=False, csrf=False)
     def open_application(self, application_code, **kwargs):
         session = self._current_session()
         if not session:
@@ -335,7 +352,7 @@ class FlexSysPlatformController(http.Controller):
 
 
 
-    @http.route('/flexsys/command', type='http', auth='public', website=True, methods=['GET'], csrf=False)
+    @http.route('/flexsys/command', type='http', auth='public', website=False, methods=['GET'], csrf=False)
     def command_palette(self, q=None, **kwargs):
         """Return permission-aware command palette items for the active FlexSys session."""
         session = self._current_session()
@@ -396,8 +413,11 @@ class FlexSysPlatformController(http.Controller):
             content_type='application/json; charset=utf-8',
         )
 
-    @http.route('/flexsys/search', type='http', auth='public', website=True, methods=['GET'], csrf=False)
+    @http.route('/flexsys/search', type='http', auth='public', website=False, methods=['GET'], csrf=False)
     def universal_search(self, q=None, **kwargs):
+        canonical = self._redirect_clean_flexsys_url()
+        if canonical:
+            return canonical
         session = self._current_session()
         if not session:
             return request.redirect('/flexsys/login')
@@ -426,8 +446,11 @@ class FlexSysPlatformController(http.Controller):
             'back_url': back_url,
         })
 
-    @http.route('/flexsys/workspace/<string:application_code>', type='http', auth='public', website=True, csrf=False)
+    @http.route('/flexsys/workspace/<string:application_code>', type='http', auth='public', website=False, csrf=False)
     def workspace(self, application_code, **kwargs):
+        canonical = self._redirect_clean_flexsys_url()
+        if canonical:
+            return canonical
         session = self._current_session()
         if not session:
             return request.redirect('/flexsys/login')
@@ -455,8 +478,11 @@ class FlexSysPlatformController(http.Controller):
         )
         return self._render('flexsys_platform.workspace_page', values, user=session.user_id)
 
-    @http.route('/flexsys', type='http', auth='public', website=True, csrf=False)
+    @http.route('/flexsys', type='http', auth='public', website=False, csrf=False)
     def launcher(self):
+        canonical = self._redirect_clean_flexsys_url()
+        if canonical:
+            return canonical
         session = self._current_session()
         if not session:
             return request.redirect('/flexsys/login')

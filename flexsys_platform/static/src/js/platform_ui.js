@@ -1,3 +1,11 @@
+/** FlexSys owns its URL namespace and language independently from Odoo Website. */
+document.addEventListener("DOMContentLoaded", () => {
+    const cleanPath = window.location.pathname.replace(/^\/(?:en|ar)(?=\/flexsys(?:\/|$))/, "");
+    if (cleanPath !== window.location.pathname) {
+        window.history.replaceState(window.history.state, "", cleanPath + window.location.search + window.location.hash);
+    }
+});
+
 /** @odoo-module **/
 document.addEventListener("DOMContentLoaded", () => {
   const cards=[...document.querySelectorAll(".fs-app-card[data-health]")];

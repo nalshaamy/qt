@@ -37,10 +37,10 @@ class FlexSysOperationsQrMenuController(http.Controller):
     def _apply_ui_language(self, manager=None, requested=None):
         language = self._normalize_ui_language(
             requested
-            or self._platform_language()
-            or (manager.language if manager else False)
             or request.session.get('flexsys_lang')
-            or request.env.lang
+            or (manager.language if manager else False)
+            or self._platform_language()
+            or 'en_US'
         )
         request.session['flexsys_lang'] = language
         request.update_context(lang=language)
@@ -810,7 +810,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
         response.delete_cookie(self._get_manager_cookie_name(), path='/')
         return response
 
-    @http.route(['/flexsys/operations', '/flexsys/operations/orders', '/operations', '/operations/dashboard', '/qr-menu/dashboard'], type='http', auth='public', website=True, csrf=False)
+    @http.route(['/flexsys/operations', '/flexsys/operations/orders', '/operations', '/operations/dashboard', '/qr-menu/dashboard'], type='http', auth='public', website=False, csrf=False)
     def manager_dashboard(self, **kwargs):
         manager = self._get_independent_manager()
         if not manager or not manager.can_view_dashboard:

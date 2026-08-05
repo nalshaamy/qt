@@ -9,7 +9,7 @@
                 <link rel="icon" type="image/jpeg" href="/flexsys_operations/static/src/img/flexsys_app_icon.png"/>
                 <t t-call-assets="web.assets_frontend"/>
             </head>
-            <body class="flexsys-operations-menu-body fs-brand-blue">
+            <body t-att-dir="'rtl' if is_rtl else 'ltr'" t-attf-class="flexsys-operations-menu-body fs-brand-blue #{'fs-dir-rtl' if is_rtl else 'fs-dir-ltr'}">
 
                 <div id="fs-splash" class="fs-splash-screen">
                     <img src="/flexsys_operations/static/src/img/flexsys_app_icon.png" alt="FlexSys"/>
@@ -69,7 +69,7 @@
                 <link rel="apple-touch-icon" href="/flexsys_operations/static/src/img/flexsys_app_icon.png"/>
                 <t t-call-assets="web.assets_frontend"/>
             </head>
-            <body class="flexsys-operations-menu-body fs-brand-blue" t-att-data-pos-config-id="pos_config_id or ''">
+            <body t-att-dir="'rtl' if is_rtl else 'ltr'" t-attf-class="flexsys-operations-menu-body fs-brand-blue #{'fs-dir-rtl' if is_rtl else 'fs-dir-ltr'}" t-att-data-pos-config-id="pos_config_id or ''">
                 <input type="hidden" id="flexsys-operations-pos-config-id" t-att-value="pos_config_id or ''"/>
                 <main class="flexsys-operations-menu-app">
                     <header class="fs-topbar">
@@ -321,7 +321,7 @@
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <t t-call-assets="web.assets_frontend"/>
             </head>
-            <body class="fs-customer-track" t-att-data-token="order.tracking_token" t-att-data-language="language">
+            <body t-att-dir="'rtl' if is_rtl else 'ltr'" t-attf-class="fs-customer-track #{'fs-dir-rtl' if is_rtl else 'fs-dir-ltr'}" t-att-data-token="order.tracking_token" t-att-data-language="language">
                 <main class="fs-track-shell">
                     <header class="fs-track-header">
                         <div>
@@ -368,7 +368,7 @@
                 <link rel="icon" type="image/jpeg" href="/flexsys_operations/static/src/img/flexsys_app_icon.png"/>
                 <t t-call-assets="web.assets_backend"/>
             </head>
-            <body class="flexsys-operations-screen-body" data-screen="cashier">
+            <body t-att-dir="'rtl' if is_rtl else 'ltr'" t-attf-class="flexsys-operations-screen-body #{'fs-dir-rtl' if is_rtl else 'fs-dir-ltr'}" data-screen="cashier">
                 <main class="flexsys-operations-screen">
                     <header>
                         <div>
@@ -403,7 +403,7 @@
                 <link rel="icon" type="image/jpeg" href="/flexsys_operations/static/src/img/flexsys_app_icon.png"/>
                 <t t-call-assets="web.assets_backend"/>
             </head>
-            <body class="flexsys-operations-screen-body" data-screen="kds">
+            <body t-att-dir="'rtl' if is_rtl else 'ltr'" t-attf-class="flexsys-operations-screen-body #{'fs-dir-rtl' if is_rtl else 'fs-dir-ltr'}" data-screen="kds">
                 <main class="flexsys-operations-screen">
                     <header>
                         <div>
@@ -439,7 +439,7 @@
                 <link rel="icon" type="image/jpeg" href="/flexsys_operations/static/src/img/flexsys_app_icon.png"/>
                 <t t-call-assets="web.assets_frontend"/>
             </head>
-            <body class="flexsys-operations-menu-body fs-brand-blue">
+            <body t-att-dir="'rtl' if is_rtl else 'ltr'" t-attf-class="flexsys-operations-menu-body fs-brand-blue #{'fs-dir-rtl' if is_rtl else 'fs-dir-ltr'}">
 
                 <div id="fs-splash" class="fs-splash-screen">
                     <img src="/flexsys_operations/static/src/img/flexsys_app_icon.png" alt="FlexSys"/>
@@ -531,7 +531,7 @@
                 <link rel="icon" type="image/jpeg" href="/flexsys_operations/static/src/img/flexsys_app_icon.png"/>
                 <t t-call-assets="web.assets_frontend"/>
             </head>
-            <body class="flexsys-operations-menu-body fs-brand-blue">
+            <body t-att-dir="'rtl' if is_rtl else 'ltr'" t-attf-class="flexsys-operations-menu-body fs-brand-blue #{'fs-dir-rtl' if is_rtl else 'fs-dir-ltr'}">
 
                 <div id="fs-splash" class="fs-splash-screen">
                     <img src="/flexsys_operations/static/src/img/flexsys_app_icon.png" alt="FlexSys"/>
@@ -604,7 +604,7 @@
                 <link rel="icon" type="image/jpeg" href="/flexsys_operations/static/src/img/flexsys_app_icon.png"/>
                 <t t-call-assets="web.assets_frontend"/>
             </head>
-            <body class="flexsys-operations-menu-body fs-brand-blue">
+            <body t-att-dir="'rtl' if is_rtl else 'ltr'" t-attf-class="flexsys-operations-menu-body fs-brand-blue #{'fs-dir-rtl' if is_rtl else 'fs-dir-ltr'}">
 
                 <div id="fs-splash" class="fs-splash-screen">
                     <img src="/flexsys_operations/static/src/img/flexsys_app_icon.png" alt="FlexSys"/>
@@ -692,7 +692,7 @@
                 <link rel="icon" type="image/jpeg" href="/flexsys_operations/static/src/img/flexsys_app_icon.png"/>
                 <t t-call-assets="web.assets_frontend"/>
             </head>
-            <body class="flexsys-operations-menu-body fs-brand-blue">
+            <body t-att-dir="'rtl' if is_rtl else 'ltr'" t-attf-class="flexsys-operations-menu-body fs-brand-blue #{'fs-dir-rtl' if is_rtl else 'fs-dir-ltr'}">
 
                 <div id="fs-splash" class="fs-splash-screen">
                     <img src="/flexsys_operations/static/src/img/flexsys_app_icon.png" alt="FlexSys"/>
@@ -754,7 +754,7 @@
                 <link rel="icon" type="image/png" href="/flexsys_operations/static/src/img/flexsys_app_icon.png"/>
                 <t t-call-assets="web.assets_frontend"/>
             </head>
-            <body class="fs-manager-body fs-manager-v16">
+            <body t-att-dir="'rtl' if is_rtl else 'ltr'" t-attf-class="fs-manager-body fs-manager-v16 #{'fs-dir-rtl' if is_rtl else 'fs-dir-ltr'}">
                 <main class="fs-manager-app">
                     <a href="/flexsys/workspace/operations" class="fs-manager-back-link"><span class="fa fa-arrow-left"/> <t t-esc="'العودة إلى Operations' if is_rtl else 'Back to Operations'"/></a>
                     <header class="fs-manager-header fs-manager-header-pro">
@@ -944,7 +944,7 @@
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <t t-call-assets="web.assets_frontend"/>
             </head>
-            <body class="flexsys-operations-menu-body fs-brand-blue">
+            <body t-att-dir="'rtl' if is_rtl else 'ltr'" t-attf-class="flexsys-operations-menu-body fs-brand-blue #{'fs-dir-rtl' if is_rtl else 'fs-dir-ltr'}">
                 <main class="fs-auth-page">
                     <section class="fs-auth-card">
                         <img class="fs-auth-logo" src="/flexsys_operations/static/src/img/flexsys_app_icon.png" alt="FlexSys"/>
@@ -967,7 +967,7 @@
                 <link rel="icon" type="image/png" href="/flexsys_operations/static/src/img/flexsys_app_icon.png"/>
                 <t t-call-assets="web.assets_frontend"/>
             </head>
-            <body class="fs-manager-login-body">
+            <body t-att-dir="'rtl' if is_rtl else 'ltr'" t-attf-class="fs-manager-login-body #{'fs-dir-rtl' if is_rtl else 'fs-dir-ltr'}">
                 <main class="fs-manager-login-page">
                     <section class="fs-manager-login-card">
                         <img src="/flexsys_operations/static/src/img/flexsys_app_icon.png" alt="FlexSys"/>
@@ -1007,7 +1007,7 @@
                 <link rel="icon" type="image/png" href="/flexsys_operations/static/src/img/flexsys_app_icon.png"/>
                 <t t-call-assets="web.assets_frontend"/>
             </head>
-            <body class="fs-store-closed-body">
+            <body t-att-dir="'rtl' if is_rtl else 'ltr'" t-attf-class="fs-store-closed-body #{'fs-dir-rtl' if is_rtl else 'fs-dir-ltr'}">
                 <main class="fs-store-closed-page">
                     <section class="fs-store-closed-card">
                         <img src="/flexsys_operations/static/src/img/flexsys_app_icon.png" alt="FlexSys"/>
@@ -1034,7 +1034,7 @@
                 <link rel="icon" type="image/png" href="/flexsys_operations/static/src/img/flexsys_app_icon.png"/>
                 <t t-call-assets="web.assets_frontend"/>
             </head>
-            <body class="fs-branch-selector-body">
+            <body t-att-dir="'rtl' if is_rtl else 'ltr'" t-attf-class="fs-branch-selector-body #{'fs-dir-rtl' if is_rtl else 'fs-dir-ltr'}">
                 <main class="fs-branch-selector-page">
                     <section class="fs-branch-selector-card">
                         <img class="fs-branch-selector-logo" src="/flexsys_operations/static/src/img/flexsys_app_icon.png" alt="FlexSys"/>
@@ -1146,7 +1146,7 @@
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <t t-call-assets="web.assets_frontend"/>
             </head>
-            <body class="fs-store-closed-body">
+            <body t-att-dir="'rtl' if is_rtl else 'ltr'" t-attf-class="fs-store-closed-body #{'fs-dir-rtl' if is_rtl else 'fs-dir-ltr'}">
                 <main class="fs-store-closed-page">
                     <section class="fs-store-closed-card">
                         <img src="/flexsys_operations/static/src/img/flexsys_app_icon.png" alt="FlexSys"/>

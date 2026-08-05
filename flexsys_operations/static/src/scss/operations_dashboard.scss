@@ -195,3 +195,31 @@ html[dir="rtl"] .fs-clickable-order-row.is-focused { box-shadow: inset -4px 0 0 
   .fs-manager-header-actions { flex-wrap: wrap; }
   .fs-manager-language-form { order: -1; }
 }
+
+
+/* FlexSys-owned bidirectional manager layout. */
+body.fs-dir-rtl { direction: rtl !important; text-align: right; }
+body.fs-dir-ltr { direction: ltr !important; text-align: left; }
+body.fs-dir-rtl .fs-manager-shell,
+body.fs-dir-rtl .fs-manager-header,
+body.fs-dir-rtl .fs-manager-tabs,
+body.fs-dir-rtl .fs-manager-toolbar,
+body.fs-dir-rtl .fs-manager-summary-grid,
+body.fs-dir-rtl .fs-manager-content-grid,
+body.fs-dir-rtl .fs-manager-kpi-grid,
+body.fs-dir-rtl .fs-manager-filters { direction: rtl; }
+body.fs-dir-rtl .fs-manager-header,
+body.fs-dir-rtl .fs-manager-toolbar { flex-direction: row-reverse; }
+body.fs-dir-rtl .fs-manager-tabs,
+body.fs-dir-rtl .fs-manager-kpi-grid,
+body.fs-dir-rtl .fs-manager-summary-grid { direction: rtl; }
+body.fs-dir-rtl .fs-manager-card,
+body.fs-dir-rtl .fs-manager-panel,
+body.fs-dir-rtl .fs-manager-table,
+body.fs-dir-rtl .fs-manager-title { text-align: right; }
+body.fs-dir-rtl .fa-arrow-right,
+body.fs-dir-rtl .fs-manager-arrow { transform: scaleX(-1); }
+body.fs-dir-rtl .fs-order-number,
+body.fs-dir-rtl .fs-money,
+body.fs-dir-rtl time,
+body.fs-dir-rtl [dir="ltr"] { direction: ltr !important; unicode-bidi: isolate; text-align: left; }

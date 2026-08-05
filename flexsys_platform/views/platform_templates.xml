@@ -7,10 +7,12 @@
                 <meta charset="utf-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
                 <meta name="theme-color" content="#173b5b"/>
+                <meta name="flexsys-language" t-att-content="ui_lang"/>
+                <link rel="canonical" t-att-href="request.httprequest.url_root.rstrip('/') + request.httprequest.path.replace('/en/flexsys', '/flexsys').replace('/ar/flexsys', '/flexsys')"/>
                 <title>FlexSys</title>
                 <t t-call-assets="web.assets_frontend" t-js="false"/>
             </head>
-            <body class="fs-standalone-body">
+            <body t-att-dir="'rtl' if is_rtl else 'ltr'" t-attf-class="fs-standalone-body #{'fs-dir-rtl' if is_rtl else 'fs-dir-ltr'}">
                 <t t-out="0"/>
                 <t t-call-assets="web.assets_frontend" t-css="false"/>
             </body>

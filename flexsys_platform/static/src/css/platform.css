@@ -746,3 +746,51 @@ html[dir="rtl"] .fs-login-language { justify-content: flex-start; }
   .fs-inline-language-form { min-height: 36px; }
   .fs-login-capabilities { display: none; }
 }
+
+
+/* FlexSys Core language engine: visual direction is owned by FlexSys, not Odoo. */
+body.fs-dir-rtl { direction: rtl !important; text-align: right; }
+body.fs-dir-ltr { direction: ltr !important; text-align: left; }
+body.fs-dir-rtl .fs-platform-page { direction: rtl; }
+body.fs-dir-ltr .fs-platform-page { direction: ltr; }
+
+body.fs-dir-rtl .fs-mission-topbar,
+body.fs-dir-rtl .fs-mission-content,
+body.fs-dir-rtl .fs-launcher-header,
+body.fs-dir-rtl .fs-section-head,
+body.fs-dir-rtl .fs-platform-footer { flex-direction: row-reverse; }
+body.fs-dir-rtl .fs-mission-actions,
+body.fs-dir-rtl .fs-user-context,
+body.fs-dir-rtl .fs-brand,
+body.fs-dir-rtl .fs-context-switcher,
+body.fs-dir-rtl .fs-global-search,
+body.fs-dir-rtl .fs-kpi-card,
+body.fs-dir-rtl .fs-app-card,
+body.fs-dir-rtl .fs-activity-item { direction: rtl; }
+body.fs-dir-rtl .fs-mission-controls,
+body.fs-dir-rtl .fs-kpi-grid,
+body.fs-dir-rtl .fs-app-grid,
+body.fs-dir-rtl .fs-context-fields { direction: rtl; }
+body.fs-dir-rtl .fs-health-summary { justify-items: start; text-align: right; }
+body.fs-dir-rtl .fs-welcome-content,
+body.fs-dir-rtl .fs-app-content,
+body.fs-dir-rtl .fs-kpi-card > div,
+body.fs-dir-rtl .fs-activity-content { text-align: right; }
+body.fs-dir-rtl .fs-kpi-arrow,
+body.fs-dir-rtl .fs-app-arrow,
+body.fs-dir-rtl .fs-action-card > .fa-arrow-right { margin-inline-start: auto; transform: scaleX(-1); }
+body.fs-dir-ltr .fs-kpi-arrow,
+body.fs-dir-ltr .fs-app-arrow,
+body.fs-dir-ltr .fs-action-card > .fa-arrow-right { transform: none; }
+body.fs-dir-rtl .fs-global-search input,
+body.fs-dir-rtl .fs-context-fields select { text-align: right; }
+body.fs-dir-rtl .fs-inline-language-form select { text-align: right; }
+body.fs-dir-rtl .fs-order-number,
+body.fs-dir-rtl .fs-money,
+body.fs-dir-rtl time,
+body.fs-dir-rtl [dir="ltr"] { direction: ltr !important; unicode-bidi: isolate; text-align: left; }
+
+@media (max-width: 760px) {
+  body.fs-dir-rtl .fs-mission-topbar,
+  body.fs-dir-rtl .fs-mission-content { flex-direction: column; }
+}
