@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<odoo>
-    <function model="flexsys.platform.permission" name="_ensure_seed_data"/>
-</odoo>
