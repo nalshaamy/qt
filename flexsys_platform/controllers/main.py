@@ -20,16 +20,23 @@ class FlexSysPlatformController(http.Controller):
         code = (language or 'en_US').replace('-', '_')
         return 'ar_001' if code.lower().startswith('ar') else 'en_US'
 
-    def _apply_language(self, user=None, requested=None):
-        """Use the FlexSys user's language as the single source of truth."""
+    def _apply_language(self, user=None, requested=None, persist=False):
+        """Apply the active FlexSys language to session and request context.
+
+        An explicit selection wins, then the current FlexSys session, then the
+        saved user preference. This lets users switch language instantly while
+        preserving their last choice for the next visit.
+        """
         language = self._normalize_language(
             requested
-            or (user.language if user else False)
             or request.session.get('flexsys_lang')
+            or (user.language if user else False)
             or request.env.lang
         )
         request.session['flexsys_lang'] = language
         request.update_context(lang=language)
+        if persist and user and user.language != language:
+            user.sudo().write({'language': language})
         return language
 
     @staticmethod
@@ -88,6 +95,11 @@ class FlexSysPlatformController(http.Controller):
             'review_attention_items': 'راجع العناصر التي تحتاج متابعة' if ar else 'Review items needing attention',
             'live_sessions_now': 'جلسات فعالة حاليًا' if ar else 'Live sessions right now',
             'open_workspace': 'فتح مساحة العمل' if ar else 'Open workspace',
+            'language': 'اللغة' if ar else 'Language',
+            'loading': 'جارٍ الدخول...' if ar else 'Signing in...',
+            'invalid_credentials': 'اسم المستخدم أو كلمة المرور غير صحيحة.' if ar else 'Invalid login or password.',
+            'show_password': 'إظهار كلمة المرور' if ar else 'Show password',
+            'hide_password': 'إخفاء كلمة المرور' if ar else 'Hide password',
 
         }
 
@@ -182,7 +194,7 @@ class FlexSysPlatformController(http.Controller):
                 )
                 request.session[SESSION_ID_KEY] = session.id
                 request.session[SESSION_TOKEN_KEY] = token
-                self._apply_language(user=user)
+                self._apply_language(user=user, requested=requested_language, persist=True)
                 request.env['flexsys.system.log'].record(
                     'authentication', 'login', platform_user_id=user.id,
                     company_id=session.company_id.id,
@@ -192,7 +204,8 @@ class FlexSysPlatformController(http.Controller):
                     user_agent=request.httprequest.user_agent.string,
                 )
                 return request.redirect('/flexsys')
-            error = 'Invalid login or password.'
+            language = self._apply_language(requested=requested_language)
+            error = self._platform_text(language)['invalid_credentials']
             request.env['flexsys.system.log'].record(
                 'authentication', 'failed_login', description=f'Failed login for {login or "unknown"}',
                 ip_address=request.httprequest.remote_addr,
@@ -204,6 +217,33 @@ class FlexSysPlatformController(http.Controller):
             user=active_session.user_id if active_session else None,
             requested=requested_language,
         )
+
+    @http.route('/flexsys/language', type='http', auth='public', website=True, methods=['POST'])
+    def switch_language(self, **post):
+        """Switch FlexSys language without ending the active session."""
+        session = self._current_session()
+        requested_language = self._normalize_language(post.get('lang'))
+        next_url = post.get('next') or '/flexsys'
+        if not self._safe_internal_url(next_url):
+            next_url = '/flexsys'
+
+        if session:
+            self._apply_language(
+                user=session.user_id,
+                requested=requested_language,
+                persist=True,
+            )
+            request.env['flexsys.system.log'].record(
+                'system', 'language_changed',
+                platform_user_id=session.user_id.id,
+                company_id=session.company_id.id,
+                branch_id=session.branch_id.id or False,
+                description=f'FlexSys language changed to {requested_language}',
+            )
+        else:
+            self._apply_language(requested=requested_language)
+            next_url = '/flexsys/login'
+        return request.redirect(next_url)
 
     @http.route('/flexsys/logout', type='http', auth='public', website=True, methods=['POST'])
     def logout(self, **post):

@@ -163,3 +163,35 @@ html[dir="rtl"] .fs-clickable-order-row.is-focused { box-shadow: inset -4px 0 0 
 @media (max-width: 760px) {
     .fs-manager-back-link { margin-inline: 4px; }
 }
+
+/* FlexSys live language switch -------------------------------------------- */
+.fs-manager-language-form {
+  min-height: 38px;
+  padding-inline: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(95, 141, 178, .32);
+  border-radius: 999px;
+  color: #173b5b;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 6px 18px rgba(23, 59, 91, .07);
+}
+.fs-manager-language-form select {
+  max-width: 92px;
+  border: 0;
+  outline: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.fs-manager-language-form:focus-within {
+  box-shadow: 0 0 0 3px rgba(95, 141, 178, .16);
+}
+@media (max-width: 700px) {
+  .fs-manager-header-actions { flex-wrap: wrap; }
+  .fs-manager-language-form { order: -1; }
+}

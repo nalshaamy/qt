@@ -767,6 +767,15 @@
                             </div>
                         </div>
                         <div class="fs-manager-header-actions">
+                            <form method="post" action="/flexsys/language" class="fs-manager-language-form">
+                                <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                                <input type="hidden" name="next" t-att-value="request.httprequest.path"/>
+                                <span class="fa fa-globe" aria-hidden="true"/>
+                                <select name="lang" aria-label="Language" onchange="this.form.submit()">
+                                    <option value="ar_001" t-att-selected="ui_lang == 'ar_001'">العربية</option>
+                                    <option value="en_US" t-att-selected="ui_lang == 'en_US'">English</option>
+                                </select>
+                            </form>
                             <a t-att-href="(public_base_url or '/self-order') + '/menu'" t-esc="ui_text['product_preview']"/>
                             <a href="/self-order/manager/logout" t-esc="ui_text['logout']"/>
                         </div>

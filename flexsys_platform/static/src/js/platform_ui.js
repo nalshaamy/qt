@@ -21,5 +21,22 @@ document.addEventListener("click", (event) => {
         icon.classList.toggle("fa-eye", !reveal);
         icon.classList.toggle("fa-eye-slash", reveal);
     }
-    button.setAttribute("aria-label", reveal ? "Hide password" : "Show password");
+    button.setAttribute("aria-label", reveal ? (button.dataset.hideLabel || "Hide password") : (button.dataset.showLabel || "Show password"));
+});
+
+// Login v2.1: loading feedback and preserved language selection.
+document.addEventListener("DOMContentLoaded", () => {
+    const form = document.querySelector("[data-fs-login-form]");
+    if (!form) return;
+    form.addEventListener("submit", () => {
+        const button = form.querySelector("[data-fs-login-submit]");
+        if (!button || button.disabled) return;
+        button.disabled = true;
+        button.classList.add("is-loading");
+        button.setAttribute("aria-busy", "true");
+        const label = button.querySelector("[data-fs-login-label]");
+        const icon = button.querySelector("[data-fs-login-icon]");
+        if (label) label.textContent = button.dataset.loadingLabel || "Signing in...";
+        if (icon) icon.className = "fa fa-circle-o-notch fa-spin";
+    });
 });

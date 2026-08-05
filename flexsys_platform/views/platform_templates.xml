@@ -46,6 +46,9 @@
                             <span class="fs-login-brand-line" aria-hidden="true"/>
                             <strong class="fs-login-value" t-esc="ui_text['one_platform']"/>
                             <p class="fs-login-value-note" t-esc="ui_text['secure_access']"/>
+                            <div class="fs-login-capabilities" aria-hidden="true">
+                                <span>Mission Control</span><i/> <span>Workspaces</span><i/> <span>Operations</span>
+                            </div>
                         </div>
                         <div class="fs-login-wave" aria-hidden="true">
                             <span/><span/><span/><span/>
@@ -68,7 +71,7 @@
                                 <p t-esc="ui_text['continue_to_flexsys']"/>
                             </header>
 
-                            <form method="post" action="/flexsys/login" class="fs-login-form">
+                            <form method="post" action="/flexsys/login" class="fs-login-form" data-fs-login-form="1">
                                 <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
                                 <input type="hidden" name="lang" t-att-value="ui_lang"/>
 
@@ -85,7 +88,7 @@
                                     <input id="fs-login-password" name="password" type="password"
                                            autocomplete="current-password" required="required"/>
                                     <button type="button" class="fs-password-toggle" data-fs-password-toggle="1"
-                                            aria-label="Show password">
+                                            t-att-aria-label="ui_text['show_password']" data-show-label="Show password" data-hide-label="Hide password">
                                         <span class="fa fa-eye" aria-hidden="true"/>
                                     </button>
                                 </div>
@@ -94,9 +97,10 @@
                                     <span class="fa fa-exclamation-circle"/><t t-esc="error"/>
                                 </div>
 
-                                <button type="submit" class="fs-btn fs-login-submit">
-                                    <span t-esc="ui_text['sign_in']"/>
-                                    <span t-attf-class="fa #{'fa-arrow-left' if is_rtl else 'fa-arrow-right'}" aria-hidden="true"/>
+                                <button type="submit" class="fs-btn fs-login-submit" data-fs-login-submit="1"
+                                        t-att-data-loading-label="ui_text['loading']">
+                                    <span data-fs-login-label="1" t-esc="ui_text['sign_in']"/>
+                                    <span data-fs-login-icon="1" t-attf-class="fa #{'fa-arrow-left' if is_rtl else 'fa-arrow-right'}" aria-hidden="true"/>
                                 </button>
                             </form>
                         </div>
@@ -121,6 +125,15 @@
                                 <div><h1>FlexSys</h1><p t-esc="ui_text['smart_operations_platform']"/></div>
                             </div>
                             <div class="fs-mission-actions">
+                                <form method="post" action="/flexsys/language" class="fs-inline-language-form">
+                                    <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                                    <input type="hidden" name="next" value="/flexsys"/>
+                                    <span class="fa fa-globe" aria-hidden="true"/>
+                                    <select name="lang" t-att-aria-label="ui_text['language']" onchange="this.form.submit()">
+                                        <option value="ar_001" t-att-selected="ui_lang == 'ar_001'">العربية</option>
+                                        <option value="en_US" t-att-selected="ui_lang == 'en_US'">English</option>
+                                    </select>
+                                </form>
                                 <span class="fs-user-pill fs-user-pill-dark" t-esc="platform_user.name"/>
                                 <form method="post" action="/flexsys/logout" class="fs-logout-form">
                                     <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
@@ -265,7 +278,19 @@
                 <div class="fs-shell">
                     <header class="fs-launcher-header">
                         <div class="fs-brand"><a href="/flexsys" class="fs-brand-mark">FS</a><div><h1 t-esc="application.name"/><p t-esc="ui_text['workspace']"/></div></div>
-                        <div class="fs-user-context"><span class="fs-user-pill" t-esc="platform_user.name"/><a href="/flexsys" class="fs-btn fs-btn-ghost"><span class="fa fa-th-large"/> <t t-esc="ui_text['mission_control']"/></a></div>
+                        <div class="fs-user-context">
+                            <form method="post" action="/flexsys/language" class="fs-inline-language-form fs-inline-language-light">
+                                <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                                <input type="hidden" name="next" t-att-value="request.httprequest.path"/>
+                                <span class="fa fa-globe" aria-hidden="true"/>
+                                <select name="lang" t-att-aria-label="ui_text['language']" onchange="this.form.submit()">
+                                    <option value="ar_001" t-att-selected="ui_lang == 'ar_001'">العربية</option>
+                                    <option value="en_US" t-att-selected="ui_lang == 'en_US'">English</option>
+                                </select>
+                            </form>
+                            <span class="fs-user-pill" t-esc="platform_user.name"/>
+                            <a href="/flexsys" class="fs-btn fs-btn-ghost"><span class="fa fa-th-large"/> <t t-esc="ui_text['mission_control']"/></a>
+                        </div>
                     </header>
                     <t t-call="flexsys_platform.command_palette"/>
                     <main>
@@ -294,7 +319,19 @@
                 <div class="fs-shell fs-launcher">
                     <header class="fs-launcher-header">
                         <div class="fs-brand"><a href="/flexsys" class="fs-brand-mark">FS</a><div><h1 t-esc="ui_text['search_title']"/><p t-esc="ui_text['universal_search']"/></div></div>
-                        <div class="fs-user-context"><span class="fs-user-pill" t-esc="platform_user.name"/><a href="/flexsys" class="fs-btn fs-btn-ghost"><span class="fa fa-th-large"/> <t t-esc="ui_text['mission_control']"/></a></div>
+                        <div class="fs-user-context">
+                            <form method="post" action="/flexsys/language" class="fs-inline-language-form fs-inline-language-light">
+                                <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                                <input type="hidden" name="next" t-att-value="request.httprequest.path"/>
+                                <span class="fa fa-globe" aria-hidden="true"/>
+                                <select name="lang" t-att-aria-label="ui_text['language']" onchange="this.form.submit()">
+                                    <option value="ar_001" t-att-selected="ui_lang == 'ar_001'">العربية</option>
+                                    <option value="en_US" t-att-selected="ui_lang == 'en_US'">English</option>
+                                </select>
+                            </form>
+                            <span class="fs-user-pill" t-esc="platform_user.name"/>
+                            <a href="/flexsys" class="fs-btn fs-btn-ghost"><span class="fa fa-th-large"/> <t t-esc="ui_text['mission_control']"/></a>
+                        </div>
                     </header>
                     <t t-call="flexsys_platform.command_palette"/>
                     <main>
