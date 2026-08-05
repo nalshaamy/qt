@@ -36,7 +36,7 @@ class FlexSysPlatformController(http.Controller):
         parsed = urlsplit(url or '')
         return bool(url and not parsed.scheme and not parsed.netloc and url.startswith('/'))
 
-    @http.route('/flexsys/login', type='http', auth='public', website=True, methods=['GET', 'POST'], csrf=False)
+    @http.route('/flexsys/login', type='http', auth='public', website=True, methods=['GET', 'POST'])
     def login(self, **post):
         active_session = self._current_session()
         if active_session and request.httprequest.method == 'GET':
@@ -73,7 +73,7 @@ class FlexSysPlatformController(http.Controller):
             )
         return request.render('flexsys_platform.login_page', {'error': error})
 
-    @http.route('/flexsys/logout', type='http', auth='public', website=True, methods=['POST'], csrf=False)
+    @http.route('/flexsys/logout', type='http', auth='public', website=True, methods=['POST'])
     def logout(self, **post):
         session = self._current_session()
         if session:
@@ -88,7 +88,7 @@ class FlexSysPlatformController(http.Controller):
         request.session.pop(SESSION_TOKEN_KEY, None)
         return request.redirect('/flexsys/login')
 
-    @http.route('/flexsys/context', type='http', auth='public', website=True, methods=['POST'], csrf=False)
+    @http.route('/flexsys/context', type='http', auth='public', website=True, methods=['POST'])
     def switch_context(self, **post):
         session = self._current_session()
         if not session:

@@ -246,12 +246,18 @@ class FlexSysPlatformSession(models.Model):
     @api.model
     def create_for_user(self, user, *, hours=12, company=None, branch=None, ip_address=None, user_agent=None):
         user.ensure_one()
-        company = company or user.default_company_id or user.company_ids[:1]
-        if not company:
+        allowed_companies = user.company_ids.filtered('active')
+        if not allowed_companies:
             raise ValidationError(_('At least one allowed company is required.'))
-        branch = branch or user.default_branch_id
-        if branch and branch.company_id != company:
-            branch = user.branch_ids.filtered(lambda item: item.company_id == company)[:1]
+
+        requested_company = company or user.default_company_id
+        company = requested_company if requested_company in allowed_companies else allowed_companies[:1]
+
+        allowed_branches = user.branch_ids.filtered(
+            lambda item: item.active and item.company_id == company
+        )
+        requested_branch = branch or user.default_branch_id
+        branch = requested_branch if requested_branch in allowed_branches else allowed_branches[:1]
         raw_token = secrets.token_urlsafe(32)
         session = self.sudo().create({
             'user_id': user.id,

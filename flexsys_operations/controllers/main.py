@@ -1214,7 +1214,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
             domain.append(('state', 'in', states))
         else:
             domain.append(('state', 'in', ['new', 'accepted', 'preparing']))
-        orders = request.env['flexsys.operations.order'].search(domain, limit=80, order='create_date desc')
+        orders = request.env['flexsys.operations.order'].sudo().search(domain, limit=80, order='create_date desc')
         return {'success': True, 'orders': [self._serialize_order(order) for order in orders]}
 
 
@@ -1232,7 +1232,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
                 headers=[('Content-Type', 'application/json')]
             )
         domain.append(('pos_config_id', '=', pos_config_id))
-        orders = request.env['flexsys.operations.order'].search(domain, limit=50, order='create_date desc')
+        orders = request.env['flexsys.operations.order'].sudo().search(domain, limit=50, order='create_date desc')
         import json
         return request.make_response(
             json.dumps({'count': len(orders), 'ids': orders.ids}),

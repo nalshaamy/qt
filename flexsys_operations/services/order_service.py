@@ -162,7 +162,7 @@ class OrderService(BaseService):
             # the authenticated portal user.  This avoids portal record-rule side
             # effects while preserving customer history and tracking ownership.
             customer_name = (partner.name or "").strip()
-            customer_mobile = (partner.mobile or partner.phone or "").strip()
+            customer_mobile = (partner.phone or "").strip()
 
         values = {
             "partner_id": partner.id if partner else False,
