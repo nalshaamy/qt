@@ -47,18 +47,25 @@ class FlexSysPlatformPermission(models.Model):
             self._bind_seed_xmlid(xmlid_model, xml_name, record)
 
         role = role_model.search([('code', '=', 'platform_admin')], limit=1)
+        required_permission_ids = {
+            permission_records['platform.access'].id,
+            permission_records['operations.access'].id,
+        }
         role_values = {
             'name': 'Platform Administrator',
             'code': 'platform_admin',
             'active': True,
-            'permission_ids': [(6, 0, [
-                permission_records['platform.access'].id,
-                permission_records['operations.access'].id,
-            ])],
         }
         if role:
+            # Preserve permissions registered by other applications.
             role.write(role_values)
+            missing_ids = required_permission_ids - set(role.permission_ids.ids)
+            if missing_ids:
+                role.write({
+                    'permission_ids': [(4, permission_id) for permission_id in missing_ids],
+                })
         else:
+            role_values['permission_ids'] = [(6, 0, list(required_permission_ids))]
             role = role_model.create(role_values)
         self._bind_seed_xmlid(xmlid_model, 'role_platform_admin', role)
         return True
