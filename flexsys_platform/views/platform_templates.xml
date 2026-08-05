@@ -60,51 +60,26 @@
         <t t-call="flexsys_platform.flexsys_layout">
             <div class="fs-platform-page fs-launcher">
                 <div class="fs-shell">
-                    <header class="fs-launcher-header">
-                        <div class="fs-brand">
-                            <div class="fs-brand-mark">FS</div>
-                            <div><h1>FlexSys</h1><p>Smart Operations Platform</p></div>
+                    <header class="fs-mission-header">
+                        <div class="fs-mission-topbar">
+                            <div class="fs-brand fs-brand-on-dark">
+                                <div class="fs-brand-mark">FS</div>
+                                <div><h1>FlexSys</h1><p>Smart Operations Platform</p></div>
+                            </div>
+                            <div class="fs-mission-actions">
+                                <span class="fs-user-pill fs-user-pill-dark" t-esc="platform_user.name"/>
+                                <form method="post" action="/flexsys/logout" class="fs-logout-form">
+                                    <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                                    <button type="submit" class="fs-btn fs-btn-light"><span class="fa fa-sign-out"/>Sign out</button>
+                                </form>
+                            </div>
                         </div>
-                        <div class="fs-user-context">
-                            <span class="fs-user-pill" t-esc="platform_user.name"/>
-                            <form method="post" action="/flexsys/context" class="fs-context-form">
-                                <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
-                                <select name="company_id" aria-label="Company" onchange="this.form.submit()">
-                                    <option t-foreach="allowed_companies" t-as="item"
-                                            t-att-value="item.id" t-att-selected="item == company"
-                                            t-esc="branch_labels.get(item.id, item.name)"/>
-                                </select>
-                                <select name="branch_id" aria-label="Branch" onchange="this.form.submit()">
-                                    <option value="">All branches</option>
-                                    <option t-foreach="allowed_branches" t-as="item"
-                                            t-att-value="item.id" t-att-selected="item == branch"
-                                            t-esc="item.name"/>
-                                </select>
-                            </form>
-                            <form method="post" action="/flexsys/logout" class="fs-logout-form">
-                                <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
-                                <button type="submit" class="fs-btn fs-btn-ghost"><span class="fa fa-sign-out"/>Sign out</button>
-                            </form>
-                        </div>
-                    </header>
-                    <t t-call="flexsys_platform.command_palette"/>
 
-                    <form action="/flexsys/search" method="get" class="fs-global-search" role="search">
-                        <span class="fa fa-search" aria-hidden="true"/>
-                        <input type="search" name="q" minlength="2" maxlength="100" placeholder="Search orders, customers and more..." aria-label="Search FlexSys"/>
-                        <button type="submit" class="fs-btn fs-btn-primary">Search</button>
-                    </form>
-
-                    <main>
-                        <section class="fs-welcome">
+                        <div class="fs-mission-content">
                             <div class="fs-welcome-content">
                                 <span class="fs-eyebrow"><span class="fa fa-compass"/> Mission Control</span>
                                 <h2>Welcome, <t t-esc="platform_user.name"/></h2>
-                                <p>
-                                    <t t-esc="company.name"/>
-                                    <t t-if="branch"> · <t t-esc="branch_label or branch.name"/></t>
-                                    <t t-else=""> · All branches</t>
-                                </p>
+                                <p>Manage your workspaces, company, and branch from one place.</p>
                             </div>
                             <div class="fs-health-summary">
                                 <span t-attf-class="fs-status-chip fs-status-#{platform_health}">
@@ -112,7 +87,43 @@
                                 </span>
                                 <strong>Platform status</strong>
                             </div>
-                        </section>
+                        </div>
+
+                        <div class="fs-mission-controls">
+                            <form method="post" action="/flexsys/context" class="fs-context-switcher">
+                                <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                                <span class="fs-context-icon fa fa-building" aria-hidden="true"/>
+                                <div class="fs-context-fields">
+                                    <label>
+                                        <span>Company</span>
+                                        <select name="company_id" aria-label="Company" onchange="this.form.submit()">
+                                            <option t-foreach="allowed_companies" t-as="item"
+                                                    t-att-value="item.id" t-att-selected="item == company"
+                                                    t-esc="item.name"/>
+                                        </select>
+                                    </label>
+                                    <label>
+                                        <span>Branch</span>
+                                        <select name="branch_id" aria-label="Branch" onchange="this.form.submit()">
+                                            <option value="">All branches</option>
+                                            <option t-foreach="allowed_branches" t-as="item"
+                                                    t-att-value="item.id" t-att-selected="item == branch"
+                                                    t-esc="branch_labels.get(item.id, item.name)"/>
+                                        </select>
+                                    </label>
+                                </div>
+                            </form>
+
+                            <form action="/flexsys/search" method="get" class="fs-global-search fs-global-search-in-header" role="search">
+                                <span class="fa fa-search" aria-hidden="true"/>
+                                <input type="search" name="q" minlength="2" maxlength="100" placeholder="Search orders, customers and more..." aria-label="Search FlexSys"/>
+                                <button type="submit" class="fs-btn fs-btn-light">Search</button>
+                            </form>
+                        </div>
+                    </header>
+                    <t t-call="flexsys_platform.command_palette"/>
+
+                    <main>
 
                         <section class="fs-kpi-grid" aria-label="Platform overview">
                             <article class="fs-kpi-card">

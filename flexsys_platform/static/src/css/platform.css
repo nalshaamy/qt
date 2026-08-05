@@ -263,3 +263,150 @@ html[dir="rtl"] .fs-health-summary { justify-items: start; }
   .fs-global-search { padding: 8px 10px 8px 14px; flex-wrap: nowrap; }
   .fs-global-search .fs-btn { width: auto; padding-inline: 14px; }
 }
+
+/* Mission Control unified header */
+.fs-mission-header {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 24px;
+  padding: 22px;
+  border-radius: 24px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--fs-primary-dark) 0%, var(--fs-primary-mid) 58%, var(--fs-primary) 100%);
+  box-shadow: var(--fs-shadow);
+}
+.fs-mission-header::after {
+  content: "";
+  position: absolute;
+  top: -120px;
+  right: -80px;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.09);
+  pointer-events: none;
+}
+html[dir="rtl"] .fs-mission-header::after { right: auto; left: -80px; }
+.fs-mission-topbar,
+.fs-mission-content,
+.fs-mission-controls { position: relative; z-index: 1; }
+.fs-mission-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.fs-brand-on-dark h1 { color: #fff; }
+.fs-brand-on-dark p { color: rgba(255,255,255,.74); }
+.fs-mission-actions { display: flex; align-items: center; gap: 10px; }
+.fs-user-pill-dark {
+  color: #fff;
+  background: rgba(255,255,255,.14);
+  border: 1px solid rgba(255,255,255,.14);
+}
+.fs-btn-light {
+  color: var(--fs-primary-dark);
+  background: #fff;
+  border-color: rgba(255,255,255,.72);
+}
+.fs-btn-light:hover { color: var(--fs-primary-dark); background: #f3f7fb; }
+.fs-mission-content {
+  min-height: 150px;
+  padding: 32px 2px 24px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+.fs-mission-content .fs-welcome-content h2 {
+  margin: 10px 0 8px;
+  color: #fff;
+  font-size: 40px;
+  line-height: 1.15;
+}
+.fs-mission-content .fs-welcome-content p { margin: 0; color: rgba(255,255,255,.78); }
+.fs-mission-controls {
+  display: grid;
+  grid-template-columns: minmax(320px, .85fr) minmax(360px, 1.15fr);
+  gap: 12px;
+}
+.fs-context-switcher,
+.fs-global-search-in-header {
+  min-height: 70px;
+  margin: 0;
+  border: 1px solid rgba(255,255,255,.28);
+  background: rgba(255,255,255,.96);
+  box-shadow: none;
+}
+.fs-context-switcher {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 16px;
+  color: var(--fs-text);
+}
+.fs-context-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--fs-primary-dark);
+  background: rgba(95,141,178,.14);
+}
+.fs-context-fields {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.fs-context-fields label { min-width: 0; display: grid; gap: 3px; }
+.fs-context-fields label > span {
+  color: var(--fs-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.fs-context-fields select {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 28px 0 0;
+  border: 0;
+  outline: 0;
+  color: var(--fs-text);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+html[dir="rtl"] .fs-context-fields select { padding: 0 0 0 28px; }
+.fs-global-search-in-header {
+  max-width: none;
+  padding: 8px 8px 8px 16px;
+}
+.fs-global-search-in-header input { min-height: 48px; }
+.fs-global-search-in-header .fs-btn { min-height: 46px; }
+
+@media (max-width: 900px) {
+  .fs-mission-controls { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .fs-mission-header { padding: 18px; border-radius: 20px; }
+  .fs-mission-topbar { align-items: flex-start; }
+  .fs-mission-actions { align-items: stretch; flex-direction: column; }
+  .fs-mission-content { min-height: 0; padding: 28px 0 22px; align-items: flex-start; flex-direction: column; }
+  .fs-mission-content .fs-welcome-content h2 { font-size: 31px; }
+  .fs-mission-controls { gap: 10px; }
+}
+@media (max-width: 520px) {
+  .fs-mission-topbar { flex-direction: column; }
+  .fs-mission-actions { width: 100%; flex-direction: row; justify-content: space-between; }
+  .fs-context-switcher { align-items: flex-start; }
+  .fs-context-fields { grid-template-columns: 1fr; }
+  .fs-global-search-in-header { flex-wrap: nowrap; }
+  .fs-global-search-in-header .fs-btn { width: auto; }
+}
