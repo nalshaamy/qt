@@ -289,6 +289,8 @@ async function submitOrder() {
             if (trackingLink && payload.order && payload.order.tracking_url) {
                 trackingLink.href = payload.order.tracking_url;
                 trackingLink.hidden = false;
+                window.localStorage.setItem('flexsys_active_tracking_url', payload.order.tracking_url);
+                window.localStorage.setItem('flexsys_active_order_name', orderName || '');
             }
             const orderTypeLabels = {dine_in: 'محلي', takeaway: 'سفري', car: 'طلب سيارة', delivery: 'توصيل'};
             const paymentLabels = {cash: 'نقدًا', card: 'بطاقة', wallet: 'محفظة إلكترونية'};
@@ -321,12 +323,45 @@ async function submitOrder() {
     }
 }
 
+
+
+async function restoreActiveTrackingLink() {
+    const url = window.localStorage.getItem('flexsys_active_tracking_url');
+    if (!url || !document.body.classList.contains('flexsys-operations-menu-body')) return;
+    try {
+        const token = url.split('/').filter(Boolean).pop()?.split('?')[0];
+        if (!token) return;
+        const response = await fetch(`/self-order/api/track/${encodeURIComponent(token)}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+            credentials: 'same-origin',
+            body: JSON.stringify({jsonrpc: '2.0', method: 'call', id: Date.now(), params: {}}),
+        });
+        const data = await response.json();
+        const payload = data.result || {};
+        if (!payload.success || payload.tracking?.terminal) {
+            window.localStorage.removeItem('flexsys_active_tracking_url');
+            window.localStorage.removeItem('flexsys_active_order_name');
+            return;
+        }
+        const link = document.createElement('a');
+        link.className = 'fs-active-order-link';
+        link.href = url;
+        const name = window.localStorage.getItem('flexsys_active_order_name') || '';
+        link.innerHTML = `<span>طلبك الحالي${name ? ` · ${name}` : ''}</span><strong>متابعة الطلب</strong>`;
+        document.body.appendChild(link);
+    } catch (error) {
+        console.debug('Unable to restore active tracking link', error);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     bindFilters();
     bindCartButtons();
     bindCheckoutOptions();
     renderCart();
     hydrateReorderCart();
+    restoreActiveTrackingLink();
 
     document.querySelectorAll('.add-to-cart').forEach(btn => {
         btn.addEventListener('click', () => {

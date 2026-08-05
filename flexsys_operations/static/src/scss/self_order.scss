@@ -2020,3 +2020,25 @@ textarea {
     .fs-history-card footer { align-items: stretch; flex-direction: column; }
     .fs-reorder-button { text-align: center; }
 }
+
+
+/* Customer tracking timeline: no percentages, clear lifecycle states. */
+.fs-track-status { display: grid; gap: 4px; }
+.fs-track-status small { color: #6c7d8e; font-size: 12px; }
+.fs-track-status strong { font-size: 22px; }
+.fs-track-progress { display: none !important; }
+.fs-track-timeline { display: grid; gap: 0; }
+.fs-track-event { position: relative; display: grid; grid-template-columns: 30px minmax(0,1fr); gap: 10px; min-height: 58px; align-items: start; }
+.fs-track-event:not(:last-child)::after { content: ''; position: absolute; inset-inline-start: 14px; top: 27px; bottom: -3px; width: 2px; background: #d9e2ea; }
+.fs-track-marker { position: relative; z-index: 1; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; font-size: 16px; font-weight: 800; background: #fff; }
+.fs-track-event div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-top: 3px; }
+.fs-track-event time { color: #6c7d8e; font-size: 12px; white-space: nowrap; }
+.fs-track-event-completed .fs-track-marker { color: #0f8a62; border: 2px solid #0f8a62; background: #eaf8f3; }
+.fs-track-event-current .fs-track-marker { color: #b86f11; border: 2px solid #b86f11; background: #fff8e7; }
+.fs-track-event-pending .fs-track-marker { color: #93a0ad; border: 2px solid #cbd5df; }
+.fs-track-event-cancelled .fs-track-marker { color: #c2414f; border: 2px solid #c2414f; background: #fff0f2; }
+.fs-track-event-cancelled strong { color: #a82f3d; }
+.fs-active-order-link { position: fixed; z-index: 1030; inset-inline: 14px; bottom: calc(14px + env(safe-area-inset-bottom)); min-height: 58px; padding: 11px 15px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-radius: 17px; color: #fff; background: linear-gradient(135deg,#173b5b,#5f8db2); box-shadow: 0 16px 34px rgba(23,59,91,.28); text-decoration: none; }
+.fs-active-order-link span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fs-active-order-link strong { white-space: nowrap; }
+@media (min-width: 760px) { .fs-active-order-link { inset-inline-start: auto; width: 420px; } }

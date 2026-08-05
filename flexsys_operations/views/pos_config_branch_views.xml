@@ -63,13 +63,13 @@
                     <group>
                         <div class="o_form_label">الشاشات التشغيلية</div>
                         <div class="d-flex flex-column gap-2">
-                            <a href="/operations/kitchen"
+                            <a href="/flexsys/operations/kitchen"
                                target="_blank"
                                class="oe_link text-success fw-bold">
                                 <i class="fa fa-arrow-left me-1"/>
                                 معاينة شاشة المطبخ
                             </a>
-                            <a href="/operations/dashboard"
+                            <a href="/flexsys/operations/orders"
                                target="_blank"
                                class="oe_link text-success fw-bold">
                                 <i class="fa fa-arrow-left me-1"/>

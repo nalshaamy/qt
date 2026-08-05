@@ -1,6 +1,7 @@
 import json
 import logging
 import secrets
+import re
 from datetime import datetime, timedelta
 import psycopg2
 from urllib.parse import urlencode
@@ -17,6 +18,20 @@ _logger = logging.getLogger(__name__)
 
 
 class FlexSysOperationsQrMenuController(http.Controller):
+
+
+    def _public_brand_prefix(self):
+        raw = request.env['ir.config_parameter'].sudo().get_param(
+            'flexsys_operations.public_url_prefix', 'brand'
+        )
+        slug = re.sub(r'[^a-z0-9-]+', '-', (raw or 'brand').strip().lower()).strip('-')
+        return slug or 'brand'
+
+    def _public_base_url(self):
+        return '/' + self._public_brand_prefix()
+
+    def _valid_public_brand(self, brand):
+        return (brand or '').strip().lower() == self._public_brand_prefix()
 
     def _get_manager_cookie_name(self):
         return 'operations_manager_session'
@@ -89,7 +104,8 @@ class FlexSysOperationsQrMenuController(http.Controller):
             'name': values.get('name', ''),
             'email': values.get('email', ''),
             'error': values.get('error', ''),
-            'redirect': values.get('redirect') or '/qr-menu/shop',
+            'redirect': values.get('redirect') or (self._public_base_url() + '/menu'),
+            'public_base_url': self._public_base_url(),
         }
 
 
@@ -311,6 +327,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
                 'car': bool(pos_config.operations_enable_car_order) if pos_config else True,
                 'delivery': bool(pos_config.operations_enable_delivery) if pos_config else True,
             },
+            'public_base_url': self._public_base_url(),
             'enabled_payment_methods': {
                 'cash': bool(pos_config.operations_enable_cash) if pos_config else True,
                 'card': bool(pos_config.operations_enable_card) if pos_config else True,
@@ -351,6 +368,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
             'login_url': login_url,
             'register_url': register_url,
             'pos_config_id': pos_config_id,
+            'public_base_url': self._public_base_url(),
         })
 
 
@@ -533,6 +551,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
             return request.render('flexsys_operations.qr_branch_selector_page', {
                 'branches': branches,
                 'branch_values': values.get('branch_values', []),
+                'public_base_url': self._public_base_url(),
             })
 
         if selected_branch and not selected_branch.operations_branch_is_open:
@@ -540,6 +559,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
                 'branch': selected_branch,
                 'branch_name': selected_branch.operations_branch_name or selected_branch.display_name,
                 'branch_closed_message': selected_branch.operations_branch_closed_message or 'هذا الفرع مغلق حاليًا.',
+                'public_base_url': self._public_base_url(),
             })
 
         return request.render('flexsys_operations.qr_menu_page', values)
@@ -565,6 +585,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
         return request.render('flexsys_operations.qr_my_orders_page', {
             'orders': orders,
             'customer_partner': partner,
+            'public_base_url': self._public_base_url(),
             'state_labels': {
                 'new': 'جديد',
                 'accepted': 'تم الاعتماد',
@@ -590,7 +611,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
     @http.route('/qr-menu/manager/login', type='http', auth='public', website=True, methods=['GET', 'POST'], csrf=True)
     def manager_independent_login(self, **post):
         if self._is_operations_manager():
-            return request.redirect('/operations/dashboard')
+            return request.redirect('/flexsys/operations/orders')
 
         values = {
             'login': (post.get('login') or '').strip(),
@@ -612,7 +633,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
             else:
                 raw_token = secrets.token_urlsafe(48)
                 manager.create_session(raw_token, hours=12)
-                response = request.redirect('/operations/dashboard')
+                response = request.redirect('/flexsys/operations/orders')
                 response.set_cookie(
                     self._get_manager_cookie_name(),
                     raw_token,
@@ -646,11 +667,11 @@ class FlexSysOperationsQrMenuController(http.Controller):
         response.delete_cookie(self._get_manager_cookie_name(), path='/')
         return response
 
-    @http.route(['/operations', '/operations/dashboard', '/qr-menu/dashboard'], type='http', auth='public', website=True, csrf=False)
+    @http.route(['/flexsys/operations', '/flexsys/operations/orders', '/operations', '/operations/dashboard', '/qr-menu/dashboard'], type='http', auth='public', website=True, csrf=False)
     def manager_dashboard(self, **kwargs):
         manager = self._get_independent_manager()
         if not manager or not manager.can_view_dashboard:
-            return request.redirect('/operations/login')
+            return request.redirect('/flexsys/login')
         return request.render('flexsys_operations.qr_manager_dashboard_page', {
             'store_settings': self._get_store_settings(),
             'manager_account': manager,
@@ -1124,11 +1145,11 @@ class FlexSysOperationsQrMenuController(http.Controller):
             },
         }
 
-    @http.route(['/operations/cashier', '/flexsys_operations/cashier'], type='http', auth='user')
+    @http.route(['/flexsys/operations/cashier', '/operations/cashier', '/flexsys_operations/cashier'], type='http', auth='user')
     def cashier_dashboard(self, **kwargs):
         return request.render('flexsys_operations.cashier_dashboard_page', {})
 
-    @http.route(['/operations/kitchen', '/flexsys_operations/kds'], type='http', auth='user')
+    @http.route(['/flexsys/operations/kitchen', '/operations/kitchen', '/flexsys_operations/kds'], type='http', auth='user')
     def kds_dashboard(self, **kwargs):
         return request.render('flexsys_operations.kds_dashboard_page', {})
 
@@ -1142,6 +1163,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
             'order': order,
             'tracking': order._customer_tracking_payload(language=language),
             'language': language,
+            'public_base_url': self._public_base_url(),
         })
 
     @http.route('/self-order/api/track/<string:token>', type='jsonrpc', auth='public', csrf=False)
@@ -1475,3 +1497,46 @@ class FlexSysOperationsQrMenuController(http.Controller):
         request.env.flush_all()
 
         return {'ok': True}
+
+
+    @http.route('/<string:brand>', type='http', auth='public', website=True, csrf=False, sitemap=False)
+    def branded_start(self, brand, **kwargs):
+        if not self._valid_public_brand(brand):
+            return request.not_found()
+        request.session['flexsys_public_brand'] = brand
+        return self.customer_start(**kwargs)
+
+    @http.route('/<string:brand>/menu', type='http', auth='public', website=True, csrf=False, sitemap=False)
+    def branded_menu(self, brand, **kwargs):
+        if not self._valid_public_brand(brand):
+            return request.not_found()
+        request.session['flexsys_public_brand'] = brand
+        return self.menu(**kwargs)
+
+    @http.route('/<string:brand>/orders', type='http', auth='user', website=True, sitemap=False)
+    def branded_orders(self, brand, **kwargs):
+        if not self._valid_public_brand(brand):
+            return request.not_found()
+        request.session['flexsys_public_brand'] = brand
+        return self.my_orders(**kwargs)
+
+    @http.route('/<string:brand>/track/<string:token>', type='http', auth='public', website=True, sitemap=False)
+    def branded_tracking(self, brand, token, **kwargs):
+        if not self._valid_public_brand(brand):
+            return request.not_found()
+        request.session['flexsys_public_brand'] = brand
+        return self.customer_order_tracking(token, **kwargs)
+
+    @http.route('/<string:brand>/login', type='http', auth='public', website=True, methods=['GET', 'POST'], csrf=True, sitemap=False)
+    def branded_login(self, brand, **post):
+        if not self._valid_public_brand(brand):
+            return request.not_found()
+        request.session['flexsys_public_brand'] = brand
+        return self.customer_phone_login(**post)
+
+    @http.route('/<string:brand>/register', type='http', auth='public', website=True, methods=['GET', 'POST'], csrf=True, sitemap=False)
+    def branded_register(self, brand, **post):
+        if not self._valid_public_brand(brand):
+            return request.not_found()
+        request.session['flexsys_public_brand'] = brand
+        return self.customer_phone_register(**post)

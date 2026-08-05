@@ -11,3 +11,11 @@ class ResConfigSettings(models.TransientModel):
         config_parameter='operations_qr_order.default_pos_config_id',
         help='Default POS configuration used when the QR menu is opened without a specific pos_config_id.',
     )
+
+
+    operations_public_url_prefix = fields.Char(
+        string='Public Brand URL Prefix',
+        config_parameter='flexsys_operations.public_url_prefix',
+        default='brand',
+        help='Public customer URL prefix, for example qtcafe, sirat, albaik or barns.',
+    )

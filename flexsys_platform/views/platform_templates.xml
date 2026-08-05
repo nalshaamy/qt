@@ -18,7 +18,7 @@
     </template>
 
     <template id="command_palette" name="FlexSys Command Palette">
-        <button type="button" class="fs-command-trigger" data-fs-command-open="1" aria-label="Open command palette">
+        <button type="button" class="fs-command-trigger" hidden="hidden" data-fs-command-open="1" aria-label="Open command palette">
             <span class="fa fa-search"/><span>Search or run a command</span><kbd>Ctrl K</kbd>
         </button>
         <div class="fs-command-backdrop" data-fs-command-backdrop="1" hidden="hidden">
@@ -72,7 +72,7 @@
                                 <select name="company_id" aria-label="Company" onchange="this.form.submit()">
                                     <option t-foreach="allowed_companies" t-as="item"
                                             t-att-value="item.id" t-att-selected="item == company"
-                                            t-esc="item.name"/>
+                                            t-esc="branch_labels.get(item.id, item.name)"/>
                                 </select>
                                 <select name="branch_id" aria-label="Branch" onchange="this.form.submit()">
                                     <option value="">All branches</option>
@@ -102,7 +102,7 @@
                                 <h2>Welcome, <t t-esc="platform_user.name"/></h2>
                                 <p>
                                     <t t-esc="company.name"/>
-                                    <t t-if="branch"> · <t t-esc="branch.name"/></t>
+                                    <t t-if="branch"> · <t t-esc="branch_label or branch.name"/></t>
                                     <t t-else=""> · All branches</t>
                                 </p>
                             </div>
@@ -134,7 +134,7 @@
                         </section>
 
                         <section>
-                            <div class="fs-section-head">
+                            <div t-if="len(applications) &gt; 1" class="fs-section-head">
                                 <div><h2>Workspaces</h2><p>Only applications available to your role are shown.</p></div>
                             </div>
                             <div class="fs-app-grid">
@@ -148,7 +148,6 @@
                                             </span>
                                         </div>
                                         <p t-esc="app.summary"/>
-                                        <span class="fs-app-meta">Version <t t-esc="app.version"/></span>
                                     </div>
                                     <span class="fa fa-arrow-right fs-app-arrow"/>
                                 </a>
@@ -160,7 +159,7 @@
                             </div>
                         </section>
 
-                        <section class="fs-activity-section">
+                        <section t-if="can_view_activity" class="fs-activity-section">
                             <div class="fs-section-head">
                                 <div><h2>Recent activity</h2><p>Latest platform events in the current context.</p></div>
                             </div>
@@ -186,10 +185,6 @@
                             </div>
                         </section>
                     </main>
-
-                    <footer class="fs-platform-footer">
-                        <span>FlexSys Platform · 19.0.2.1.4</span><span>Stable core. Flexible experience.</span>
-                    </footer>
                 </div>
             </div>
         </t>
@@ -201,13 +196,13 @@
                 <div class="fs-shell">
                     <header class="fs-launcher-header">
                         <div class="fs-brand"><a href="/flexsys" class="fs-brand-mark">FS</a><div><h1 t-esc="application.name"/><p>Workspace</p></div></div>
-                        <div class="fs-user-context"><form action="/flexsys/search" method="get" class="fs-header-search" role="search"><span class="fa fa-search"/><input type="search" name="q" minlength="2" maxlength="100" placeholder="Search..." aria-label="Search FlexSys"/></form><span class="fs-user-pill" t-esc="platform_user.name"/><a href="/flexsys" class="fs-btn fs-btn-ghost"><span class="fa fa-th-large"/> Mission Control</a></div>
+                        <div class="fs-user-context"><span class="fs-user-pill" t-esc="platform_user.name"/><a href="/flexsys" class="fs-btn fs-btn-ghost"><span class="fa fa-th-large"/> Mission Control</a></div>
                     </header>
                     <t t-call="flexsys_platform.command_palette"/>
                     <main>
                         <section class="fs-workspace-hero">
                             <div><span class="fs-eyebrow"><span t-attf-class="fa #{application.icon}"/> Workspace</span><h2 t-esc="application.workspace_title or application.name"/><p t-esc="application.workspace_subtitle or application.summary"/></div>
-                            <div class="fs-workspace-context"><strong t-esc="company.name"/><span t-if="branch" t-esc="branch.name"/><span t-else="">All branches</span></div>
+                            <div class="fs-workspace-context"><strong t-esc="company.name"/><span t-if="branch" t-esc="branch_label or branch.name"/><span t-else="">All branches</span></div>
                         </section>
                         <section t-if="metric_items" class="fs-kpi-grid">
                             <article t-foreach="metric_items" t-as="item" class="fs-kpi-card">
@@ -218,12 +213,7 @@
                             <div class="fs-section-head"><div><h2>Quick actions</h2><p>Common tasks for this workspace.</p></div></div>
                             <div class="fs-action-grid"><a t-foreach="action_items" t-as="item" t-att-href="item.action_url or '#'" class="fs-action-card"><span t-attf-class="fa #{item.icon}"/><div><strong t-esc="item.title"/><small t-esc="item.description"/></div><span class="fa fa-arrow-right"/></a></div>
                         </section>
-                        <section t-if="widget_items">
-                            <div class="fs-section-head"><div><h2>Overview</h2><p>Live workspace information.</p></div></div>
-                            <div class="fs-widget-grid"><article t-foreach="widget_items" t-as="item" t-attf-class="fs-panel fs-widget fs-widget-#{item.size}"><div class="fs-widget-head"><span t-attf-class="fa #{item.icon}"/><div><h3 t-esc="item.title"/><p t-esc="item.description"/></div></div><div class="fs-widget-value" t-esc="metrics.get(item.metric_key or item.code, '—')"/></article></div>
-                        </section>
                     </main>
-                    <footer class="fs-platform-footer"><span>FlexSys Platform · 19.0.2.1.4</span><span>Workspace Framework v1.0</span></footer>
                 </div>
             </div>
         </t>
@@ -260,7 +250,6 @@
                             <div t-else="" class="fs-empty-state"><span class="fa fa-keyboard"/><h3>Start typing</h3><p>Universal Search respects your permissions, company, and branch context.</p></div>
                         </section>
                     </main>
-                    <footer class="fs-platform-footer"><span>FlexSys Platform · 19.0.2.1.4</span><span>Universal Search v1.0</span></footer>
                 </div>
             </div>
         </t>

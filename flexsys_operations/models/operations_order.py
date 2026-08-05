@@ -149,39 +149,111 @@ class FlexSysOrder(models.Model):
     )
 
     def _customer_timeline(self, language='ar'):
+        """Return a fixed, customer-friendly lifecycle timeline without percentages."""
         self.ensure_one()
         events = self.env['flexsys.operation.event'].sudo().search([
             ('aggregate_model', '=', self._name),
             ('aggregate_id', '=', self.id),
             ('visibility', 'in', ('customer', 'both')),
         ], order='occurred_at asc, id asc')
-        message_field = 'customer_message_ar' if language == 'ar' else 'customer_message_en'
-        return [{
-            'event_type': event.event_type,
-            'message': getattr(event, message_field) or event.name,
-            'occurred_at': event.occurred_at,
-            'progress': event.customer_progress or 0.0,
-        } for event in events]
+
+        state_times = {'new': self.create_date}
+        for event in events:
+            if event.event_type == 'order.created' and not state_times.get('new'):
+                state_times['new'] = event.occurred_at
+            elif event.event_type == 'order.state_changed':
+                target = (event.payload or {}).get('to')
+                if target and target not in state_times:
+                    state_times[target] = event.occurred_at
+        if self.accepted_date:
+            state_times.setdefault('accepted', self.accepted_date)
+        if self.ready_date:
+            state_times.setdefault('ready', self.ready_date)
+        if self.completed_date:
+            state_times.setdefault('completed', self.completed_date)
+
+        labels = {
+            'ar': {
+                'new': 'تم استلام الطلب',
+                'accepted': 'تم قبول الطلب',
+                'preparing': 'قيد التحضير',
+                'ready': 'جاهز للاستلام',
+                'completed': 'تم التسليم',
+                'cancelled': 'تم إلغاء الطلب',
+                'rejected': 'تم رفض الطلب',
+            },
+            'en': {
+                'new': 'Order received',
+                'accepted': 'Order accepted',
+                'preparing': 'Preparing',
+                'ready': 'Ready for pickup',
+                'completed': 'Delivered',
+                'cancelled': 'Order cancelled',
+                'rejected': 'Order rejected',
+            },
+        }['ar' if language == 'ar' else 'en']
+        ordered_states = ['new', 'accepted', 'preparing', 'ready', 'completed']
+        state_rank = {
+            'scheduled': 0, 'new': 0, 'accepted': 1, 'preparing': 2,
+            'partially_ready': 2, 'ready': 3, 'completed': 4,
+        }
+        current_rank = state_rank.get(self.state, 0)
+        terminal_state = self.state if self.state in ('cancelled', 'rejected') else False
+
+        def format_time(value):
+            if not value:
+                return False
+            local_dt = fields.Datetime.context_timestamp(self, fields.Datetime.to_datetime(value))
+            label = local_dt.strftime('%I:%M %p').lstrip('0')
+            if language == 'ar':
+                label = label.replace('AM', 'ص').replace('PM', 'م')
+            return label
+
+        steps = []
+        for index, state in enumerate(ordered_states):
+            occurred_at = state_times.get(state)
+            status = 'completed' if index < current_rank else 'current' if index == current_rank else 'pending'
+            if self.state == 'completed':
+                status = 'completed'
+            if terminal_state and index > current_rank:
+                status = 'pending'
+            steps.append({
+                'key': state,
+                'message': labels[state],
+                'occurred_at': occurred_at,
+                'time_label': format_time(occurred_at),
+                'status': status,
+            })
+
+        if terminal_state:
+            terminal_time = state_times.get(terminal_state) or self.write_date
+            steps = [step for step in steps if step['status'] == 'completed']
+            steps.append({
+                'key': terminal_state,
+                'message': labels[terminal_state],
+                'occurred_at': terminal_time,
+                'time_label': format_time(terminal_time),
+                'status': 'cancelled',
+            })
+        return steps
 
     def _customer_tracking_payload(self, language='ar'):
         self.ensure_one()
         state_labels_ar = {
-            'scheduled': 'مجدول', 'new': 'تم الاستلام', 'accepted': 'تم الاعتماد',
-            'preparing': 'قيد التحضير', 'partially_ready': 'جاهز جزئيًا',
-            'ready': 'جاهز', 'completed': 'مكتمل', 'rejected': 'مرفوض',
+            'scheduled': 'مجدول', 'new': 'تم استلام الطلب', 'accepted': 'تم قبول الطلب',
+            'preparing': 'قيد التحضير', 'partially_ready': 'قيد التحضير',
+            'ready': 'جاهز للاستلام', 'completed': 'تم التسليم', 'rejected': 'مرفوض',
             'cancelled': 'ملغي',
         }
         state_labels_en = dict(self._fields['state'].selection)
-        timeline = self._customer_timeline(language=language)
-        progress = timeline[-1]['progress'] if timeline else (self.preparation_progress or 0.0)
         return {
             'name': self.name,
             'state': self.state,
             'state_label': (state_labels_ar if language == 'ar' else state_labels_en).get(self.state, self.state),
-            'progress': progress,
             'requested_time': self.requested_time,
             'create_date': self.create_date,
-            'timeline': timeline,
+            'timeline': self._customer_timeline(language=language),
+            'terminal': self.state in ('completed', 'cancelled', 'rejected'),
         }
 
     @api.model

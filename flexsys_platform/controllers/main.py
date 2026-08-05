@@ -36,6 +36,21 @@ class FlexSysPlatformController(http.Controller):
         parsed = urlsplit(url or '')
         return bool(url and not parsed.scheme and not parsed.netloc and url.startswith('/'))
 
+    @staticmethod
+    def _branch_label(branch):
+        """Return the operational branch name when available, otherwise the platform branch name."""
+        pos_configs = getattr(branch, 'operations_pos_config_ids', False)
+        if pos_configs:
+            pos = pos_configs.filtered('active')[:1] or pos_configs[:1]
+            if pos:
+                return getattr(pos, 'operations_branch_name', False) or pos.display_name or branch.name
+        return branch.name
+
+    @staticmethod
+    def _can_view_activity(user):
+        role_codes = set(user.role_ids.filtered('active').mapped('code'))
+        return bool(role_codes.intersection({'platform_admin', 'platform_auditor', 'branch_manager'}))
+
     @http.route('/flexsys/login', type='http', auth='public', website=True, methods=['GET', 'POST'])
     def login(self, **post):
         active_session = self._current_session()
@@ -266,6 +281,7 @@ class FlexSysPlatformController(http.Controller):
             'platform_session': session,
             'company': session.company_id,
             'branch': session.branch_id,
+            'branch_label': self._branch_label(session.branch_id) if session.branch_id else False,
         })
         request.env['flexsys.system.log'].record(
             'system', 'workspace_opened', platform_user_id=session.user_id.id,
@@ -284,14 +300,17 @@ class FlexSysPlatformController(http.Controller):
         applications = request.env['flexsys.platform.application'].sudo().search([('active', '=', True)])
         applications = applications.filtered(lambda app: app.is_available_for(user))
 
-        log_domain = [('company_id', '=', session.company_id.id)]
-        if session.branch_id:
-            log_domain.append(('branch_id', 'in', [False, session.branch_id.id]))
-        recent_logs = request.env['flexsys.system.log'].sudo().search(
-            log_domain,
-            order='create_date desc, id desc',
-            limit=8,
-        )
+        can_view_activity = self._can_view_activity(user)
+        recent_logs = request.env['flexsys.system.log']
+        if can_view_activity:
+            log_domain = [('company_id', '=', session.company_id.id)]
+            if session.branch_id:
+                log_domain.append(('branch_id', 'in', [False, session.branch_id.id]))
+            recent_logs = request.env['flexsys.system.log'].sudo().search(
+                log_domain,
+                order='create_date desc, id desc',
+                limit=8,
+            )
         active_sessions = request.env['flexsys.platform.session'].sudo().search_count([
             ('active', '=', True),
             ('company_id', '=', session.company_id.id),
@@ -312,6 +331,7 @@ class FlexSysPlatformController(http.Controller):
             'platform_session': session,
             'applications': applications,
             'recent_logs': recent_logs,
+            'can_view_activity': can_view_activity,
             'active_sessions': active_sessions,
             'health_counts': health_counts,
             'platform_health': platform_health,
@@ -322,4 +342,11 @@ class FlexSysPlatformController(http.Controller):
             'allowed_branches': user.branch_ids.filtered(
                 lambda item: item.active and item.company_id == session.company_id
             ),
+            'branch_labels': {
+                item.id: self._branch_label(item)
+                for item in user.branch_ids.filtered(
+                    lambda branch_item: branch_item.active and branch_item.company_id == session.company_id
+                )
+            },
+            'branch_label': self._branch_label(session.branch_id) if session.branch_id else False,
         })

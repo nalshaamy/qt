@@ -167,7 +167,7 @@
 
     <record id="action_operations_kds_dashboard" model="ir.actions.act_url">
         <field name="name">KDS Screen</field>
-        <field name="url">/operations/kitchen</field>
+        <field name="url">/flexsys/operations/kitchen</field>
         <field name="target">self</field>
     </record>
 </odoo>

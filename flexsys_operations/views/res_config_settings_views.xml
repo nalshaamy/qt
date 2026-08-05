@@ -15,6 +15,11 @@
                 <app data-string="FlexSys" string="FlexSys" name="flexsys_operations">
                     <block title="الإعدادات العامة"
                            help="الإعدادات الأساسية لتوجيه طلبات FlexSys.">
+                        <setting string="مسار البراند العام"
+                                 help="اسم البراند المستخدم في روابط العملاء، مثل qtcafe أو sirat أو barns.">
+                            <field name="operations_public_url_prefix" placeholder="qtcafe"/>
+                        </setting>
+
                         <setting string="نقطة البيع الاحتياطية"
                                  help="تستخدم عندما لا يحدد العميل فرعًا أو نقطة بيع.">
                             <field name="operations_default_pos_config_id"
@@ -97,7 +102,7 @@
                         </setting>
 
                         <setting string="شاشة المطبخ">
-                            <a href="/operations/kitchen"
+                            <a href="/flexsys/operations/kitchen"
                                target="_blank"
                                class="oe_link text-success fw-bold">
                                 <i class="fa fa-arrow-left me-1"/>
@@ -106,7 +111,7 @@
                         </setting>
 
                         <setting string="لوحة إدارة الفروع">
-                            <a href="/operations/dashboard"
+                            <a href="/flexsys/operations/orders"
                                target="_blank"
                                class="oe_link text-success fw-bold">
                                 <i class="fa fa-arrow-left me-1"/>

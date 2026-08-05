@@ -75,11 +75,11 @@
                     <header class="fs-topbar">
                         <div class="fs-account-actions">
                             <t t-if="is_registered_customer">
-                                <a class="fs-account-link" href="/self-order/orders">طلباتي</a>
-                                <a class="fs-account-link fs-logout-link" href="/self-order/logout">خروج</a>
+                                <a class="fs-account-link" t-att-href="(public_base_url or '/self-order') + '/orders'">طلباتي</a>
+                                <a class="fs-account-link fs-logout-link" t-att-href="(public_base_url or '/self-order') + '/logout'">خروج</a>
                             </t>
                             <t t-else="">
-                                <a class="fs-account-link" href="/self-order">دخول</a>
+                                <a class="fs-account-link" t-att-href="public_base_url or '/self-order'">دخول</a>
                             </t>
                         </div>
                         <img class="fs-brand-logo" src="/flexsys_operations/static/src/img/flexsys_full_logo.png" alt="Qatfat Tashrin"/>
@@ -101,7 +101,7 @@
                     <div t-if="selected_branch_name" class="fs-selected-branch">
                         <span>الفرع المختار</span>
                         <strong><t t-esc="selected_branch_name"/></strong>
-                        <a href="/self-order/menu">تغيير الفرع</a>
+                        <a t-att-href="(public_base_url or '/self-order') + '/menu'">تغيير الفرع</a>
                     </div>
 
                     <t t-if="is_registered_customer and favorite_products">
@@ -111,7 +111,7 @@
                                     <span class="fs-eyebrow">مفضلاتك</span>
                                     <h2>اطلبها بسرعة</h2>
                                 </div>
-                                <a href="/self-order/orders">الطلبات السابقة</a>
+                                <a t-att-href="(public_base_url or '/self-order') + '/orders'">الطلبات السابقة</a>
                             </header>
                             <div class="fs-favorites-grid">
                                 <t t-foreach="favorite_products" t-as="favorite">
@@ -294,7 +294,7 @@
                         <a id="success-tracking-link" class="fs-success-orders-link" href="#" hidden="hidden">متابعة الطلب</a>
                         <button id="new-order" type="button">طلب جديد</button>
                         <t t-if="is_registered_customer">
-                            <a class="fs-success-orders-link" href="/self-order/orders">عرض طلباتي</a>
+                            <a class="fs-success-orders-link" t-att-href="(public_base_url or '/self-order') + '/orders'">عرض طلباتي</a>
                         </t>
                     </div>
                 </section>
@@ -328,32 +328,31 @@
                             <small>FlexSys · Operations</small>
                             <h1><t t-esc="order.name"/></h1>
                         </div>
-                        <a t-att-href="'/self-order/track/%s?lang=%s' % (order.tracking_token, 'en' if language == 'ar' else 'ar')">
+                        <a t-att-href="'%s/track/%s?lang=%s' % (public_base_url or '/self-order', order.tracking_token, 'en' if language == 'ar' else 'ar')">
                             <t t-esc="'English' if language == 'ar' else 'العربية'"/>
                         </a>
                     </header>
                     <section class="fs-track-status">
-                        <span><t t-esc="tracking['state_label']"/></span>
-                        <strong><t t-esc="str(int(tracking['progress'] or 0)) + '%'"/></strong>
-                        <div class="fs-track-progress"><i t-att-style="'width:' + str(max(0, min(100, int(tracking['progress'] or 0)))) + '%'"></i></div>
+                        <small><t t-esc="'الحالة الحالية' if language == 'ar' else 'Current status'"/></small>
+                        <strong><t t-esc="tracking['state_label']"/></strong>
                     </section>
                     <section class="fs-track-timeline">
-                        <t t-if="tracking['timeline']">
-                            <t t-foreach="tracking['timeline']" t-as="item">
-                                <article class="fs-track-event">
-                                    <span class="fs-track-dot"></span>
-                                    <div>
-                                        <strong><t t-esc="item['message']"/></strong>
-                                        <time><t t-esc="item['occurred_at']"/></time>
-                                    </div>
-                                </article>
-                            </t>
+                        <t t-foreach="tracking['timeline']" t-as="item">
+                            <article t-attf-class="fs-track-event fs-track-event-#{item['status']}">
+                                <span class="fs-track-marker">
+                                    <t t-if="item['status'] == 'completed'">✓</t>
+                                    <t t-elif="item['status'] == 'current'">●</t>
+                                    <t t-elif="item['status'] == 'cancelled'">✕</t>
+                                    <t t-else="">○</t>
+                                </span>
+                                <div>
+                                    <strong><t t-esc="item['message']"/></strong>
+                                    <time t-if="item['time_label']"><t t-esc="item['time_label']"/></time>
+                                </div>
+                            </article>
                         </t>
-                        <div t-else="" class="fs-track-empty">
-                            <t t-esc="'سيظهر تقدم طلبك هنا.' if language == 'ar' else 'Your order progress will appear here.'"/>
-                        </div>
                     </section>
-                    <a class="fs-track-back" href="/self-order/menu">
+                    <a class="fs-track-back" t-att-href="(public_base_url or '/self-order') + '/menu'">
                         <t t-esc="'العودة إلى القائمة' if language == 'ar' else 'Back to menu'"/>
                     </a>
                 </main>
@@ -450,9 +449,9 @@
 
                 <main class="flexsys-operations-menu-app fs-my-orders-app">
                     <header class="fs-topbar">
-                        <a class="fs-account-link" href="/self-order/menu">قائمة المنتجات</a>
+                        <a class="fs-account-link" t-att-href="(public_base_url or '/self-order') + '/menu'">قائمة المنتجات</a>
                         <img class="fs-brand-logo" src="/flexsys_operations/static/src/img/flexsys_full_logo.png" alt="Qatfat Tashrin"/>
-                        <a class="fs-account-link" href="/self-order/logout">خروج</a>
+                        <a class="fs-account-link" t-att-href="(public_base_url or '/self-order') + '/logout'">خروج</a>
                     </header>
                     <section class="fs-hero-card fs-my-orders-hero">
                         <div>
@@ -496,7 +495,7 @@
                                         <strong><t t-esc="'%.2f' % order.amount_total"/> ر.س</strong>
                                     </div>
                                     <a class="fs-reorder-button"
-                                       t-att-href="'/self-order/menu?pos_config_id=%s&amp;reorder=%s' % (order.pos_config_id.id, order.id)">
+                                       t-att-href="'%s/menu?pos_config_id=%s&amp;reorder=%s' % (public_base_url or '/self-order', order.pos_config_id.id, order.id)">
                                         إعادة الطلب
                                     </a>
                                 </footer>
@@ -542,7 +541,7 @@
 
                 <main class="fs-auth-page">
                     <section class="fs-auth-card">
-                        <a class="fs-auth-back" href="/self-order">← رجوع</a>
+                        <a class="fs-auth-back" t-att-href="public_base_url or '/self-order'">← رجوع</a>
                         <img class="fs-auth-logo" src="/flexsys_operations/static/src/img/flexsys_full_logo.png" alt="قطفة تشرين"/>
                         <span class="fs-eyebrow">FLEXSYS</span>
                         <h1>تسجيل الدخول</h1>
@@ -550,7 +549,7 @@
 
                         <div t-if="error" class="fs-auth-error"><t t-esc="error"/></div>
 
-                        <form method="post" action="/self-order/login" class="fs-auth-form">
+                        <form method="post" t-att-action="(public_base_url or '/self-order') + '/login'" class="fs-auth-form">
                             <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
                             <input type="hidden" name="redirect" t-att-value="redirect"/>
                             <label>
@@ -615,7 +614,7 @@
 
                 <main class="fs-auth-page">
                     <section class="fs-auth-card">
-                        <a class="fs-auth-back" href="/self-order">← رجوع</a>
+                        <a class="fs-auth-back" t-att-href="public_base_url or '/self-order'">← رجوع</a>
                         <img class="fs-auth-logo" src="/flexsys_operations/static/src/img/flexsys_full_logo.png" alt="قطفة تشرين"/>
                         <span class="fs-eyebrow">FLEXSYS</span>
                         <h1>إنشاء حساب</h1>
@@ -623,7 +622,7 @@
 
                         <div t-if="error" class="fs-auth-error"><t t-esc="error"/></div>
 
-                        <form method="post" action="/self-order/register" class="fs-auth-form">
+                        <form method="post" t-att-action="(public_base_url or '/self-order') + '/register'" class="fs-auth-form">
                             <p class="fs-required-note">جميع الحقول المعلّمة بـ * إلزامية.</p>
                             <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
                             <input type="hidden" name="redirect" t-att-value="redirect"/>
@@ -712,7 +711,7 @@
                         <div t-if="error" class="fs-auth-error"><t t-esc="error"/></div>
                         <div t-if="message" class="fs-auth-success"><t t-esc="message"/></div>
 
-                        <form method="post" action="/self-order/forgot-password" class="fs-auth-form">
+                        <form method="post" t-att-action="(public_base_url or '/self-order') + '/forgot-password'" class="fs-auth-form">
                             <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
                             <input type="hidden" name="redirect" t-att-value="redirect"/>
                             <label>
@@ -767,7 +766,7 @@
                             </div>
                         </div>
                         <div class="fs-manager-header-actions">
-                            <a href="/self-order/menu">معاينة قائمة المنتجات</a>
+                            <a t-att-href="(public_base_url or '/self-order') + '/menu'">معاينة قائمة المنتجات</a>
                             <a href="/self-order/manager/logout">تسجيل الخروج</a>
                         </div>
                     </header>
@@ -941,7 +940,7 @@
                         <img class="fs-auth-logo" src="/flexsys_operations/static/src/img/flexsys_app_icon.png" alt="FlexSys"/>
                         <h1>غير مصرح بالدخول</h1>
                         <p>هذه الصفحة مخصصة لمدير FlexSys فقط.</p>
-                        <a class="fs-auth-primary fs-manager-back-link" href="/self-order">العودة</a>
+                        <a class="fs-auth-primary fs-manager-back-link" t-att-href="public_base_url or '/self-order'">العودة</a>
                     </section>
                 </main>
             </body>
@@ -1054,7 +1053,7 @@
                                         <span t-if="branch['is_open']" class="fs-branch-open">مفتوح</span>
                                         <span t-else="" class="fs-branch-closed">مغلق</span>
                                         <a t-if="branch['is_open']"
-                                           t-att-href="'/self-order/menu?pos_config_id=%s' % branch['id']">
+                                           t-att-href="'%s/menu?pos_config_id=%s' % (public_base_url or '/self-order', branch['id'])">
                                             اختيار الفرع
                                         </a>
                                     </div>
@@ -1144,7 +1143,7 @@
                         <span class="fs-section-label">FLEXSYS</span>
                         <h1><t t-esc="branch_name"/></h1>
                         <p><t t-esc="branch_closed_message"/></p>
-                        <a class="fs-auth-primary fs-manager-back-link" href="/self-order/menu">اختيار فرع آخر</a>
+                        <a class="fs-auth-primary fs-manager-back-link" t-att-href="(public_base_url or '/self-order') + '/menu'">اختيار فرع آخر</a>
                     </section>
                 </main>
             </body>
