@@ -373,7 +373,7 @@
                 <main class="flexsys-operations-screen">
                     <header>
                         <div>
-                            <img class="screen-logo" src="/flexsys_operations/static/src/img/flexsys_app_icon.png" alt="QT"/>
+                            <img class="screen-logo" src="/flexsys_operations/static/src/img/flexsys_app_icon.png" alt="FlexSys"/>
                             <h1>طلبات الكاشير</h1>
                             <p>قبول الطلبات الجديدة وتحويلها للتحضير</p>
                         </div>
@@ -408,7 +408,7 @@
                 <main class="flexsys-operations-screen">
                     <header>
                         <div>
-                            <img class="screen-logo" src="/flexsys_operations/static/src/img/flexsys_app_icon.png" alt="QT"/>
+                            <img class="screen-logo" src="/flexsys_operations/static/src/img/flexsys_app_icon.png" alt="FlexSys"/>
                             <h1>شاشة التحضير KDS</h1>
                             <p>متابعة الطلبات المقبولة وقيد التحضير</p>
                         </div>

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Idempotent bootstrap: runs on install and every module upgrade. -->
+    <function model="flexsys.platform.user" name="bootstrap_operations_access"/>
+</odoo>

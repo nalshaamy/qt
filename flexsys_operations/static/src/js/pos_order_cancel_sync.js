@@ -22,7 +22,7 @@ function isFlexSysOperationsQrOrder(order) {
     return Boolean(
         relationId(order.operations_qr_order_id) ||
         reference.startsWith("QR") ||
-        reference.startsWith("QT")
+        reference.startsWith("FS")
     );
 }
 

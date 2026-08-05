@@ -1,32 +1,3 @@
-/* FlexSys local Cairo font setup.
-   Add licensed Cairo WOFF2 files to static/src/fonts/ using these exact names. */
-@font-face {
-    font-family: "QT Cairo Local";
-    src: local("Cairo"),
-         url("/flexsys_operations/static/src/fonts/Cairo-Regular.woff2") format("woff2");
-    font-style: normal;
-    font-weight: 400 500;
-    font-display: swap;
-}
-@font-face {
-    font-family: "QT Cairo Local";
-    src: local("Cairo SemiBold"),
-         local("Cairo"),
-         url("/flexsys_operations/static/src/fonts/Cairo-SemiBold.woff2") format("woff2");
-    font-style: normal;
-    font-weight: 600;
-    font-display: swap;
-}
-@font-face {
-    font-family: "QT Cairo Local";
-    src: local("Cairo Bold"),
-         local("Cairo"),
-         url("/flexsys_operations/static/src/fonts/Cairo-Bold.woff2") format("woff2");
-    font-style: normal;
-    font-weight: 700 800;
-    font-display: swap;
-}
-
 :root {
     --fs-blue: #5F8DB2;
     --fs-blue-dark: #3F6F98;
@@ -39,7 +10,7 @@
     margin: 0;
     background: #101820;
     color: #fff;
-    font-family: "QT Cairo Local", Tahoma, Arial, sans-serif;
+    font-family: "Cairo", "Noto Kufi Arabic", Tahoma, Arial, sans-serif;
     direction: rtl;
 }
 .flexsys-operations-screen { padding: 24px; }
@@ -135,14 +106,14 @@ textarea {
 .flexsys-operations-screen-body,
 .fs-manager-dashboard,
 .fs-manager-shell {
-    font-family: "QT Cairo Local", Tahoma, Arial, sans-serif !important;
+    font-family: "Cairo", "Noto Kufi Arabic", Tahoma, Arial, sans-serif !important;
 }
 
 .flexsys-operations-menu-body :where(h1,h2,h3,h4,h5,h6,p,a,button,input,select,option,textarea,label,strong,small,em,b,li,td,th,div,section,article,header,footer,nav):not(.fa):not(.fas):not(.far):not(.fab):not(.oi):not([class*="fa-"]),
 .flexsys-operations-screen-body :where(h1,h2,h3,h4,h5,h6,p,a,button,input,select,option,textarea,label,strong,small,em,b,li,td,th,div,section,article,header,footer,nav):not(.fa):not(.fas):not(.far):not(.fab):not(.oi):not([class*="fa-"]),
 .fs-manager-dashboard :where(h1,h2,h3,h4,h5,h6,p,a,button,input,select,option,textarea,label,strong,small,em,b,li,td,th,div,section,article,header,footer,nav):not(.fa):not(.fas):not(.far):not(.fab):not(.oi):not([class*="fa-"]),
 .fs-manager-shell :where(h1,h2,h3,h4,h5,h6,p,a,button,input,select,option,textarea,label,strong,small,em,b,li,td,th,div,section,article,header,footer,nav):not(.fa):not(.fas):not(.far):not(.fab):not(.oi):not([class*="fa-"]) {
-    font-family: "QT Cairo Local", Tahoma, Arial, sans-serif !important;
+    font-family: "Cairo", "Noto Kufi Arabic", Tahoma, Arial, sans-serif !important;
 }
 
 .flexsys-operations-menu-body button,
