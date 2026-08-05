@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="menu_operations_root" name="Operations" sequence="10"/>
+
+    <menuitem id="menu_operations_qr_orders"
+              name="Orders"
+              parent="menu_operations_root"
+              action="action_operations_qr_order"
+              sequence="5"/>
+
+    <menuitem id="menu_operations_products"
+              name="Products"
+              parent="menu_operations_root"
+              sequence="20"/>
+
+    <menuitem id="menu_operations_qr_products"
+              name="Menu Products"
+              parent="menu_operations_products"
+              action="action_operations_qr_menu_products"
+              sequence="5"/>
+
+    <menuitem id="menu_operations_qr_categories"
+              name="Menu Categories"
+              parent="menu_operations_products"
+              action="action_operations_qr_menu_category"
+              sequence="10"/>
+
+    <menuitem id="menu_operations_config"
+              name="Configuration"
+              parent="menu_operations_root"
+              sequence="90"/>
+</odoo>

@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_operations_manager_account_list" model="ir.ui.view">
+        <field name="name">flexsys.operations.manager.list</field>
+        <field name="model">flexsys.operations.manager</field>
+        <field name="arch" type="xml">
+            <list string="Independent Managers">
+                <field name="name"/>
+                <field name="login"/>
+                <field name="pos_config_ids" widget="many2many_tags"/>
+                <field name="active"/>
+                <field name="can_view_dashboard"/>
+                <field name="can_manage_store"/>
+                <field name="last_login"/>
+                <field name="session_expires_at"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_operations_manager_account_form" model="ir.ui.view">
+        <field name="name">flexsys.operations.manager.form</field>
+        <field name="model">flexsys.operations.manager</field>
+        <field name="arch" type="xml">
+            <form string="Independent Manager">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="login"/>
+                            <field name="pos_config_ids" widget="many2many_tags" required="1"/>
+                            <field name="pos_config_id" invisible="1"/>
+                            <field name="new_password" password="True" required="not id"
+                                   placeholder="8 characters minimum"/>
+                            <field name="active"/>
+                        </group>
+                        <group>
+                            <field name="can_view_dashboard"/>
+                            <field name="can_manage_store"/>
+                            <field name="last_login" readonly="1"/>
+                            <field name="session_expires_at" readonly="1"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_operations_manager_accounts" model="ir.actions.act_window">
+        <field name="name">Independent Managers</field>
+        <field name="res_model">flexsys.operations.manager</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+
+    <record id="view_platform_branch_operations_form" model="ir.ui.view">
+        <field name="name">flexsys.platform.branch.operations.form</field>
+        <field name="model">flexsys.platform.branch</field>
+        <field name="arch" type="xml">
+            <form string="Platform Branch">
+                <sheet>
+                    <group>
+                        <field name="name"/><field name="code"/><field name="company_id"/>
+                        <field name="sequence"/><field name="active"/>
+                    </group>
+                    <group string="Operations">
+                        <field name="operations_pos_config_ids" widget="many2many_tags"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_platform_user_operations_access" model="ir.ui.view">
+        <field name="name">flexsys.platform.user.operations.access</field>
+        <field name="model">flexsys.platform.user</field>
+        <field name="inherit_id" ref="flexsys_platform.view_flexsys_platform_user_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='default_branch_id']/ancestor::page[1]" position="after">
+                <page string="Operations">
+                    <group>
+                        <field name="operations_pos_config_ids" widget="many2many_tags" readonly="1"/>
+                        <field name="can_view_dashboard" readonly="1"/>
+                        <field name="can_manage_store" readonly="1"/>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>
