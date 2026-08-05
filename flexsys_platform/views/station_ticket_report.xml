@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="paperformat_station_ticket_80mm" model="report.paperformat">
+        <field name="name">FlexSys Station Ticket 80mm</field>
+        <field name="default" eval="False"/>
+        <field name="format">custom</field>
+        <field name="page_height">180</field>
+        <field name="page_width">80</field>
+        <field name="orientation">Portrait</field>
+        <field name="margin_top">3</field>
+        <field name="margin_bottom">3</field>
+        <field name="margin_left">3</field>
+        <field name="margin_right">3</field>
+        <field name="dpi">203</field>
+    </record>
+
+    <record id="action_report_station_ticket" model="ir.actions.report">
+        <field name="name">Station Ticket</field>
+        <field name="model">flexsys.execution.task</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">flexsys_platform.report_station_ticket</field>
+        <field name="report_file">flexsys_platform.report_station_ticket</field>
+        <field name="paperformat_id" ref="paperformat_station_ticket_80mm"/>
+        <field name="binding_model_id" ref="model_flexsys_execution_task"/>
+        <field name="binding_type">report</field>
+        <field name="print_report_name">'Station Ticket - %s' % (object.name)</field>
+    </record>
+
+    <template id="report_station_ticket">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="task">
+                <div class="page" style="font-family: Arial, sans-serif; font-size: 12px; line-height: 1.35; color: #000;">
+                    <div style="text-align:center; font-size:16px; font-weight:700; border-bottom:2px solid #000; padding-bottom:6px; margin-bottom:6px;">
+                        <span t-esc="task.station_id.name or 'Station'"/>
+                    </div>
+                    <table style="width:100%; border-collapse:collapse; margin-bottom:6px;">
+                        <tr><td style="font-weight:700;">Task</td><td style="text-align:right;"><span t-esc="task.name"/></td></tr>
+                        <tr><td style="font-weight:700;">Order</td><td style="text-align:right;"><span t-esc="task.order_id.name"/></td></tr>
+                        <tr><td style="font-weight:700;">Type</td><td style="text-align:right;"><span t-esc="task.order_id.order_type or '-'"/></td></tr>
+                        <tr t-if="task.requested_time"><td style="font-weight:700;">Requested</td><td style="text-align:right;"><span t-field="task.requested_time" t-options="{'widget': 'datetime'}"/></td></tr>
+                        <tr><td style="font-weight:700;">Priority</td><td style="text-align:right; font-weight:700;"><span t-esc="(task.priority or 'normal').upper()"/></td></tr>
+                    </table>
+                    <div style="border-top:1px dashed #000; border-bottom:1px dashed #000; padding:8px 0; margin:6px 0;">
+                        <div style="font-size:18px; font-weight:700;">
+                            <span t-esc="('%g' % task.qty)"/> × <span t-esc="task.product_id.display_name"/>
+                        </div>
+                    </div>
+                    <div t-if="task.station_id.ticket_show_notes and task.note" style="margin:8px 0;">
+                        <div style="font-weight:700;">Notes / ملاحظات</div>
+                        <div style="font-size:14px; white-space:pre-wrap;"><span t-esc="task.note"/></div>
+                    </div>
+                    <div t-if="task.station_id.ticket_show_customer and (task.order_id.customer_name or task.order_id.customer_mobile)" style="border-top:1px dashed #000; padding-top:6px; margin-top:6px;">
+                        <div style="font-weight:700;">Customer / العميل</div>
+                        <div t-if="task.order_id.customer_name"><span t-esc="task.order_id.customer_name"/></div>
+                        <div t-if="task.order_id.customer_mobile"><span t-esc="task.order_id.customer_mobile"/></div>
+                    </div>
+                    <div style="border-top:2px solid #000; margin-top:8px; padding-top:5px; font-size:10px;">
+                        <div>Station: <span t-esc="task.station_id.name"/></div>
+                        <div>Printed: <span t-field="task.last_printed_at" t-options="{'widget': 'datetime'}"/></div>
+                        <div>Copies: <span t-esc="max(task.station_id.print_copies or 1, 1)"/></div>
+                    </div>
+                </div>
+            </t>
+        </t>
+    </template>
+</odoo>
