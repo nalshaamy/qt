@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
+import re
 from urllib.parse import urlsplit
 
 from odoo import fields, http
@@ -13,6 +14,78 @@ SESSION_TOKEN_KEY = 'flexsys_platform_token'
 
 class FlexSysPlatformController(http.Controller):
 
+
+    @staticmethod
+    def _normalize_language(language):
+        code = (language or 'en_US').replace('-', '_')
+        return 'ar_001' if code.lower().startswith('ar') else 'en_US'
+
+    def _apply_language(self, user=None, requested=None):
+        """Use the FlexSys user's language as the single source of truth."""
+        language = self._normalize_language(
+            requested
+            or (user.language if user else False)
+            or request.session.get('flexsys_lang')
+            or request.env.lang
+        )
+        request.session['flexsys_lang'] = language
+        request.update_context(lang=language)
+        return language
+
+    @staticmethod
+    def _platform_text(language):
+        ar = language.startswith('ar')
+        return {
+            'smart_operations_platform': 'منصة العمليات الذكية' if ar else 'Smart Operations Platform',
+            'mission_control': 'مركز القيادة' if ar else 'Mission Control',
+            'welcome': 'مرحبًا' if ar else 'Welcome',
+            'manage_context': 'أدر مساحات العمل والشركة والفرع من مكان واحد.' if ar else 'Manage your workspaces, company, and branch from one place.',
+            'sign_out': 'تسجيل الخروج' if ar else 'Sign out',
+            'platform_status': 'حالة المنصة' if ar else 'Platform status',
+            'company': 'الشركة' if ar else 'Company',
+            'branch': 'الفرع' if ar else 'Branch',
+            'all_branches': 'جميع الفروع' if ar else 'All branches',
+            'search_placeholder': 'ابحث في الطلبات والعملاء والمزيد...' if ar else 'Search orders, customers and more...',
+            'search': 'بحث' if ar else 'Search',
+            'applications': 'التطبيقات' if ar else 'Applications',
+            'healthy': 'مستقر' if ar else 'Healthy',
+            'needs_attention': 'بحاجة إلى متابعة' if ar else 'Needs attention',
+            'active_sessions': 'الجلسات النشطة' if ar else 'Active sessions',
+            'workspaces': 'مساحات العمل' if ar else 'Workspaces',
+            'recent_activity': 'النشاط الأخير' if ar else 'Recent activity',
+        }
+
+    def _render(self, template, values=None, user=None, requested=None):
+        values = dict(values or {})
+        language = self._apply_language(user=user, requested=requested)
+        values.update({
+            'ui_lang': language,
+            'is_rtl': language.startswith('ar'),
+            'ui_text': self._platform_text(language),
+        })
+        return request.render(template, values)
+
+    def _workspace_action_urls(self, action_items):
+        """Resolve safe dynamic URL placeholders for workspace actions.
+
+        Applications may use ``/{brand}/...`` in their workspace item URL.
+        The placeholder is resolved at request time from the Operations public
+        brand prefix, so changing the setting takes effect after a refresh and
+        does not require a module upgrade.
+        """
+        raw_prefix = request.env['ir.config_parameter'].sudo().get_param(
+            'flexsys_operations.public_url_prefix', 'brand'
+        )
+        brand = re.sub(
+            r'[^a-z0-9-]+', '-', (raw_prefix or 'brand').strip().lower()
+        ).strip('-') or 'brand'
+
+        resolved = {}
+        for item in action_items:
+            url = item.action_url or '#'
+            resolved[item.id] = url.replace('{brand}', brand)
+        return resolved
+
     def _current_session(self):
         session_id = request.session.get(SESSION_ID_KEY)
         token = request.session.get(SESSION_TOKEN_KEY)
@@ -25,6 +98,7 @@ class FlexSysPlatformController(http.Controller):
             request.session.pop(SESSION_TOKEN_KEY, None)
             return False
         session.touch()
+        self._apply_language(user=session.user_id)
         return session
 
     def _current_user(self):
@@ -71,6 +145,7 @@ class FlexSysPlatformController(http.Controller):
                 )
                 request.session[SESSION_ID_KEY] = session.id
                 request.session[SESSION_TOKEN_KEY] = token
+                self._apply_language(user=user)
                 request.env['flexsys.system.log'].record(
                     'authentication', 'login', platform_user_id=user.id,
                     company_id=session.company_id.id,
@@ -86,7 +161,7 @@ class FlexSysPlatformController(http.Controller):
                 ip_address=request.httprequest.remote_addr,
                 user_agent=request.httprequest.user_agent.string,
             )
-        return request.render('flexsys_platform.login_page', {'error': error})
+        return self._render('flexsys_platform.login_page', {'error': error}, user=active_session.user_id if active_session else None)
 
     @http.route('/flexsys/logout', type='http', auth='public', website=True, methods=['POST'])
     def logout(self, **post):
@@ -256,7 +331,7 @@ class FlexSysPlatformController(http.Controller):
                 after_value=query[:100],
                 ip_address=request.httprequest.remote_addr,
             )
-        return request.render('flexsys_platform.search_page', {
+        return self._render('flexsys_platform.search_page', {
             'platform_user': session.user_id,
             'platform_session': session,
             'company': session.company_id,
@@ -276,6 +351,9 @@ class FlexSysPlatformController(http.Controller):
         if not app or not app.is_available_for(session.user_id):
             return request.redirect('/flexsys')
         values = app.get_workspace_values(session)
+        values['workspace_action_urls'] = self._workspace_action_urls(
+            values.get('action_items', request.env['flexsys.platform.workspace.item'])
+        )
         values.update({
             'platform_user': session.user_id,
             'platform_session': session,
@@ -289,7 +367,7 @@ class FlexSysPlatformController(http.Controller):
             application_code=app.code, description=f'Opened {app.name} workspace',
             ip_address=request.httprequest.remote_addr,
         )
-        return request.render('flexsys_platform.workspace_page', values)
+        return self._render('flexsys_platform.workspace_page', values, user=session.user_id)
 
     @http.route('/flexsys', type='http', auth='public', website=True, csrf=False)
     def launcher(self):
@@ -326,7 +404,7 @@ class FlexSysPlatformController(http.Controller):
             else 'healthy'
         )
 
-        return request.render('flexsys_platform.launcher_page', {
+        return self._render('flexsys_platform.launcher_page', {
             'platform_user': user,
             'platform_session': session,
             'applications': applications,
@@ -349,4 +427,4 @@ class FlexSysPlatformController(http.Controller):
                 )
             },
             'branch_label': self._branch_label(session.branch_id) if session.branch_id else False,
-        })
+        }, user=user)

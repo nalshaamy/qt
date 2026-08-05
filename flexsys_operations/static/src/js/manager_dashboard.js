@@ -2,9 +2,31 @@
 
 import { rpc } from "@web/core/network/rpc";
 
-const stateLabels = {scheduled:"مجدول", new:"جديد", accepted:"تم الاعتماد", preparing:"قيد التحضير", partially_ready:"جاهز جزئيًا", ready:"جاهز", completed:"مكتمل", rejected:"مرفوض", cancelled:"ملغي"};
-const typeLabels = {dine_in:"محلي", takeaway:"سفري", car:"طلب سيارة", delivery:"توصيل"};
-const paymentLabels = {cash:"نقدًا", card:"بطاقة", wallet:"محفظة إلكترونية"};
+const isRTL = document.documentElement.dir === "rtl";
+const UI = isRTL ? {
+    active_orders: "الطلبات النشطة",
+    open_tasks: "المهام المفتوحة",
+    delayed_tasks: "المهام المتأخرة",
+    available_stations: "المحطات المتاحة",
+    view_details: "عرض التفاصيل",
+} : {
+    active_orders: "Active orders",
+    open_tasks: "Open tasks",
+    delayed_tasks: "Delayed tasks",
+    available_stations: "Available stations",
+    view_details: "View details",
+};
+const t = (key, fallback) => UI[key] || fallback;
+
+const stateLabels = isRTL
+    ? {scheduled:"مجدول", new:"جديد", accepted:"تم الاعتماد", preparing:"قيد التحضير", partially_ready:"جاهز جزئيًا", ready:"جاهز", completed:"مكتمل", rejected:"مرفوض", cancelled:"ملغي"}
+    : {scheduled:"Scheduled", new:"New", accepted:"Accepted", preparing:"Preparing", partially_ready:"Partially ready", ready:"Ready", completed:"Completed", rejected:"Rejected", cancelled:"Cancelled"};
+const typeLabels = isRTL
+    ? {dine_in:"محلي", takeaway:"سفري", car:"طلب سيارة", delivery:"توصيل"}
+    : {dine_in:"Dine in", takeaway:"Takeaway", car:"Car order", delivery:"Delivery"};
+const paymentLabels = isRTL
+    ? {cash:"نقدًا", card:"بطاقة", wallet:"محفظة إلكترونية"}
+    : {cash:"Cash", card:"Card", wallet:"Electronic wallet"};
 
 function money(value) { return Number(value || 0).toFixed(2); }
 function formatDateTime(value) { return value ? String(value).replace("T", " ").slice(0, 16) : "-"; }
@@ -36,10 +58,10 @@ function renderMissionControl(data) {
     }
 
     const kpis = [
-        ["الطلبات النشطة", data?.active_orders || 0, "orders"],
-        ["المهام المفتوحة", data?.open_tasks || 0, "tasks"],
-        ["المهام المتأخرة", data?.delayed_tasks || 0, "delayed"],
-        ["المحطات المتاحة", `${data?.active_stations || 0}/${data?.total_stations || 0}`, "stations"],
+        [t("active_orders", "Active orders"), data?.active_orders || 0, "orders"],
+        [t("open_tasks", "Open tasks"), data?.open_tasks || 0, "tasks"],
+        [t("delayed_tasks", "Delayed tasks"), data?.delayed_tasks || 0, "delayed"],
+        [t("available_stations", "Available stations"), `${data?.active_stations || 0}/${data?.total_stations || 0}`, "stations"],
     ];
     const kpiBox = document.querySelector("#mission-control-kpis");
     if (kpiBox) kpiBox.innerHTML = kpis.map(([label,value,css]) => `
@@ -164,7 +186,7 @@ function renderOrders(orders) {
             <td>${order.pos_name || "-"}</td>
             <td>${money(order.amount_total)} ر.س</td>
             <td>${formatDateTime(order.create_date)}</td>
-            <td><button type="button" class="fs-view-order-details" data-order-id="${order.id}">عرض التفاصيل</button></td>
+            <td><button type="button" class="fs-view-order-details" data-order-id="${order.id}">${t("view_details", "View details")}</button></td>
         </tr>`).join("");
 
     const orderMap = new Map(orders.map((order) => [Number(order.id), order]));

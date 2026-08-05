@@ -2042,3 +2042,46 @@ textarea {
 .fs-active-order-link span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fs-active-order-link strong { white-space: nowrap; }
 @media (min-width: 760px) { .fs-active-order-link { inset-inline-start: auto; width: 420px; } }
+
+
+/* FlexSys bidirectional layout normalization */
+html[dir="rtl"] body { direction: rtl; text-align: right; }
+html[dir="ltr"] body { direction: ltr; text-align: left; }
+html[dir="rtl"] input,
+html[dir="rtl"] textarea,
+html[dir="rtl"] select { text-align: right; }
+html[dir="ltr"] input,
+html[dir="ltr"] textarea,
+html[dir="ltr"] select { text-align: left; }
+html[dir="rtl"] .fa,
+html[dir="rtl"] [class*="icon"] { direction: ltr; }
+html[dir="rtl"] [dir="ltr"],
+html[dir="rtl"] .fs-ltr,
+html[dir="rtl"] time,
+html[dir="rtl"] .fs-order-number,
+html[dir="rtl"] .fs-money,
+html[dir="rtl"] input[type="date"],
+html[dir="rtl"] input[type="datetime-local"],
+html[dir="rtl"] input[type="tel"],
+html[dir="rtl"] input[type="email"] {
+    direction: ltr;
+    unicode-bidi: isolate;
+    text-align: left;
+}
+.fs-manager-header,
+.fs-manager-tabs,
+.fs-manager-kpi-grid,
+.fs-manager-filters,
+.fs-mission-controls,
+.fs-mission-topbar,
+.fs-context-switcher,
+.fs-global-search,
+.fs-app-card,
+.fs-activity-item,
+.fs-order-details-summary {
+    direction: inherit;
+}
+html[dir="rtl"] .fs-app-arrow,
+html[dir="rtl"] .fa-arrow-right { transform: scaleX(-1); }
+html[dir="ltr"] .fs-app-arrow,
+html[dir="ltr"] .fa-arrow-right { transform: none; }

@@ -36,6 +36,7 @@ class FlexSysOperationsManagerAccount(models.Model):
         help='The manager can view and manage only these POS branches.',
     )
     active = fields.Boolean(default=True)
+    language = fields.Selection(selection=lambda self: self.env['res.lang'].get_installed(), default=lambda self: self.env.lang)
     can_view_dashboard = fields.Boolean(default=True)
     can_manage_store = fields.Boolean(default=True)
     last_login = fields.Datetime(readonly=True)

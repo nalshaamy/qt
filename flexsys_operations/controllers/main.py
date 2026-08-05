@@ -19,6 +19,95 @@ _logger = logging.getLogger(__name__)
 
 class FlexSysOperationsQrMenuController(http.Controller):
 
+    @staticmethod
+    def _normalize_ui_language(language):
+        code = (language or 'en_US').replace('-', '_')
+        return 'ar_001' if code.lower().startswith('ar') else 'en_US'
+
+    def _platform_language(self):
+        session_id = request.session.get('flexsys_platform_session_id')
+        token = request.session.get('flexsys_platform_token')
+        if not session_id or not token:
+            return False
+        session = request.env['flexsys.platform.session'].sudo().browse(session_id).exists()
+        if session and session.verify_token(token):
+            return session.user_id.language
+        return False
+
+    def _apply_ui_language(self, manager=None, requested=None):
+        language = self._normalize_ui_language(
+            requested
+            or self._platform_language()
+            or (manager.language if manager else False)
+            or request.session.get('flexsys_lang')
+            or request.env.lang
+        )
+        request.session['flexsys_lang'] = language
+        request.update_context(lang=language)
+        return language
+
+    @staticmethod
+    def _ui_text(language):
+        ar = language.startswith('ar')
+        return {
+            'mission_control': 'مركز القيادة' if ar else 'Mission Control',
+            'smart_operations_platform': 'منصة العمليات الذكية' if ar else 'Smart Operations Platform',
+            'welcome': 'مرحبًا' if ar else 'Welcome',
+            'logout': 'تسجيل الخروج' if ar else 'Sign out',
+            'product_preview': 'معاينة قائمة المنتجات' if ar else 'Preview product list',
+            'overview': 'ملخص الفروع' if ar else 'Branch overview',
+            'orders': 'الطلبات' if ar else 'Orders',
+            'customers': 'العملاء المميزون' if ar else 'Top customers',
+            'management': 'الإدارة والإعدادات' if ar else 'Management & settings',
+            'command_center': 'مركز القيادة' if ar else 'Command center',
+            'operational_overview': 'نظرة تشغيلية شاملة' if ar else 'Operational overview',
+            'active_orders': 'الطلبات النشطة' if ar else 'Active orders',
+            'open_tasks': 'المهام المفتوحة' if ar else 'Open tasks',
+            'delayed_tasks': 'المهام المتأخرة' if ar else 'Delayed tasks',
+            'available_stations': 'المحطات المتاحة' if ar else 'Available stations',
+            'applications_shortcuts': 'التطبيقات والاختصارات' if ar else 'Applications & shortcuts',
+            'station_status': 'حالة المحطات' if ar else 'Station status',
+            'latest_events': 'آخر الأحداث' if ar else 'Latest events',
+            'from_date': 'من تاريخ' if ar else 'From date',
+            'to_date': 'إلى تاريخ' if ar else 'To date',
+            'state': 'الحالة' if ar else 'Status',
+            'pos': 'نقطة البيع' if ar else 'Point of sale',
+            'customer_type': 'نوع العميل' if ar else 'Customer type',
+            'show': 'عرض' if ar else 'Apply',
+            'all_states': 'كل الحالات' if ar else 'All statuses',
+            'all_pos': 'كل نقاط البيع' if ar else 'All points of sale',
+            'all': 'الكل' if ar else 'All',
+            'registered': 'مسجل' if ar else 'Registered',
+            'guest': 'زائر' if ar else 'Guest',
+            'latest_orders': 'آخر الطلبات' if ar else 'Latest orders',
+            'order': 'الطلب' if ar else 'Order',
+            'customer': 'العميل' if ar else 'Customer',
+            'order_type': 'نوع الطلب' if ar else 'Order type',
+            'payment': 'الدفع' if ar else 'Payment',
+            'total': 'الإجمالي' if ar else 'Total',
+            'date': 'التاريخ' if ar else 'Date',
+            'details': 'التفاصيل' if ar else 'Details',
+            'view_details': 'عرض التفاصيل' if ar else 'View details',
+            'back_orders': 'العودة إلى آخر الطلبات' if ar else 'Back to latest orders',
+            'settings': 'الإعدادات' if ar else 'Settings',
+            'branches': 'الفروع' if ar else 'Branches',
+            'products': 'المنتجات' if ar else 'Products',
+            'execution': 'التنفيذ' if ar else 'Execution',
+            'healthy': 'مستقر' if ar else 'Healthy',
+        }
+
+    def _render(self, template, values=None, manager=None, requested=None):
+        values = dict(values or {})
+        language = self._apply_ui_language(manager=manager, requested=requested)
+        values.update({
+            'ui_lang': language,
+            'is_rtl': language.startswith('ar'),
+            'language': 'ar' if language.startswith('ar') else 'en',
+            'ui_text': self._ui_text(language),
+        })
+        return self._render(template, values)
+
+
 
     def _public_brand_prefix(self):
         raw = request.env['ir.config_parameter'].sudo().get_param(
@@ -347,7 +436,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
     def customer_start(self, **kwargs):
         store_settings = self._get_store_settings()
         if not store_settings.is_open and not store_settings.allow_browse_when_closed:
-            return request.render('flexsys_operations.qr_store_closed_page', {
+            return self._render('flexsys_operations.qr_store_closed_page', {
                 'store_settings': store_settings,
                 'store_closed_message': store_settings.closed_message or 'المتجر مغلق حاليًا.',
                 'store_reopen_at': store_settings.reopen_at,
@@ -363,7 +452,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
         guest_url = '/qr-menu/shop?' + urlencode(shop_params)
         login_url = '/qr-menu/login?' + urlencode({'redirect': login_redirect})
         register_url = '/qr-menu/register?' + urlencode({'redirect': login_redirect})
-        return request.render('flexsys_operations.qr_customer_start_page', {
+        return self._render('flexsys_operations.qr_customer_start_page', {
             'guest_url': guest_url,
             'login_url': login_url,
             'register_url': register_url,
@@ -404,7 +493,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
 
         values['register_url'] = '/qr-menu/register?' + urlencode({'redirect': values['redirect']})
         values['forgot_url'] = '/qr-menu/forgot-password?' + urlencode({'redirect': values['redirect']})
-        return request.render('flexsys_operations.qr_phone_login_page', values)
+        return self._render('flexsys_operations.qr_phone_login_page', values)
 
 
     @http.route(['/self-order/forgot-password', '/qr-menu/forgot-password'], type='http', auth='public', website=True, methods=['GET', 'POST'], csrf=True)
@@ -436,7 +525,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
                     'إذا كان البريد مرتبطًا بحساب، فسيصلك رابط إعادة تعيين كلمة المرور خلال دقائق.'
                 )
 
-        return request.render('flexsys_operations.qr_forgot_password_page', values)
+        return self._render('flexsys_operations.qr_forgot_password_page', values)
 
     @http.route(['/self-order/register', '/qr-menu/register'], type='http', auth='public', website=True, methods=['GET', 'POST'], csrf=True)
     def customer_phone_register(self, **post):
@@ -531,13 +620,13 @@ class FlexSysOperationsQrMenuController(http.Controller):
                 return request.redirect(redirect)
 
         values['login_url'] = '/qr-menu/login?' + urlencode({'redirect': values['redirect']})
-        return request.render('flexsys_operations.qr_phone_register_page', values)
+        return self._render('flexsys_operations.qr_phone_register_page', values)
 
     @http.route(['/self-order/menu', '/flexsys_operations/menu', '/qr-menu/shop'], type='http', auth='public', website=True, csrf=False)
     def menu(self, **kwargs):
         store_settings = self._get_store_settings()
         if not store_settings.is_open and not store_settings.allow_browse_when_closed:
-            return request.render('flexsys_operations.qr_store_closed_page', {
+            return self._render('flexsys_operations.qr_store_closed_page', {
                 'store_settings': store_settings,
                 'store_closed_message': store_settings.closed_message or 'المتجر مغلق حاليًا.',
                 'store_reopen_at': store_settings.reopen_at,
@@ -548,21 +637,21 @@ class FlexSysOperationsQrMenuController(http.Controller):
         selected_branch = values.get('selected_branch')
 
         if branches and len(branches) > 1 and not selected_branch:
-            return request.render('flexsys_operations.qr_branch_selector_page', {
+            return self._render('flexsys_operations.qr_branch_selector_page', {
                 'branches': branches,
                 'branch_values': values.get('branch_values', []),
                 'public_base_url': self._public_base_url(),
             })
 
         if selected_branch and not selected_branch.operations_branch_is_open:
-            return request.render('flexsys_operations.qr_branch_closed_page', {
+            return self._render('flexsys_operations.qr_branch_closed_page', {
                 'branch': selected_branch,
                 'branch_name': selected_branch.operations_branch_name or selected_branch.display_name,
                 'branch_closed_message': selected_branch.operations_branch_closed_message or 'هذا الفرع مغلق حاليًا.',
                 'public_base_url': self._public_base_url(),
             })
 
-        return request.render('flexsys_operations.qr_menu_page', values)
+        return self._render('flexsys_operations.qr_menu_page', values)
 
     @http.route(['/self-order/orders', '/qr-menu/my-orders'], type='http', auth='user', website=True)
     def my_orders(self, **kwargs):
@@ -582,7 +671,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
         if unlinked_orders:
             unlinked_orders.write({'partner_id': partner.id})
 
-        return request.render('flexsys_operations.qr_my_orders_page', {
+        return self._render('flexsys_operations.qr_my_orders_page', {
             'orders': orders,
             'customer_partner': partner,
             'public_base_url': self._public_base_url(),
@@ -633,6 +722,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
             else:
                 raw_token = secrets.token_urlsafe(48)
                 manager.create_session(raw_token, hours=12)
+                self._apply_ui_language(manager=manager)
                 response = request.redirect('/flexsys/operations/orders')
                 response.set_cookie(
                     self._get_manager_cookie_name(),
@@ -645,7 +735,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
                 )
                 return response
 
-        return request.render('flexsys_operations.qr_manager_login_page', values)
+        return self._render('flexsys_operations.qr_manager_login_page', values)
 
     @http.route('/operations/logout', type='http', auth='public', website=True, csrf=False)
     def operations_platform_logout(self, **kwargs):
@@ -672,10 +762,10 @@ class FlexSysOperationsQrMenuController(http.Controller):
         manager = self._get_independent_manager()
         if not manager or not manager.can_view_dashboard:
             return request.redirect('/flexsys/login')
-        return request.render('flexsys_operations.qr_manager_dashboard_page', {
+        return self._render('flexsys_operations.qr_manager_dashboard_page', {
             'store_settings': self._get_store_settings(),
             'manager_account': manager,
-        })
+        }, manager=manager)
 
     def _manager_menu_products(self, products, pos_config):
         availability = self._branch_product_availability_map(pos_config, products)
@@ -1147,11 +1237,11 @@ class FlexSysOperationsQrMenuController(http.Controller):
 
     @http.route(['/flexsys/operations/cashier', '/operations/cashier', '/flexsys_operations/cashier'], type='http', auth='user')
     def cashier_dashboard(self, **kwargs):
-        return request.render('flexsys_operations.cashier_dashboard_page', {})
+        return self._render('flexsys_operations.cashier_dashboard_page', {})
 
     @http.route(['/flexsys/operations/kitchen', '/operations/kitchen', '/flexsys_operations/kds'], type='http', auth='user')
     def kds_dashboard(self, **kwargs):
-        return request.render('flexsys_operations.kds_dashboard_page', {})
+        return self._render('flexsys_operations.kds_dashboard_page', {})
 
     @http.route('/self-order/track/<string:token>', type='http', auth='public', website=True, sitemap=False)
     def customer_order_tracking(self, token, lang='ar', **kwargs):
@@ -1159,12 +1249,12 @@ class FlexSysOperationsQrMenuController(http.Controller):
         if not order:
             return request.not_found()
         language = 'en' if lang == 'en' else 'ar'
-        return request.render('flexsys_operations.customer_order_tracking_page', {
+        return self._render('flexsys_operations.customer_order_tracking_page', {
             'order': order,
             'tracking': order._customer_tracking_payload(language=language),
             'language': language,
             'public_base_url': self._public_base_url(),
-        })
+        }, requested=lang)
 
     @http.route('/self-order/api/track/<string:token>', type='jsonrpc', auth='public', csrf=False)
     def customer_order_tracking_api(self, token, language='ar'):

@@ -1,7 +1,7 @@
 <odoo>
 
     <template id="qr_customer_start_page" name="FlexSys Customer Type">
-        <html lang="ar" dir="rtl">
+        <html t-att-lang="ui_lang or 'ar_001'" t-att-dir="'rtl' if is_rtl else 'ltr'">
             <head>
                 <title>قطفة تشرين | اختر طريقة الطلب</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
@@ -57,7 +57,7 @@
     </template>
 
     <template id="qr_menu_page" name="Qatfat Tashrin QR Product List">
-        <html lang="ar" dir="rtl">
+        <html t-att-lang="ui_lang or 'ar_001'" t-att-dir="'rtl' if is_rtl else 'ltr'">
             <head>
                 <title>قطفة تشرين | QR Product List</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
@@ -315,7 +315,7 @@
     </template>
 
     <template id="customer_order_tracking_page" name="Customer Order Timeline">
-        <html t-att-lang="language" t-att-dir="'rtl' if language == 'ar' else 'ltr'">
+        <html t-att-lang="ui_lang or language" t-att-dir="'rtl' if is_rtl else 'ltr'">
             <head>
                 <title><t t-esc="order.name"/> · FlexSys</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -361,7 +361,7 @@
     </template>
 
     <template id="cashier_dashboard_page" name="FlexSys Cashier Dashboard">
-        <html lang="ar" dir="rtl">
+        <html t-att-lang="ui_lang or 'ar_001'" t-att-dir="'rtl' if is_rtl else 'ltr'">
             <head>
                 <title>FlexSys Cashier</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -396,7 +396,7 @@
     </template>
 
     <template id="kds_dashboard_page" name="FlexSys KDS Dashboard">
-        <html lang="ar" dir="rtl">
+        <html t-att-lang="ui_lang or 'ar_001'" t-att-dir="'rtl' if is_rtl else 'ltr'">
             <head>
                 <title>FlexSys KDS</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -431,7 +431,7 @@
     </template>
 
     <template id="qr_my_orders_page" name="FlexSys My Orders">
-        <html lang="ar" dir="rtl">
+        <html t-att-lang="ui_lang or 'ar_001'" t-att-dir="'rtl' if is_rtl else 'ltr'">
             <head>
                 <title>قطفة تشرين | طلباتي</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
@@ -522,7 +522,7 @@
 
 
     <template id="qr_phone_login_page" name="FlexSys Phone Login">
-        <html lang="ar" dir="rtl">
+        <html t-att-lang="ui_lang or 'ar_001'" t-att-dir="'rtl' if is_rtl else 'ltr'">
             <head>
                 <title>قطفة تشرين | تسجيل الدخول</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
@@ -595,7 +595,7 @@
     </template>
 
     <template id="qr_phone_register_page" name="FlexSys Phone Registration">
-        <html lang="ar" dir="rtl">
+        <html t-att-lang="ui_lang or 'ar_001'" t-att-dir="'rtl' if is_rtl else 'ltr'">
             <head>
                 <title>قطفة تشرين | إنشاء حساب</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
@@ -683,7 +683,7 @@
 
 
     <template id="qr_forgot_password_page" name="FlexSys Forgot Password">
-        <html lang="ar" dir="rtl">
+        <html t-att-lang="ui_lang or 'ar_001'" t-att-dir="'rtl' if is_rtl else 'ltr'">
             <head>
                 <title>قطفة تشرين | استعادة كلمة المرور</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
@@ -746,7 +746,7 @@
 
 
         <template id="qr_manager_dashboard_page" name="FlexSys Mission Control">
-        <html lang="ar" dir="rtl">
+        <html t-att-lang="ui_lang or 'ar_001'" t-att-dir="'rtl' if is_rtl else 'ltr'">
             <head>
                 <title>FlexSys | Mission Control</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
@@ -761,7 +761,7 @@
                             <img src="/flexsys_operations/static/src/img/flexsys_app_icon.png" alt="FlexSys"/>
                             <div>
                                 <span>FLEXSYS · SMART OPERATIONS PLATFORM</span>
-                                <h1>Mission Control</h1>
+                                <h1 t-esc="ui_text['mission_control']"/>
                                 <small t-if="manager_account">مرحبًا <t t-esc="manager_account.name"/></small>
                             </div>
                         </div>
@@ -772,11 +772,11 @@
                     </header>
 
                     <nav class="fs-manager-tabs fs-manager-tabs-pro">
-                        <button type="button" class="fs-manager-tab active" data-dashboard-tab="mission-control">مركز القيادة</button>
-                        <button type="button" class="fs-manager-tab" data-dashboard-tab="overview">ملخص الفروع</button>
-                        <button type="button" class="fs-manager-tab" data-dashboard-tab="orders">الطلبات</button>
-                        <button type="button" class="fs-manager-tab" data-dashboard-tab="customers">العملاء المميزون</button>
-                        <button type="button" class="fs-manager-tab" data-dashboard-tab="management">الإدارة والإعدادات</button>
+                        <button type="button" class="fs-manager-tab active" data-dashboard-tab="mission-control" t-esc="ui_text['command_center']"/>
+                        <button type="button" class="fs-manager-tab" data-dashboard-tab="overview" t-esc="ui_text['overview']"/>
+                        <button type="button" class="fs-manager-tab" data-dashboard-tab="orders" t-esc="ui_text['orders']"/>
+                        <button type="button" class="fs-manager-tab" data-dashboard-tab="customers" t-esc="ui_text['customers']"/>
+                        <button type="button" class="fs-manager-tab" data-dashboard-tab="management" t-esc="ui_text['management']"/>
                     </nav>
 
                     <section class="fs-dashboard-page active" data-dashboard-page="mission-control">
@@ -820,7 +820,7 @@
 
                     <section class="fs-dashboard-page" data-dashboard-page="overview">
                         <div class="fs-dashboard-page-heading">
-                            <div><span class="fs-section-label">ملخص الأداء</span><h2>ملخص الفروع</h2></div>
+                            <div><span class="fs-section-label">ملخص الأداء</span><h2 t-esc="ui_text['overview']"/></div>
                         </div>
                         <section class="fs-manager-filters">
                             <div><label>من تاريخ</label><input id="filter-date-from" type="date"/></div>
@@ -853,11 +853,11 @@
                     </section>
 
                     <section class="fs-dashboard-page" data-dashboard-page="orders">
-                        <div class="fs-dashboard-page-heading"><div><span class="fs-section-label">الطلبات</span><h2>آخر الطلبات</h2></div></div>
+                        <div class="fs-dashboard-page-heading"><div><span class="fs-section-label">الطلبات</span><h2 t-esc="ui_text['latest_orders']"/></div></div>
                         <section class="fs-manager-panel fs-orders-panel">
                             <div class="fs-table-wrap"><table><thead><tr>
-                                <th>الطلب</th><th>العميل</th><th>نوع الطلب</th><th>الدفع</th>
-                                <th>الحالة</th><th>نقطة البيع</th><th>الإجمالي</th><th>التاريخ</th><th>التفاصيل</th>
+                                <th t-esc="ui_text['order']"/><th t-esc="ui_text['customer']"/><th t-esc="ui_text['order_type']"/><th t-esc="ui_text['payment']"/>
+                                <th t-esc="ui_text['state']"/><th t-esc="ui_text['pos']"/><th t-esc="ui_text['total']"/><th t-esc="ui_text['date']"/><th t-esc="ui_text['details']"/>
                             </tr></thead><tbody id="recent-orders-body"></tbody></table></div>
                         </section>
                     </section>
@@ -865,7 +865,7 @@
                     <section class="fs-dashboard-page" data-dashboard-page="order-details">
                         <div class="fs-dashboard-page-heading fs-order-details-heading">
                             <div><span class="fs-section-label">تفاصيل الطلب</span><h2 id="order-details-title">الطلب</h2></div>
-                            <button id="back-to-orders" type="button" class="fs-back-orders-btn">العودة إلى آخر الطلبات</button>
+                            <button id="back-to-orders" type="button" class="fs-back-orders-btn" t-esc="ui_text['back_orders']"/>
                         </div>
                         <section id="order-details-content" class="fs-manager-panel fs-order-details-panel">
                             <div class="fs-manager-empty">اختر طلبًا لعرض تفاصيله.</div>
@@ -928,7 +928,7 @@
     </template>
 
     <template id="qr_manager_forbidden_page" name="FlexSys Manager Forbidden">
-        <html lang="ar" dir="rtl">
+        <html t-att-lang="ui_lang or 'ar_001'" t-att-dir="'rtl' if is_rtl else 'ltr'">
             <head>
                 <title>FlexSys | غير مصرح</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -949,7 +949,7 @@
 
 
     <template id="qr_manager_login_page" name="FlexSys Independent Manager Login">
-        <html lang="ar" dir="rtl">
+        <html t-att-lang="ui_lang or 'ar_001'" t-att-dir="'rtl' if is_rtl else 'ltr'">
             <head>
                 <title>FlexSys | دخول المدير</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
@@ -989,7 +989,7 @@
 
 
     <template id="qr_store_closed_page" name="FlexSys Store Closed">
-        <html lang="ar" dir="rtl">
+        <html t-att-lang="ui_lang or 'ar_001'" t-att-dir="'rtl' if is_rtl else 'ltr'">
             <head>
                 <title>قطفة تشرين | المتجر مغلق</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
@@ -1016,7 +1016,7 @@
 
 
     <template id="qr_branch_selector_page" name="FlexSys Branch Selector">
-        <html lang="ar" dir="rtl">
+        <html t-att-lang="ui_lang or 'ar_001'" t-att-dir="'rtl' if is_rtl else 'ltr'">
             <head>
                 <title>قطفة تشرين | اختر الفرع</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
@@ -1130,7 +1130,7 @@
     </template>
 
     <template id="qr_branch_closed_page" name="FlexSys Branch Closed">
-        <html lang="ar" dir="rtl">
+        <html t-att-lang="ui_lang or 'ar_001'" t-att-dir="'rtl' if is_rtl else 'ltr'">
             <head>
                 <title>قطفة تشرين | الفرع مغلق</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>

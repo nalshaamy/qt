@@ -2,7 +2,7 @@
 <odoo>
 
     <template id="flexsys_layout" name="FlexSys Standalone Layout">
-        <html t-att-lang="request.env.lang or 'en_US'" t-att-dir="'rtl' if (request.env.lang or '').startswith('ar') else 'ltr'">
+        <html t-att-lang="ui_lang or request.env.lang or 'en_US'" t-att-dir="'rtl' if is_rtl else 'ltr'">
             <head>
                 <meta charset="utf-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
@@ -40,7 +40,7 @@
                 <div class="fs-login-card">
                     <div class="fs-brand">
                         <div class="fs-brand-mark">FS</div>
-                        <div><h1>FlexSys</h1><p>Smart Operations Platform</p></div>
+                        <div><h1>FlexSys</h1><p t-esc="ui_text['smart_operations_platform']"/></div>
                     </div>
                     <form method="post" action="/flexsys/login">
                         <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
@@ -64,28 +64,28 @@
                         <div class="fs-mission-topbar">
                             <div class="fs-brand fs-brand-on-dark">
                                 <div class="fs-brand-mark">FS</div>
-                                <div><h1>FlexSys</h1><p>Smart Operations Platform</p></div>
+                                <div><h1>FlexSys</h1><p t-esc="ui_text['smart_operations_platform']"/></div>
                             </div>
                             <div class="fs-mission-actions">
                                 <span class="fs-user-pill fs-user-pill-dark" t-esc="platform_user.name"/>
                                 <form method="post" action="/flexsys/logout" class="fs-logout-form">
                                     <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
-                                    <button type="submit" class="fs-btn fs-btn-light"><span class="fa fa-sign-out"/>Sign out</button>
+                                    <button type="submit" class="fs-btn fs-btn-light"><span class="fa fa-sign-out"/><t t-esc="ui_text['sign_out']"/></button>
                                 </form>
                             </div>
                         </div>
 
                         <div class="fs-mission-content">
                             <div class="fs-welcome-content">
-                                <span class="fs-eyebrow"><span class="fa fa-compass"/> Mission Control</span>
-                                <h2>Welcome, <t t-esc="platform_user.name"/></h2>
-                                <p>Manage your workspaces, company, and branch from one place.</p>
+                                <span class="fs-eyebrow"><span class="fa fa-compass"/> <t t-esc="ui_text['mission_control']"/></span>
+                                <h2><t t-esc="ui_text['welcome']"/>, <t t-esc="platform_user.name"/></h2>
+                                <p t-esc="ui_text['manage_context']"/>
                             </div>
                             <div class="fs-health-summary">
                                 <span t-attf-class="fs-status-chip fs-status-#{platform_health}">
                                     <span class="fs-status-dot"/><t t-esc="platform_health.title()"/>
                                 </span>
-                                <strong>Platform status</strong>
+                                <strong t-esc="ui_text['platform_status']"/>
                             </div>
                         </div>
 
@@ -95,7 +95,7 @@
                                 <span class="fs-context-icon fa fa-building" aria-hidden="true"/>
                                 <div class="fs-context-fields">
                                     <label>
-                                        <span>Company</span>
+                                        <span t-esc="ui_text['company']"/>
                                         <select name="company_id" aria-label="Company" onchange="this.form.submit()">
                                             <option t-foreach="allowed_companies" t-as="item"
                                                     t-att-value="item.id" t-att-selected="item == company"
@@ -103,9 +103,9 @@
                                         </select>
                                     </label>
                                     <label>
-                                        <span>Branch</span>
+                                        <span t-esc="ui_text['branch']"/>
                                         <select name="branch_id" aria-label="Branch" onchange="this.form.submit()">
-                                            <option value="">All branches</option>
+                                            <option value="" t-esc="ui_text['all_branches']"/>
                                             <option t-foreach="allowed_branches" t-as="item"
                                                     t-att-value="item.id" t-att-selected="item == branch"
                                                     t-esc="branch_labels.get(item.id, item.name)"/>
@@ -116,8 +116,8 @@
 
                             <form action="/flexsys/search" method="get" class="fs-global-search fs-global-search-in-header" role="search">
                                 <span class="fa fa-search" aria-hidden="true"/>
-                                <input type="search" name="q" minlength="2" maxlength="100" placeholder="Search orders, customers and more..." aria-label="Search FlexSys"/>
-                                <button type="submit" class="fs-btn fs-btn-light">Search</button>
+                                <input type="search" name="q" minlength="2" maxlength="100" t-att-placeholder="ui_text['search_placeholder']" aria-label="Search FlexSys"/>
+                                <button type="submit" class="fs-btn fs-btn-light"> <t t-esc="ui_text['search']"/></button>
                             </form>
                         </div>
                     </header>
@@ -128,25 +128,25 @@
                         <section class="fs-kpi-grid" aria-label="Platform overview">
                             <article class="fs-kpi-card">
                                 <span class="fs-kpi-icon fa fa-th-large"/>
-                                <div><span>Applications</span><strong t-esc="len(applications)"/></div>
+                                <div><span t-esc="ui_text['applications']"/><strong t-esc="len(applications)"/></div>
                             </article>
                             <article class="fs-kpi-card">
                                 <span class="fs-kpi-icon fa fa-check-circle"/>
-                                <div><span>Healthy</span><strong t-esc="health_counts['healthy']"/></div>
+                                <div><span t-esc="ui_text['healthy']"/><strong t-esc="health_counts['healthy']"/></div>
                             </article>
                             <article class="fs-kpi-card">
                                 <span class="fs-kpi-icon fa fa-exclamation-triangle"/>
-                                <div><span>Needs attention</span><strong t-esc="health_counts['degraded'] + health_counts['unavailable']"/></div>
+                                <div><span t-esc="ui_text['needs_attention']"/><strong t-esc="health_counts['degraded'] + health_counts['unavailable']"/></div>
                             </article>
                             <article class="fs-kpi-card">
                                 <span class="fs-kpi-icon fa fa-users"/>
-                                <div><span>Active sessions</span><strong t-esc="active_sessions"/></div>
+                                <div><span t-esc="ui_text['active_sessions']"/><strong t-esc="active_sessions"/></div>
                             </article>
                         </section>
 
                         <section>
                             <div t-if="len(applications) &gt; 1" class="fs-section-head">
-                                <div><h2>Workspaces</h2><p>Only applications available to your role are shown.</p></div>
+                                <div><h2 t-esc="ui_text['workspaces']"/><p>Only applications available to your role are shown.</p></div>
                             </div>
                             <div class="fs-app-grid">
                                 <a t-foreach="applications" t-as="app" t-att-href="'/flexsys/open/%s' % app.code" class="fs-app-card">
@@ -172,7 +172,7 @@
 
                         <section t-if="can_view_activity" class="fs-activity-section">
                             <div class="fs-section-head">
-                                <div><h2>Recent activity</h2><p>Latest platform events in the current context.</p></div>
+                                <div><h2 t-esc="ui_text['recent_activity']"/><p>Latest platform events in the current context.</p></div>
                             </div>
                             <div class="fs-panel">
                                 <div t-if="recent_logs" class="fs-activity-list">
@@ -222,7 +222,7 @@
                         </section>
                         <section t-if="action_items">
                             <div class="fs-section-head"><div><h2>Quick actions</h2><p>Common tasks for this workspace.</p></div></div>
-                            <div class="fs-action-grid"><a t-foreach="action_items" t-as="item" t-att-href="item.action_url or '#'" class="fs-action-card"><span t-attf-class="fa #{item.icon}"/><div><strong t-esc="item.title"/><small t-esc="item.description"/></div><span class="fa fa-arrow-right"/></a></div>
+                            <div class="fs-action-grid"><a t-foreach="action_items" t-as="item" t-att-href="workspace_action_urls.get(item.id, item.action_url or '#')" class="fs-action-card"><span t-attf-class="fa #{item.icon}"/><div><strong t-esc="item.title"/><small t-esc="item.description"/></div><span class="fa fa-arrow-right"/></a></div>
                         </section>
                     </main>
                 </div>
@@ -244,8 +244,8 @@
                             <div><span class="fs-eyebrow"><span class="fa fa-search"/> Universal Search</span><h2>Find anything in FlexSys</h2><p><t t-esc="company.name"/><t t-if="branch"> · <t t-esc="branch.name"/></t></p></div>
                             <form action="/flexsys/search" method="get" class="fs-global-search fs-global-search-page" role="search">
                                 <span class="fa fa-search" aria-hidden="true"/>
-                                <input type="search" name="q" t-att-value="query" minlength="2" maxlength="100" autofocus="autofocus" placeholder="Search orders, customers and more..." aria-label="Search FlexSys"/>
-                                <button type="submit" class="fs-btn fs-btn-primary">Search</button>
+                                <input type="search" name="q" t-att-value="query" minlength="2" maxlength="100" autofocus="autofocus" t-att-placeholder="ui_text['search_placeholder']" aria-label="Search FlexSys"/>
+                                <button type="submit" class="fs-btn fs-btn-primary"> <t t-esc="ui_text['search']"/></button>
                             </form>
                         </section>
                         <section class="fs-search-results">

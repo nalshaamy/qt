@@ -7,6 +7,7 @@
             <list string="Independent Managers">
                 <field name="name"/>
                 <field name="login"/>
+                            <field name="language"/>
                 <field name="pos_config_ids" widget="many2many_tags"/>
                 <field name="active"/>
                 <field name="can_view_dashboard"/>
