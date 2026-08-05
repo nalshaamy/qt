@@ -136,7 +136,6 @@
                                         <option value="en_US" t-att-selected="ui_lang == 'en_US'">English</option>
                                     </select>
                                 </form>
-                                <span class="fs-user-pill fs-user-pill-dark" t-esc="platform_user.name"/>
                                 <form method="post" action="/flexsys/logout" class="fs-logout-form">
                                     <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
                                     <button type="submit" class="fs-btn fs-btn-light"><span class="fa fa-sign-out"/><t t-esc="ui_text['sign_out']"/></button>
@@ -194,35 +193,47 @@
 
                     <main>
 
-                        <section class="fs-kpi-grid" aria-label="Platform overview">
-                            <a href="#applications" class="fs-kpi-card fs-kpi-link" data-fs-app-filter="all">
-                                <span class="fs-kpi-icon fa fa-th-large"/>
-                                <div><span t-esc="ui_text['applications']"/><strong t-esc="len(applications)"/><small t-esc="ui_text['view_applications']"/></div>
-                                <span class="fa fa-arrow-right fs-kpi-arrow"/>
-                            </a>
-                            <a href="#applications" class="fs-kpi-card fs-kpi-link" data-fs-app-filter="healthy">
-                                <span class="fs-kpi-icon fa fa-check-circle"/>
-                                <div><span t-esc="ui_text['healthy']"/><strong t-esc="health_counts['healthy']"/><small t-esc="ui_text['all_systems_operational']"/></div>
-                                <span class="fa fa-arrow-right fs-kpi-arrow"/>
-                            </a>
-                            <a href="#applications" class="fs-kpi-card fs-kpi-link" data-fs-app-filter="attention">
-                                <span class="fs-kpi-icon fa fa-exclamation-triangle"/>
-                                <div><span t-esc="ui_text['needs_attention']"/><strong t-esc="health_counts['degraded'] + health_counts['unavailable']"/><small t-esc="ui_text['review_attention_items']"/></div>
-                                <span class="fa fa-arrow-right fs-kpi-arrow"/>
-                            </a>
-                            <a t-att-href="'#recent-activity' if can_view_activity else '#applications'" class="fs-kpi-card fs-kpi-link">
-                                <span class="fs-kpi-icon fa fa-users"/>
-                                <div><span t-esc="ui_text['active_sessions']"/><strong t-esc="active_sessions"/><small t-esc="ui_text['live_sessions_now']"/></div>
-                                <span class="fa fa-arrow-right fs-kpi-arrow"/>
-                            </a>
+                        <section class="fs-kpi-grid fs-kpi-grid-display" aria-label="Platform overview">
+                            <article class="fs-kpi-card fs-kpi-display fs-kpi-applications">
+                                <span class="fs-kpi-icon fa fa-th-large" aria-hidden="true"/>
+                                <div>
+                                    <span t-esc="ui_text['applications']"/>
+                                    <strong t-esc="len(applications)"/>
+                                    <small t-esc="ui_text['view_applications']"/>
+                                </div>
+                            </article>
+                            <article class="fs-kpi-card fs-kpi-display fs-kpi-healthy">
+                                <span class="fs-kpi-icon fa fa-check-circle" aria-hidden="true"/>
+                                <div>
+                                    <span t-esc="ui_text['healthy']"/>
+                                    <strong t-esc="health_counts['healthy']"/>
+                                    <small t-esc="ui_text['all_systems_operational']"/>
+                                </div>
+                            </article>
+                            <article class="fs-kpi-card fs-kpi-display fs-kpi-attention">
+                                <span class="fs-kpi-icon fa fa-exclamation-triangle" aria-hidden="true"/>
+                                <div>
+                                    <span t-esc="ui_text['needs_attention']"/>
+                                    <strong t-esc="health_counts['degraded'] + health_counts['unavailable']"/>
+                                    <small t-esc="ui_text['review_attention_items']"/>
+                                </div>
+                            </article>
+                            <article class="fs-kpi-card fs-kpi-display fs-kpi-sessions">
+                                <span class="fs-kpi-icon fa fa-users" aria-hidden="true"/>
+                                <div>
+                                    <span t-esc="ui_text['active_sessions']"/>
+                                    <strong t-esc="active_sessions"/>
+                                    <small t-esc="ui_text['live_sessions_now']"/>
+                                </div>
+                            </article>
                         </section>
 
-                        <section id="applications">
-                            <div t-if="len(applications) &gt; 1" class="fs-section-head">
+                        <section id="applications" class="fs-workspaces-section">
+                            <div class="fs-section-head">
                                 <div><h2 t-esc="ui_text['workspaces']"/><p t-esc="ui_text['applications_note']"/></div>
                             </div>
                             <div class="fs-app-grid">
-                                <a t-foreach="applications" t-as="app" t-att-href="'/flexsys/open/%s' % app.code" t-att-data-health="app.health_status" class="fs-app-card fs-app-card-compact">
+                                <a t-foreach="applications" t-as="app" t-att-href="'/flexsys/open/%s' % app.code" t-att-data-health="app.health_status" class="fs-app-card fs-app-card-compact fs-workspace-tile">
                                     <span t-attf-class="fa #{app.icon} fs-app-icon"/>
                                     <div class="fs-app-content">
                                         <div class="fs-app-title-row">
