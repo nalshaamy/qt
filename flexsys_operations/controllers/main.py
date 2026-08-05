@@ -105,7 +105,7 @@ class FlexSysOperationsQrMenuController(http.Controller):
             'language': 'ar' if language.startswith('ar') else 'en',
             'ui_text': self._ui_text(language),
         })
-        return self._render(template, values)
+        return request.render(template, values)
 
 
 
