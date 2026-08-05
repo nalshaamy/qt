@@ -65,7 +65,7 @@ class FlexSysPlatformApplication(models.Model):
             'summary': 'Orders, execution tasks, stations and mission control',
             'icon': 'fa-diagram-project',
             'url': '/flexsys/workspace/operations',
-            'version': '19.0.3.1.4',
+            'version': '19.0.3.1.8',
             'module_name': 'flexsys_operations',
             'category': 'operations',
             'workspace_enabled': True,

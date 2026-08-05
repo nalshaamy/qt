@@ -55,7 +55,7 @@ class FlexSysPlatformController(http.Controller):
             'recent_activity': 'النشاط الأخير' if ar else 'Recent activity',
             'username': 'اسم المستخدم' if ar else 'Username',
             'password': 'كلمة المرور' if ar else 'Password',
-            'sign_in': 'تسجيل الدخول' if ar else 'Sign in',
+            'sign_in': 'دخول' if ar else 'Login',
             'applications_note': 'تظهر فقط التطبيقات المتاحة لدورك.' if ar else 'Only applications available to your role are shown.',
             'no_workspaces': 'لا توجد مساحات عمل متاحة' if ar else 'No workspaces available',
             'assign_permission': 'اطلب من المسؤول تعيين صلاحية تطبيق لحسابك.' if ar else 'Ask an administrator to assign an application permission to your account.',
@@ -75,6 +75,13 @@ class FlexSysPlatformController(http.Controller):
             'try_search': 'جرّب رقم طلب أو اسم عميل أو رقم جوال.' if ar else 'Try an order number, customer name, or mobile number.',
             'start_typing': 'ابدأ بالكتابة' if ar else 'Start typing',
             'search_permissions_note': 'يحترم البحث الشامل صلاحياتك وسياق الشركة والفرع.' if ar else 'Universal Search respects your permissions, company, and branch context.',
+            'back': 'رجوع' if ar else 'Back',
+            'view_applications': 'عرض التطبيقات' if ar else 'View applications',
+            'all_systems_operational': 'جميع الأنظمة تعمل' if ar else 'All systems operational',
+            'review_attention_items': 'راجع العناصر التي تحتاج متابعة' if ar else 'Review items needing attention',
+            'live_sessions_now': 'جلسات فعالة حاليًا' if ar else 'Live sessions right now',
+            'open_workspace': 'فتح مساحة العمل' if ar else 'Open workspace',
+
         }
 
     def _render(self, template, values=None, user=None, requested=None):
@@ -353,6 +360,9 @@ class FlexSysPlatformController(http.Controller):
                 after_value=query[:100],
                 ip_address=request.httprequest.remote_addr,
             )
+        back_url = kwargs.get('back') or request.httprequest.referrer or '/flexsys'
+        if not self._safe_internal_url(back_url):
+            back_url = '/flexsys'
         return self._render('flexsys_platform.search_page', {
             'platform_user': session.user_id,
             'platform_session': session,
@@ -360,6 +370,7 @@ class FlexSysPlatformController(http.Controller):
             'branch': session.branch_id,
             'query': query,
             'results': results,
+            'back_url': back_url,
         })
 
     @http.route('/flexsys/workspace/<string:application_code>', type='http', auth='public', website=True, csrf=False)

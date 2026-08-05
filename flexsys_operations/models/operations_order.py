@@ -291,7 +291,7 @@ class FlexSysOrder(models.Model):
                 'subtitle': subtitle,
                 'type': _('Order'),
                 'icon': 'fa-receipt',
-                'url': '/operations/dashboard?order_id=%s' % order.id,
+                'url': '/flexsys/operations/orders?focus_order=%s#order-%s' % (order.id, order.id),
             })
         return results
 

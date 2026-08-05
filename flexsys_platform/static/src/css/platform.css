@@ -453,3 +453,55 @@ html[dir="rtl"] .fs-app-arrow,
 html[dir="rtl"] .fa-arrow-right { transform: scaleX(-1); }
 html[dir="ltr"] .fs-app-arrow,
 html[dir="ltr"] .fa-arrow-right { transform: none; }
+
+/* Sprint 1: visual polish and actionable dashboard surfaces */
+.fs-brand-logo-mark {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  border-radius: 16px;
+  box-shadow: 0 12px 28px rgba(23, 50, 77, .24);
+}
+.fs-login-card .fs-brand-logo-mark { width: 58px; height: 58px; flex-basis: 58px; }
+.fs-login-card { border-radius: 24px; box-shadow: 0 24px 64px rgba(23, 50, 77, .13); }
+.fs-login-card input { min-height: 54px; border-radius: 14px; }
+.fs-login-card .fs-btn { min-height: 48px; border-radius: 14px; }
+
+.fs-kpi-link { position: relative; min-height: 126px; text-decoration: none; color: inherit; cursor: pointer; }
+.fs-kpi-link:hover { color: inherit; transform: translateY(-3px); border-color: rgba(95,141,178,.55); box-shadow: var(--fs-shadow); }
+.fs-kpi-link div { min-width: 0; display: grid; gap: 4px; }
+.fs-kpi-link small { color: var(--fs-muted); font-size: 11px; line-height: 1.4; }
+.fs-kpi-arrow { margin-inline-start: auto; color: var(--fs-primary); opacity: .8; transition: transform .16s ease; }
+.fs-kpi-link:hover .fs-kpi-arrow { transform: translateX(3px); }
+html[dir="rtl"] .fs-kpi-link:hover .fs-kpi-arrow { transform: translateX(-3px); }
+
+#applications { scroll-margin-top: 24px; }
+#recent-activity { scroll-margin-top: 24px; }
+.fs-app-grid { align-items: stretch; }
+.fs-app-card-compact { min-height: 112px; max-width: 760px; padding: 18px 20px; }
+.fs-app-card-compact .fs-app-icon { width: 48px; height: 48px; }
+.fs-app-card[hidden] { display: none !important; }
+
+.fs-back-link {
+  width: fit-content;
+  margin: 0 0 18px;
+  padding: 10px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--fs-border);
+  border-radius: 12px;
+  color: var(--fs-primary-dark);
+  background: var(--fs-surface);
+  box-shadow: var(--fs-shadow-soft);
+  text-decoration: none;
+  font-weight: 700;
+}
+.fs-back-link:hover { color: var(--fs-primary-dark); background: var(--fs-surface-soft); transform: translateY(-1px); }
+.fs-search-result { transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease; }
+.fs-search-result:hover { transform: translateY(-2px); border-color: rgba(95,141,178,.5); box-shadow: var(--fs-shadow-soft); }
+
+@media (max-width: 760px) {
+  .fs-kpi-link { min-height: 108px; }
+  .fs-app-card-compact { max-width: none; }
+}

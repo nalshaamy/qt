@@ -756,6 +756,7 @@
             </head>
             <body class="fs-manager-body fs-manager-v16">
                 <main class="fs-manager-app">
+                    <a href="/flexsys/workspace/operations" class="fs-manager-back-link"><span class="fa fa-arrow-left"/> <t t-esc="'العودة إلى Operations' if is_rtl else 'Back to Operations'"/></a>
                     <header class="fs-manager-header fs-manager-header-pro">
                         <div class="fs-manager-brand">
                             <img src="/flexsys_operations/static/src/img/flexsys_app_icon.png" alt="FlexSys"/>
@@ -857,7 +858,7 @@
                         <section class="fs-manager-panel fs-orders-panel">
                             <div class="fs-table-wrap"><table><thead><tr>
                                 <th t-esc="ui_text['order']"/><th t-esc="ui_text['customer']"/><th t-esc="ui_text['order_type']"/><th t-esc="ui_text['payment']"/>
-                                <th t-esc="ui_text['state']"/><th t-esc="ui_text['pos']"/><th t-esc="ui_text['total']"/><th t-esc="ui_text['date']"/><th t-esc="ui_text['details']"/>
+                                <th t-esc="ui_text['state']"/><th t-esc="ui_text['pos']"/><th t-esc="ui_text['total']"/><th t-esc="ui_text['date']"/>
                             </tr></thead><tbody id="recent-orders-body"></tbody></table></div>
                         </section>
                     </section>

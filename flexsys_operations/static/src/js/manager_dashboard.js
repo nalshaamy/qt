@@ -5,7 +5,7 @@ import { rpc } from "@web/core/network/rpc";
 const isRTL = document.documentElement.dir === "rtl";
 const UI = isRTL ? {
     active_orders: "الطلبات النشطة", open_tasks: "المهام المفتوحة", delayed_tasks: "المهام المتأخرة", available_stations: "المحطات المتاحة",
-    view_details: "عرض التفاصيل", excellent: "ممتاز", stable: "مستقر", warning: "يحتاج متابعة", critical: "حالة حرجة",
+excellent: "ممتاز", stable: "مستقر", warning: "يحتاج متابعة", critical: "حالة حرجة",
     waiting: "انتظار", executing: "تنفيذ", no_stations: "لم تتم إضافة محطات تنفيذ بعد.", no_events: "لا توجد أحداث تشغيلية بعد.",
     event_order_created: "تم إنشاء طلب", event_order_state: "تغيرت حالة طلب", event_line_state: "تغيرت حالة صنف", event_task_created: "تم إنشاء مهمة تنفيذ",
     total_orders: "إجمالي الطلبات", completed_sales: "المبيعات المنفذة", average_order: "متوسط الطلب", registered_customers: "العملاء المسجلون",
@@ -20,7 +20,7 @@ const UI = isRTL ? {
     update_branch_failed: t("update_branch_failed"), update_setting_failed: t("update_setting_failed"), update_distance_failed: t("update_distance_failed"), choose_pos_products: "اختر نقطة البيع من القائمة أعلاه لعرض وتعديل توفر المنتجات.", no_items: "لا توجد أصناف.", uncategorized: "بدون تصنيف", available: "متوفر", unavailable: "نفذت الكمية", update_product_failed: t("update_product_failed"), no_tables: "لم تتم إضافة طاولات بعد.", delete: "حذف", delete_table_confirm: "حذف الطاولة؟", delete_table_failed: t("delete_table_failed"), all_pos: "كل نقاط البيع", select_pos: "اختر نقطة البيع", select_branch: "اختر الفرع", dashboard_load_failed: t("dashboard_load_failed"), settings_update_failed: t("settings_update_failed"), add_table_failed: t("add_table_failed"), products_load_failed: t("products_load_failed")
 } : {
     active_orders: "Active orders", open_tasks: "Open tasks", delayed_tasks: "Delayed tasks", available_stations: "Available stations",
-    view_details: "View details", excellent: "Excellent", stable: "Stable", warning: "Needs attention", critical: "Critical",
+excellent: "Excellent", stable: "Stable", warning: "Needs attention", critical: "Critical",
     waiting: "Waiting", executing: "Executing", no_stations: "No execution stations have been added yet.", no_events: "No operational events yet.",
     event_order_created: "Order created", event_order_state: "Order status changed", event_line_state: "Order line status changed", event_task_created: "Execution task created",
     total_orders: "Total orders", completed_sales: "Completed sales", average_order: "Average order", registered_customers: "Registered customers",
@@ -187,15 +187,17 @@ function renderTopCustomers(customers) {
     best.innerHTML = `<div class="fs-best-customer"><div class="fs-vip-avatar">${(customer.name||(isRTL?"ع":"C")).charAt(0)}</div><strong>${customer.name}</strong><span>${customer.orders} ${t("visit")}</span><b>${money(customer.spent)} ${t("currency")}</b></div>`;
 }
 
+let pendingFocusOrderId = Number(new URLSearchParams(window.location.search).get("focus_order") || 0);
+
 function renderOrders(orders) {
     const body = document.querySelector("#recent-orders-body");
     if (!orders.length) {
-        body.innerHTML = `<tr><td colspan="9" class="fs-manager-empty">${t("no_orders")}</td></tr>`;
+        body.innerHTML = `<tr><td colspan="8" class="fs-manager-empty">${t("no_orders")}</td></tr>`;
         return;
     }
 
     body.innerHTML = orders.map((order) => `
-        <tr class="fs-clickable-order-row" data-order-id="${order.id}" tabindex="0">
+        <tr id="order-${order.id}" class="fs-clickable-order-row" data-order-id="${order.id}" tabindex="0">
             <td><strong>${order.name || "-"}</strong></td>
             <td>${order.customer_name || "-"}</td>
             <td><span class="fs-order-chip">${order.order_type_label || typeLabels[order.order_type] || "-"}</span></td>
@@ -204,7 +206,6 @@ function renderOrders(orders) {
             <td>${order.pos_name || "-"}</td>
             <td>${money(order.amount_total)} ${t("currency")}</td>
             <td>${formatDateTime(order.create_date)}</td>
-            <td><button type="button" class="fs-view-order-details" data-order-id="${order.id}">${t("view_details", "View details")}</button></td>
         </tr>`).join("");
 
     const orderMap = new Map(orders.map((order) => [Number(order.id), order]));
@@ -218,12 +219,6 @@ function renderOrders(orders) {
         renderOrderDetails(order);
         activateDashboardTab("order-details");
     };
-
-    body.querySelectorAll(".fs-view-order-details").forEach((button) => {
-        button.addEventListener("click", (event) => {
-            event.stopPropagation();
-            showOrder(button.dataset.orderId);
-        });
     });
 
     body.querySelectorAll(".fs-clickable-order-row").forEach((row) => {
@@ -235,6 +230,15 @@ function renderOrders(orders) {
             }
         });
     });
+    if (pendingFocusOrderId) {
+        const targetRow = body.querySelector(`[data-order-id="${pendingFocusOrderId}"]`);
+        if (targetRow) {
+            targetRow.classList.add("is-focused");
+            targetRow.scrollIntoView({behavior: "smooth", block: "center"});
+            window.setTimeout(() => showOrder(pendingFocusOrderId), 350);
+            pendingFocusOrderId = 0;
+        }
+    }
 }
 
 function renderOrderDetails(order) {

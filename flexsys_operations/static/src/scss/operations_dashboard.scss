@@ -126,3 +126,40 @@ textarea {
 .fs-manager-dashboard textarea {
     line-height: 1.2;
 }
+
+/* Sprint 1: navigation, identity, and order interaction polish */
+.fs-manager-back-link {
+    width: fit-content;
+    margin: 0 0 14px;
+    padding: 10px 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid rgba(23, 50, 77, .16);
+    border-radius: 12px;
+    color: #17324d;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(23, 50, 77, .07);
+    text-decoration: none;
+    font-weight: 700;
+    transition: transform .16s ease, box-shadow .16s ease;
+}
+.fs-manager-back-link:hover { color: #17324d; transform: translateY(-2px); box-shadow: 0 12px 26px rgba(23, 50, 77, .11); }
+.fs-clickable-order-row { cursor: pointer; transition: background .16s ease, box-shadow .16s ease; }
+.fs-clickable-order-row:hover { background: rgba(95, 141, 178, .08); }
+.fs-clickable-order-row:focus-visible { outline: 3px solid rgba(95, 141, 178, .35); outline-offset: -3px; }
+.fs-clickable-order-row.is-focused {
+    background: rgba(95, 141, 178, .14);
+    box-shadow: inset 4px 0 0 #5f8db2;
+    animation: fs-order-focus-pulse 1.2s ease 1;
+}
+html[dir="rtl"] .fs-clickable-order-row.is-focused { box-shadow: inset -4px 0 0 #5f8db2; }
+@keyframes fs-order-focus-pulse { 0%,100% { background: rgba(95,141,178,.14); } 50% { background: rgba(95,141,178,.25); } }
+.fs-manager-header-pro,
+.fs-manager-tabs-pro,
+.fs-manager-panel,
+.fs-mission-hero { border-radius: 20px; }
+.fs-manager-panel { box-shadow: 0 8px 24px rgba(23, 50, 77, .07); }
+@media (max-width: 760px) {
+    .fs-manager-back-link { margin-inline: 4px; }
+}
