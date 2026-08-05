@@ -505,3 +505,163 @@ html[dir="rtl"] .fs-kpi-link:hover .fs-kpi-arrow { transform: translateX(-3px); 
   .fs-kpi-link { min-height: 108px; }
   .fs-app-card-compact { max-width: none; }
 }
+
+/* FlexSys Login v2 --------------------------------------------------------- */
+.fs-login-v2 {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: clamp(20px, 4vw, 64px);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 15% 18%, rgba(95,141,178,.12), transparent 34%),
+    radial-gradient(circle at 85% 82%, rgba(49,95,132,.10), transparent 30%),
+    linear-gradient(180deg, #fbfdff 0%, #eef4f9 100%);
+}
+.fs-login-v2::before,
+.fs-login-v2::after {
+  content: "";
+  position: absolute;
+  width: 52vw;
+  height: 220px;
+  border: 1px solid rgba(95,141,178,.13);
+  border-radius: 50%;
+  transform: rotate(-9deg);
+  pointer-events: none;
+}
+.fs-login-v2::before { inset-inline-start: -18vw; bottom: 3vh; }
+.fs-login-v2::after { inset-inline-end: -18vw; bottom: 8vh; transform: rotate(9deg); }
+.fs-login-shell {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 980px);
+  min-height: 630px;
+  display: grid;
+  grid-template-columns: minmax(330px, .9fr) minmax(430px, 1.15fr);
+  overflow: hidden;
+  border: 1px solid rgba(23,50,77,.12);
+  border-radius: 26px;
+  background: #fff;
+  box-shadow: 0 36px 90px rgba(23,50,77,.18);
+}
+.fs-login-brand-panel {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  padding: 52px 42px;
+  color: #fff;
+  text-align: center;
+  background:
+    radial-gradient(circle at 85% 10%, rgba(95,141,178,.35), transparent 34%),
+    linear-gradient(150deg, #214f78 0%, #173b5b 45%, #0c2844 100%);
+}
+.fs-login-brand-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: .18;
+  background-image:
+    linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(to bottom, #000, transparent 68%);
+}
+.fs-login-brand-content { position: relative; z-index: 2; display: grid; justify-items: center; }
+.fs-login-brand-logo {
+  width: 138px;
+  height: 138px;
+  object-fit: contain;
+  filter: drop-shadow(0 18px 26px rgba(2,15,28,.26));
+}
+.fs-login-brand-content h1 { margin: 20px 0 4px; font-size: 44px; line-height: 1; letter-spacing: -.035em; }
+.fs-login-tagline { margin: 0; color: rgba(255,255,255,.72); font-size: 16px; }
+.fs-login-brand-line { width: 38px; height: 4px; margin: 30px 0 24px; border-radius: 99px; background: #4ba5f5; }
+.fs-login-value { max-width: 280px; font-size: 17px; line-height: 1.55; }
+.fs-login-value-note { max-width: 300px; margin: 10px 0 0; color: rgba(255,255,255,.62); font-size: 13px; line-height: 1.65; }
+.fs-login-wave { position: absolute; inset-inline: -12%; bottom: -35px; height: 190px; opacity: .32; transform: rotate(-4deg); }
+.fs-login-wave span { position: absolute; inset-inline: 0; height: 100px; border: 1px solid rgba(90,176,255,.55); border-radius: 50%; }
+.fs-login-wave span:nth-child(1) { bottom: 0; }
+.fs-login-wave span:nth-child(2) { bottom: 18px; transform: scaleX(1.06); }
+.fs-login-wave span:nth-child(3) { bottom: 36px; transform: scaleX(1.12); }
+.fs-login-wave span:nth-child(4) { bottom: 54px; transform: scaleX(1.18); }
+.fs-login-form-panel { position: relative; display: grid; grid-template-rows: auto 1fr auto; min-width: 0; padding: 30px 54px 24px; background: rgba(255,255,255,.98); }
+.fs-login-language { display: flex; justify-content: flex-end; }
+html[dir="rtl"] .fs-login-language { justify-content: flex-start; }
+.fs-language-switch {
+  min-height: 44px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--fs-border);
+  border-radius: 999px;
+  color: var(--fs-text);
+  text-decoration: none;
+  background: #fff;
+  box-shadow: 0 5px 16px rgba(23,50,77,.05);
+  font-size: 13px;
+  font-weight: 650;
+}
+.fs-language-switch:hover { color: var(--fs-primary-dark); border-color: rgba(95,141,178,.5); }
+.fs-login-form-wrap { width: 100%; max-width: 450px; margin: auto; padding-block: 24px; }
+.fs-login-form-head h2 { margin: 0; color: #102c48; font-size: 34px; line-height: 1.18; letter-spacing: -.025em; }
+.fs-login-form-head p { margin: 8px 0 30px; color: var(--fs-muted); font-size: 16px; }
+.fs-login-form { display: grid; gap: 11px; }
+.fs-login-form > label { margin-top: 7px; font-size: 13px; font-weight: 750; }
+.fs-login-field {
+  min-height: 58px;
+  padding-inline: 17px;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  border: 1px solid #d5e0e9;
+  border-radius: 15px;
+  background: #fbfdff;
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+.fs-login-field:focus-within { border-color: var(--fs-primary); background: #fff; box-shadow: 0 0 0 4px rgba(95,141,178,.13); }
+.fs-login-field > .fa { width: 20px; color: #6c8194; text-align: center; font-size: 17px; }
+.fs-login-field input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--fs-text); font: inherit; }
+.fs-password-toggle { width: 34px; height: 34px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 9px; color: #70869a; background: transparent; cursor: pointer; }
+.fs-password-toggle:hover { color: var(--fs-primary-dark); background: var(--fs-surface-soft); }
+.fs-login-submit {
+  min-height: 58px;
+  margin-top: 14px;
+  padding-inline: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  border: 0;
+  border-radius: 15px;
+  color: #fff;
+  background: linear-gradient(135deg, #214f78 0%, #173b5b 100%);
+  box-shadow: 0 14px 28px rgba(23,59,91,.22);
+  font-weight: 750;
+  cursor: pointer;
+  transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+}
+.fs-login-submit:hover { color: #fff; transform: translateY(-1px); filter: brightness(1.04); box-shadow: 0 18px 34px rgba(23,59,91,.28); }
+.fs-login-submit:active { transform: translateY(0); }
+.fs-login-footer { padding-top: 21px; border-top: 1px solid #e8eef3; color: #8b9bab; text-align: center; font-size: 12px; }
+.fs-login-form .fs-alert { margin-top: 7px; }
+@media (max-width: 820px) {
+  .fs-login-v2 { padding: 18px; }
+  .fs-login-shell { width: min(100%, 560px); min-height: auto; grid-template-columns: 1fr; }
+  .fs-login-brand-panel { min-height: 230px; padding: 32px 24px; }
+  .fs-login-brand-logo { width: 86px; height: 86px; }
+  .fs-login-brand-content h1 { margin-top: 12px; font-size: 32px; }
+  .fs-login-brand-line, .fs-login-value, .fs-login-value-note { display: none; }
+  .fs-login-form-panel { padding: 22px 28px 22px; }
+  .fs-login-form-wrap { padding-block: 22px; }
+}
+@media (max-width: 480px) {
+  .fs-login-v2 { place-items: start center; padding: 12px; }
+  .fs-login-shell { border-radius: 20px; }
+  .fs-login-brand-panel { min-height: 190px; }
+  .fs-login-form-panel { padding-inline: 20px; }
+  .fs-login-form-head h2 { font-size: 28px; }
+  .fs-login-form-head p { font-size: 14px; }
+}

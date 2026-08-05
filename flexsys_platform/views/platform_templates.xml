@@ -36,23 +36,77 @@
 
     <template id="login_page" name="FlexSys Platform Login">
         <t t-call="flexsys_platform.flexsys_layout">
-            <div class="fs-platform-page fs-login-page">
-                <div class="fs-login-card">
-                    <div class="fs-brand">
-                        <img class="fs-brand-logo-mark" src="/flexsys_platform/static/src/img/flexsys_mark.svg" alt="FlexSys"/>
-                        <div><h1>FlexSys</h1><p t-esc="ui_text['smart_operations_platform']"/></div>
-                    </div>
-                    <form method="post" action="/flexsys/login">
-                        <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
-                        <label t-esc="ui_text['username']"/>
-                        <input name="login" type="text" autocomplete="username" required="required" autofocus="autofocus"/>
-                        <label t-esc="ui_text['password']"/>
-                        <input name="password" type="password" autocomplete="current-password" required="required"/>
-                        <div t-if="error" class="fs-alert fs-alert-danger"><span class="fa fa-exclamation-circle"/><t t-esc="error"/></div>
-                        <button type="submit" class="fs-btn fs-btn-primary" t-esc="ui_text['sign_in']"/>
-                    </form>
+            <main class="fs-platform-page fs-login-v2" aria-labelledby="fs-login-title">
+                <div class="fs-login-shell">
+                    <section class="fs-login-brand-panel" aria-label="FlexSys">
+                        <div class="fs-login-brand-content">
+                            <img class="fs-login-brand-logo" src="/flexsys_platform/static/src/img/flexsys_mark.svg" alt="FlexSys"/>
+                            <h1>FlexSys</h1>
+                            <p class="fs-login-tagline" t-esc="ui_text['smart_operations_platform']"/>
+                            <span class="fs-login-brand-line" aria-hidden="true"/>
+                            <strong class="fs-login-value" t-esc="ui_text['one_platform']"/>
+                            <p class="fs-login-value-note" t-esc="ui_text['secure_access']"/>
+                        </div>
+                        <div class="fs-login-wave" aria-hidden="true">
+                            <span/><span/><span/><span/>
+                        </div>
+                    </section>
+
+                    <section class="fs-login-form-panel">
+                        <div class="fs-login-language">
+                            <a t-att-href="'/flexsys/login?lang=%s' % ('en_US' if is_rtl else 'ar_001')"
+                               class="fs-language-switch" t-att-aria-label="ui_text['switch_language']">
+                                <span class="fa fa-globe" aria-hidden="true"/>
+                                <span t-esc="ui_text['language_name']"/>
+                                <span class="fa fa-chevron-down" aria-hidden="true"/>
+                            </a>
+                        </div>
+
+                        <div class="fs-login-form-wrap">
+                            <header class="fs-login-form-head">
+                                <h2 id="fs-login-title" t-esc="ui_text['welcome_back']"/>
+                                <p t-esc="ui_text['continue_to_flexsys']"/>
+                            </header>
+
+                            <form method="post" action="/flexsys/login" class="fs-login-form">
+                                <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                                <input type="hidden" name="lang" t-att-value="ui_lang"/>
+
+                                <label for="fs-login-username" t-esc="ui_text['username']"/>
+                                <div class="fs-login-field">
+                                    <span class="fa fa-user-o" aria-hidden="true"/>
+                                    <input id="fs-login-username" name="login" type="text" autocomplete="username"
+                                           required="required" autofocus="autofocus"/>
+                                </div>
+
+                                <label for="fs-login-password" t-esc="ui_text['password']"/>
+                                <div class="fs-login-field">
+                                    <span class="fa fa-lock" aria-hidden="true"/>
+                                    <input id="fs-login-password" name="password" type="password"
+                                           autocomplete="current-password" required="required"/>
+                                    <button type="button" class="fs-password-toggle" data-fs-password-toggle="1"
+                                            aria-label="Show password">
+                                        <span class="fa fa-eye" aria-hidden="true"/>
+                                    </button>
+                                </div>
+
+                                <div t-if="error" class="fs-alert fs-alert-danger" role="alert">
+                                    <span class="fa fa-exclamation-circle"/><t t-esc="error"/>
+                                </div>
+
+                                <button type="submit" class="fs-btn fs-login-submit">
+                                    <span t-esc="ui_text['sign_in']"/>
+                                    <span t-attf-class="fa #{'fa-arrow-left' if is_rtl else 'fa-arrow-right'}" aria-hidden="true"/>
+                                </button>
+                            </form>
+                        </div>
+
+                        <footer class="fs-login-footer">
+                            © 2026 FlexSys. <t t-esc="ui_text['copyright']"/>
+                        </footer>
+                    </section>
                 </div>
-            </div>
+            </main>
         </t>
     </template>
 

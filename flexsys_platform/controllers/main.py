@@ -56,6 +56,13 @@ class FlexSysPlatformController(http.Controller):
             'username': 'اسم المستخدم' if ar else 'Username',
             'password': 'كلمة المرور' if ar else 'Password',
             'sign_in': 'دخول' if ar else 'Login',
+            'welcome_back': 'مرحبًا بعودتك' if ar else 'Welcome back',
+            'continue_to_flexsys': 'سجّل الدخول للمتابعة إلى FlexSys' if ar else 'Sign in to continue to FlexSys',
+            'one_platform': 'منصة واحدة. عمليات بلا حدود.' if ar else 'One Platform. Infinite Operations.',
+            'secure_access': 'وصول آمن إلى مركز القيادة ومساحات العمل.' if ar else 'Secure access to Mission Control and your workspaces.',
+            'language_name': 'العربية' if ar else 'English',
+            'switch_language': 'English' if ar else 'العربية',
+            'copyright': 'جميع الحقوق محفوظة.' if ar else 'All rights reserved.',
             'applications_note': 'تظهر فقط التطبيقات المتاحة لدورك.' if ar else 'Only applications available to your role are shown.',
             'no_workspaces': 'لا توجد مساحات عمل متاحة' if ar else 'No workspaces available',
             'assign_permission': 'اطلب من المسؤول تعيين صلاحية تطبيق لحسابك.' if ar else 'Ask an administrator to assign an application permission to your account.',
@@ -156,6 +163,7 @@ class FlexSysPlatformController(http.Controller):
 
     @http.route('/flexsys/login', type='http', auth='public', website=True, methods=['GET', 'POST'])
     def login(self, **post):
+        requested_language = post.get('lang') or request.params.get('lang')
         active_session = self._current_session()
         if active_session and request.httprequest.method == 'GET':
             return request.redirect('/flexsys')
@@ -190,7 +198,12 @@ class FlexSysPlatformController(http.Controller):
                 ip_address=request.httprequest.remote_addr,
                 user_agent=request.httprequest.user_agent.string,
             )
-        return self._render('flexsys_platform.login_page', {'error': error}, user=active_session.user_id if active_session else None)
+        return self._render(
+            'flexsys_platform.login_page',
+            {'error': error},
+            user=active_session.user_id if active_session else None,
+            requested=requested_language,
+        )
 
     @http.route('/flexsys/logout', type='http', auth='public', website=True, methods=['POST'])
     def logout(self, **post):
