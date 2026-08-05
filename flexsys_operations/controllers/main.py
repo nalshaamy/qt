@@ -1253,9 +1253,9 @@ class FlexSysOperationsQrMenuController(http.Controller):
 
         try:
             request.env.cr.execute(
-                """
+                f"""
                 SELECT id
-                  FROM operations_qr_order
+                  FROM {Order._table}
                  WHERE id = %s
                  FOR UPDATE NOWAIT
                 """,
@@ -1450,9 +1450,9 @@ class FlexSysOperationsQrMenuController(http.Controller):
 
         try:
             request.env.cr.execute(
-                """
+                f"""
                 SELECT id
-                  FROM operations_qr_order
+                  FROM {Order._table}
                  WHERE id = %s
                  FOR UPDATE NOWAIT
                 """,
