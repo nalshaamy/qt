@@ -748,7 +748,7 @@
         <template id="qr_manager_dashboard_page" name="FlexSys Mission Control">
         <html t-att-lang="ui_lang or 'ar_001'" t-att-dir="'rtl' if is_rtl else 'ltr'">
             <head>
-                <title>FlexSys | Mission Control</title>
+                <title><t t-esc="ui_text['mission_control']"/> | FlexSys</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
                 <meta name="theme-color" content="#5F8DB2"/>
                 <link rel="icon" type="image/png" href="/flexsys_operations/static/src/img/flexsys_app_icon.png"/>
@@ -760,14 +760,14 @@
                         <div class="fs-manager-brand">
                             <img src="/flexsys_operations/static/src/img/flexsys_app_icon.png" alt="FlexSys"/>
                             <div>
-                                <span>FLEXSYS · SMART OPERATIONS PLATFORM</span>
+                                <span t-esc="ui_text['smart_operations_platform']"/>
                                 <h1 t-esc="ui_text['mission_control']"/>
-                                <small t-if="manager_account">مرحبًا <t t-esc="manager_account.name"/></small>
+                                <small t-if="manager_account"><t t-esc="ui_text['welcome']"/> <t t-esc="manager_account.name"/></small>
                             </div>
                         </div>
                         <div class="fs-manager-header-actions">
-                            <a t-att-href="(public_base_url or '/self-order') + '/menu'">معاينة قائمة المنتجات</a>
-                            <a href="/self-order/manager/logout">تسجيل الخروج</a>
+                            <a t-att-href="(public_base_url or '/self-order') + '/menu'" t-esc="ui_text['product_preview']"/>
+                            <a href="/self-order/manager/logout" t-esc="ui_text['logout']"/>
                         </div>
                     </header>
 
@@ -782,14 +782,14 @@
                     <section class="fs-dashboard-page active" data-dashboard-page="mission-control">
                         <div class="fs-mission-hero">
                             <div>
-                                <span class="fs-section-label">الحالة التشغيلية المباشرة</span>
-                                <h2>مركز قيادة المنشأة</h2>
-                                <p>نظرة واحدة على الطلبات والمحطات والتنبيهات المهمة.</p>
+                                <span class="fs-section-label" t-esc="ui_text['live_status']"/>
+                                <h2 t-esc="ui_text['command_title']"/>
+                                <p t-esc="ui_text['command_description']"/>
                             </div>
                             <div class="fs-mission-health">
-                                <span>الصحة التشغيلية</span>
+                                <span t-esc="ui_text['operational_health']"/>
                                 <strong id="mission-overall-health">--%</strong>
-                                <small id="mission-health-label">جاري التحميل</small>
+                                <small id="mission-health-label" t-esc="ui_text['loading']"/>
                             </div>
                         </div>
 
@@ -797,22 +797,22 @@
 
                         <section class="fs-mission-grid">
                             <article class="fs-manager-panel fs-mission-apps">
-                                <header><span class="fs-section-label">مساحات العمل</span><h2>التطبيقات والاختصارات</h2></header>
+                                <header><span class="fs-section-label" t-esc="ui_text['workspaces']"/><h2 t-esc="ui_text['applications_shortcuts']"/></header>
                                 <div class="fs-launcher-grid">
-                                    <button type="button" class="fs-launcher-card is-primary" data-open-tab="overview"><span class="fs-launcher-icon">◫</span><strong>Operations</strong><small>الأداء والطلبات والتحليلات</small></button>
-                                    <button type="button" class="fs-launcher-card" data-open-tab="orders"><span class="fs-launcher-icon">≡</span><strong>Orders</strong><small>متابعة الطلبات وتفاصيلها</small></button>
-                                    <a class="fs-launcher-card" href="/odoo/action-flexsys_operations.action_flexsys_execution_task"><span class="fs-launcher-icon">✓</span><strong>Execution</strong><small>المهام ومحطات التنفيذ</small></a>
-                                    <button type="button" class="fs-launcher-card" data-open-tab="management"><span class="fs-launcher-icon">⚙</span><strong>Management</strong><small>الفروع والتوفر والإعدادات</small></button>
+                                    <button type="button" class="fs-launcher-card is-primary" data-open-tab="overview"><span class="fs-launcher-icon">◫</span><strong t-esc="ui_text['operations']"/><small t-esc="ui_text['operations_desc']"/></button>
+                                    <button type="button" class="fs-launcher-card" data-open-tab="orders"><span class="fs-launcher-icon">≡</span><strong t-esc="ui_text['orders']"/><small t-esc="ui_text['orders_desc']"/></button>
+                                    <a class="fs-launcher-card" href="/odoo/action-flexsys_operations.action_flexsys_execution_task"><span class="fs-launcher-icon">✓</span><strong t-esc="ui_text['execution']"/><small t-esc="ui_text['execution_desc']"/></a>
+                                    <button type="button" class="fs-launcher-card" data-open-tab="management"><span class="fs-launcher-icon">⚙</span><strong t-esc="ui_text['management_short']"/><small t-esc="ui_text['management_desc']"/></button>
                                 </div>
                             </article>
 
                             <article class="fs-manager-panel fs-mission-stations">
-                                <header><span class="fs-section-label">التنفيذ</span><h2>حالة المحطات</h2></header>
+                                <header><span class="fs-section-label" t-esc="ui_text['execution']"/><h2 t-esc="ui_text['station_status']"/></header>
                                 <div id="mission-stations" class="fs-station-health-list"></div>
                             </article>
 
                             <article class="fs-manager-panel fs-mission-events">
-                                <header><span class="fs-section-label">نشاط مباشر</span><h2>آخر الأحداث</h2></header>
+                                <header><span class="fs-section-label" t-esc="ui_text['live_activity']"/><h2 t-esc="ui_text['latest_events']"/></header>
                                 <div id="mission-events" class="fs-mission-event-list"></div>
                             </article>
                         </section>
@@ -820,40 +820,40 @@
 
                     <section class="fs-dashboard-page" data-dashboard-page="overview">
                         <div class="fs-dashboard-page-heading">
-                            <div><span class="fs-section-label">ملخص الأداء</span><h2 t-esc="ui_text['overview']"/></div>
+                            <div><span class="fs-section-label" t-esc="ui_text['performance_summary']"/><h2 t-esc="ui_text['overview']"/></div>
                         </div>
                         <section class="fs-manager-filters">
-                            <div><label>من تاريخ</label><input id="filter-date-from" type="date"/></div>
-                            <div><label>إلى تاريخ</label><input id="filter-date-to" type="date"/></div>
-                            <div><label>الحالة</label><select id="filter-state">
-                                <option value="">كل الحالات</option>
-                                <option value="new">جديد</option><option value="accepted">تم الاعتماد</option>
-                                <option value="scheduled">مجدول</option>
-                                <option value="preparing">قيد التحضير</option><option value="partially_ready">جاهز جزئيًا</option>
-                                <option value="ready">جاهز</option><option value="completed">مكتمل</option>
-                                <option value="rejected">مرفوض</option><option value="cancelled">ملغي</option>
+                            <div><label t-esc="ui_text['from_date']"/><input id="filter-date-from" type="date"/></div>
+                            <div><label t-esc="ui_text['to_date']"/><input id="filter-date-to" type="date"/></div>
+                            <div><label t-esc="ui_text['state']"/><select id="filter-state">
+                                <option value="" t-esc="ui_text['all_states']"/>
+                                <option value="new" t-esc="ui_text['state_new']"/><option value="accepted" t-esc="ui_text['state_accepted']"/>
+                                <option value="scheduled" t-esc="ui_text['state_scheduled']"/>
+                                <option value="preparing" t-esc="ui_text['state_preparing']"/><option value="partially_ready" t-esc="ui_text['state_partially_ready']"/>
+                                <option value="ready" t-esc="ui_text['state_ready']"/><option value="completed" t-esc="ui_text['state_completed']"/>
+                                <option value="rejected" t-esc="ui_text['state_rejected']"/><option value="cancelled" t-esc="ui_text['state_cancelled']"/>
                             </select></div>
-                            <div><label>نقطة البيع</label><select id="filter-pos"><option value="">كل نقاط البيع</option></select></div>
-                            <div><label>نوع العميل</label><select id="filter-customer-type">
-                                <option value="">الكل</option><option value="registered">مسجل</option><option value="guest">زائر</option>
+                            <div><label t-esc="ui_text['pos']"/><select id="filter-pos"><option value="" t-esc="ui_text['all_pos']"/></select></div>
+                            <div><label t-esc="ui_text['customer_type']"/><select id="filter-customer-type">
+                                <option value="" t-esc="ui_text['all']"/><option value="registered" t-esc="ui_text['registered']"/><option value="guest" t-esc="ui_text['guest']"/>
                             </select></div>
-                            <button id="apply-dashboard-filters" type="button">عرض</button>
+                            <button id="apply-dashboard-filters" type="button" t-esc="ui_text['show']"/>
                         </section>
                         <section id="dashboard-kpis" class="fs-manager-kpi-grid fs-kpi-grid-pro"></section>
                         <section class="fs-manager-panel fs-daily-comparison-panel">
-                            <header><span class="fs-section-label">مقارنة الأيام</span><h2>الأعلى والأقل أداءً</h2></header>
+                            <header><span class="fs-section-label" t-esc="ui_text['daily_comparison']"/><h2 t-esc="ui_text['highest_lowest']"/></header>
                             <div id="daily-comparison" class="fs-daily-comparison-grid"></div>
                         </section>
                         <section class="fs-analytics-grid">
-                            <article class="fs-manager-panel"><header><span class="fs-section-label">الأداء</span><h2>أكثر المنتجات طلبًا</h2></header><div id="top-products" class="fs-top-products"></div></article>
-                            <article class="fs-manager-panel"><header><span class="fs-section-label">نوع الطلب</span><h2>توزيع الطلبات</h2></header><div id="order-type-breakdown" class="fs-breakdown-list"></div></article>
-                            <article class="fs-manager-panel"><header><span class="fs-section-label">الدفع</span><h2>طرق الدفع</h2></header><div id="payment-breakdown" class="fs-breakdown-list"></div></article>
-                            <article class="fs-manager-panel fs-vip-highlight"><header><span class="fs-section-label">العميل الأفضل</span><h2>الأكثر ترددًا</h2></header><div id="best-customer-card"></div></article>
+                            <article class="fs-manager-panel"><header><span class="fs-section-label" t-esc="ui_text['performance']"/><h2 t-esc="ui_text['top_products']"/></header><div id="top-products" class="fs-top-products"></div></article>
+                            <article class="fs-manager-panel"><header><span class="fs-section-label" t-esc="ui_text['order_type']"/><h2 t-esc="ui_text['order_distribution']"/></header><div id="order-type-breakdown" class="fs-breakdown-list"></div></article>
+                            <article class="fs-manager-panel"><header><span class="fs-section-label" t-esc="ui_text['payment']"/><h2 t-esc="ui_text['payment_methods']"/></header><div id="payment-breakdown" class="fs-breakdown-list"></div></article>
+                            <article class="fs-manager-panel fs-vip-highlight"><header><span class="fs-section-label" t-esc="ui_text['best_customer']"/><h2 t-esc="ui_text['most_frequent']"/></header><div id="best-customer-card"></div></article>
                         </section>
                     </section>
 
                     <section class="fs-dashboard-page" data-dashboard-page="orders">
-                        <div class="fs-dashboard-page-heading"><div><span class="fs-section-label">الطلبات</span><h2 t-esc="ui_text['latest_orders']"/></div></div>
+                        <div class="fs-dashboard-page-heading"><div><span class="fs-section-label" t-esc="ui_text['orders']"/><h2 t-esc="ui_text['latest_orders']"/></div></div>
                         <section class="fs-manager-panel fs-orders-panel">
                             <div class="fs-table-wrap"><table><thead><tr>
                                 <th t-esc="ui_text['order']"/><th t-esc="ui_text['customer']"/><th t-esc="ui_text['order_type']"/><th t-esc="ui_text['payment']"/>
@@ -864,59 +864,59 @@
 
                     <section class="fs-dashboard-page" data-dashboard-page="order-details">
                         <div class="fs-dashboard-page-heading fs-order-details-heading">
-                            <div><span class="fs-section-label">تفاصيل الطلب</span><h2 id="order-details-title">الطلب</h2></div>
+                            <div><span class="fs-section-label" t-esc="ui_text['order_details']"/><h2 id="order-details-title" t-esc="ui_text['order']"/></div>
                             <button id="back-to-orders" type="button" class="fs-back-orders-btn" t-esc="ui_text['back_orders']"/>
                         </div>
                         <section id="order-details-content" class="fs-manager-panel fs-order-details-panel">
-                            <div class="fs-manager-empty">اختر طلبًا لعرض تفاصيله.</div>
+                            <div class="fs-manager-empty" t-esc="ui_text['select_order']"/>
                         </section>
                     </section>
 
                     <section class="fs-dashboard-page" data-dashboard-page="customers">
-                        <div class="fs-dashboard-page-heading"><div><span class="fs-section-label">أفضل 10</span><h2>العملاء المميزون</h2><p>الترتيب حسب الطلبات المنفذة ثم إجمالي المشتريات.</p></div></div>
+                        <div class="fs-dashboard-page-heading"><div><span class="fs-section-label" t-esc="ui_text['top_ten']"/><h2 t-esc="ui_text['customers']"/><p t-esc="ui_text['top_customers_desc']"/></div></div>
                         <section id="top-customers" class="fs-vip-customers-grid"></section>
                     </section>
 
                     <section class="fs-dashboard-page" data-dashboard-page="management">
-                        <div class="fs-dashboard-page-heading"><div><span class="fs-section-label">التحكم التشغيلي</span><h2>الإدارة والإعدادات</h2></div></div>
+                        <div class="fs-dashboard-page-heading"><div><span class="fs-section-label" t-esc="ui_text['operational_control']"/><h2 t-esc="ui_text['management']"/></div></div>
                         <section class="fs-management-grid">
                             <section class="fs-manager-store-card">
-                                <div><span class="fs-section-label">حالة المتجر</span><h2 id="store-status-title">...</h2><p id="store-status-message"></p></div>
+                                <div><span class="fs-section-label" t-esc="ui_text['store_status']"/><h2 id="store-status-title">...</h2><p id="store-status-message"></p></div>
                                 <button id="toggle-store" type="button">...</button>
                             </section>
                             <article class="fs-manager-panel">
-                                <header><span class="fs-section-label">الإغلاق</span><h2>إعدادات الإغلاق</h2></header>
+                                <header><span class="fs-section-label" t-esc="ui_text['closing']"/><h2 t-esc="ui_text['closing_settings']"/></header>
                                 <div class="fs-store-settings-form">
-                                    <label><span>رسالة الإغلاق</span><textarea id="closed-message" rows="4"></textarea></label>
-                                    <label><span>وقت إعادة الفتح</span><input id="reopen-at" type="datetime-local"/></label>
-                                    <label class="fs-switch-row"><input id="allow-browse-closed" type="checkbox"/><span>السماح بعرض قائمة المنتجات أثناء الإغلاق</span></label>
-                                    <button id="save-store-settings" type="button">حفظ الإعدادات</button>
+                                    <label><span t-esc="ui_text['closed_message']"/><textarea id="closed-message" rows="4"></textarea></label>
+                                    <label><span t-esc="ui_text['reopen_at']"/><input id="reopen-at" type="datetime-local"/></label>
+                                    <label class="fs-switch-row"><input id="allow-browse-closed" type="checkbox"/><span t-esc="ui_text['allow_browse_closed']"/></label>
+                                    <button id="save-store-settings" type="button" t-esc="ui_text['save_settings']"/>
                                 </div>
                             </article>
                         </section>
 
-                        <section class="fs-manager-panel fs-branches-panel"><header><span class="fs-section-label">الفروع ونقاط البيع</span><h2>إدارة الفروع</h2></header><div id="manager-branches" class="fs-manager-branches-grid"></div></section>
+                        <section class="fs-manager-panel fs-branches-panel"><header><span class="fs-section-label" t-esc="ui_text['branches_pos']"/><h2 t-esc="ui_text['manage_branches']"/></header><div id="manager-branches" class="fs-manager-branches-grid"></div></section>
 
                         <section class="fs-manager-panel fs-tables-panel">
-                            <header><span class="fs-section-label">الطلبات المحلية</span><h2>إدارة الطاولات</h2></header>
+                            <header><span class="fs-section-label" t-esc="ui_text['local_orders']"/><h2 t-esc="ui_text['manage_tables']"/></header>
                             <div class="fs-table-create-row">
-                                <input id="new-table-name" placeholder="اسم أو رقم الطاولة"/>
-                                <select id="new-table-branch"><option value="">اختر الفرع</option></select>
-                                <button id="add-table" type="button">إضافة طاولة</button>
+                                <input id="new-table-name" t-att-placeholder="ui_text['table_name']"/>
+                                <select id="new-table-branch"><option value="" t-esc="ui_text['select_branch']"/></select>
+                                <button id="add-table" type="button" t-esc="ui_text['add_table']"/>
                             </div>
                             <div id="manager-tables" class="fs-manager-tables-grid"></div>
                         </section>
 
                         <section class="fs-manager-panel fs-products-control-panel">
                             <header>
-                                <span class="fs-section-label">توفر الأصناف</span>
-                                <h2>إدارة قائمة المنتجات</h2>
-                                <p>اختر نقطة البيع أولًا، ثم عدّل توفر المنتجات لهذا الفرع فقط.</p>
+                                <span class="fs-section-label" t-esc="ui_text['product_availability']"/>
+                                <h2 t-esc="ui_text['manage_product_list']"/>
+                                <p t-esc="ui_text['product_instruction']"/>
                             </header>
                             <div class="fs-product-pos-selector">
-                                <label for="product-pos-filter">نقطة البيع</label>
+                                <label for="product-pos-filter" t-esc="ui_text['pos']"/>
                                 <select id="product-pos-filter">
-                                    <option value="">اختر نقطة البيع</option>
+                                    <option value="" t-esc="ui_text['select_pos']"/>
                                 </select>
                             </div>
                             <div id="manager-menu-products" class="fs-manager-products-grid"></div>

@@ -49,52 +49,104 @@ class FlexSysOperationsQrMenuController(http.Controller):
     @staticmethod
     def _ui_text(language):
         ar = language.startswith('ar')
-        return {
-            'mission_control': 'مركز القيادة' if ar else 'Mission Control',
-            'smart_operations_platform': 'منصة العمليات الذكية' if ar else 'Smart Operations Platform',
-            'welcome': 'مرحبًا' if ar else 'Welcome',
-            'logout': 'تسجيل الخروج' if ar else 'Sign out',
-            'product_preview': 'معاينة قائمة المنتجات' if ar else 'Preview product list',
-            'overview': 'ملخص الفروع' if ar else 'Branch overview',
-            'orders': 'الطلبات' if ar else 'Orders',
-            'customers': 'العملاء المميزون' if ar else 'Top customers',
-            'management': 'الإدارة والإعدادات' if ar else 'Management & settings',
-            'command_center': 'مركز القيادة' if ar else 'Command center',
-            'operational_overview': 'نظرة تشغيلية شاملة' if ar else 'Operational overview',
-            'active_orders': 'الطلبات النشطة' if ar else 'Active orders',
-            'open_tasks': 'المهام المفتوحة' if ar else 'Open tasks',
-            'delayed_tasks': 'المهام المتأخرة' if ar else 'Delayed tasks',
-            'available_stations': 'المحطات المتاحة' if ar else 'Available stations',
-            'applications_shortcuts': 'التطبيقات والاختصارات' if ar else 'Applications & shortcuts',
-            'station_status': 'حالة المحطات' if ar else 'Station status',
-            'latest_events': 'آخر الأحداث' if ar else 'Latest events',
-            'from_date': 'من تاريخ' if ar else 'From date',
-            'to_date': 'إلى تاريخ' if ar else 'To date',
-            'state': 'الحالة' if ar else 'Status',
-            'pos': 'نقطة البيع' if ar else 'Point of sale',
-            'customer_type': 'نوع العميل' if ar else 'Customer type',
-            'show': 'عرض' if ar else 'Apply',
-            'all_states': 'كل الحالات' if ar else 'All statuses',
-            'all_pos': 'كل نقاط البيع' if ar else 'All points of sale',
-            'all': 'الكل' if ar else 'All',
-            'registered': 'مسجل' if ar else 'Registered',
-            'guest': 'زائر' if ar else 'Guest',
-            'latest_orders': 'آخر الطلبات' if ar else 'Latest orders',
-            'order': 'الطلب' if ar else 'Order',
-            'customer': 'العميل' if ar else 'Customer',
-            'order_type': 'نوع الطلب' if ar else 'Order type',
-            'payment': 'الدفع' if ar else 'Payment',
-            'total': 'الإجمالي' if ar else 'Total',
-            'date': 'التاريخ' if ar else 'Date',
-            'details': 'التفاصيل' if ar else 'Details',
-            'view_details': 'عرض التفاصيل' if ar else 'View details',
-            'back_orders': 'العودة إلى آخر الطلبات' if ar else 'Back to latest orders',
-            'settings': 'الإعدادات' if ar else 'Settings',
-            'branches': 'الفروع' if ar else 'Branches',
-            'products': 'المنتجات' if ar else 'Products',
-            'execution': 'التنفيذ' if ar else 'Execution',
-            'healthy': 'مستقر' if ar else 'Healthy',
+        pairs = {
+            'mission_control': ('مركز القيادة', 'Mission Control'),
+            'smart_operations_platform': ('منصة العمليات الذكية', 'Smart Operations Platform'),
+            'welcome': ('مرحبًا', 'Welcome'),
+            'logout': ('تسجيل الخروج', 'Sign out'),
+            'product_preview': ('معاينة قائمة المنتجات', 'Preview product list'),
+            'overview': ('ملخص الفروع', 'Branch overview'),
+            'orders': ('الطلبات', 'Orders'),
+            'customers': ('العملاء المميزون', 'Top customers'),
+            'management': ('الإدارة والإعدادات', 'Management & settings'),
+            'command_center': ('مركز القيادة', 'Command center'),
+            'operational_overview': ('نظرة تشغيلية شاملة', 'Operational overview'),
+            'live_status': ('الحالة التشغيلية المباشرة', 'Live operational status'),
+            'command_title': ('مركز قيادة المنشأة', 'Operations command center'),
+            'command_description': ('نظرة واحدة على الطلبات والمحطات والتنبيهات المهمة.', 'A unified view of orders, stations, and important alerts.'),
+            'operational_health': ('الصحة التشغيلية', 'Operational health'),
+            'loading': ('جاري التحميل', 'Loading'),
+            'active_orders': ('الطلبات النشطة', 'Active orders'),
+            'open_tasks': ('المهام المفتوحة', 'Open tasks'),
+            'delayed_tasks': ('المهام المتأخرة', 'Delayed tasks'),
+            'available_stations': ('المحطات المتاحة', 'Available stations'),
+            'workspaces': ('مساحات العمل', 'Workspaces'),
+            'applications_shortcuts': ('التطبيقات والاختصارات', 'Applications & shortcuts'),
+            'operations': ('العمليات', 'Operations'),
+            'operations_desc': ('الأداء والطلبات والتحليلات', 'Performance, orders, and analytics'),
+            'orders_desc': ('متابعة الطلبات وتفاصيلها', 'Track orders and view details'),
+            'execution': ('التنفيذ', 'Execution'),
+            'execution_desc': ('المهام ومحطات التنفيذ', 'Tasks and execution stations'),
+            'management_short': ('الإدارة', 'Management'),
+            'management_desc': ('الفروع والتوفر والإعدادات', 'Branches, availability, and settings'),
+            'station_status': ('حالة المحطات', 'Station status'),
+            'latest_events': ('آخر الأحداث', 'Latest events'),
+            'live_activity': ('نشاط مباشر', 'Live activity'),
+            'performance_summary': ('ملخص الأداء', 'Performance summary'),
+            'from_date': ('من تاريخ', 'From date'),
+            'to_date': ('إلى تاريخ', 'To date'),
+            'state': ('الحالة', 'Status'),
+            'pos': ('نقطة البيع', 'Point of sale'),
+            'customer_type': ('نوع العميل', 'Customer type'),
+            'show': ('عرض', 'Apply'),
+            'all_states': ('كل الحالات', 'All statuses'),
+            'all_pos': ('كل نقاط البيع', 'All points of sale'),
+            'all': ('الكل', 'All'),
+            'registered': ('مسجل', 'Registered'),
+            'guest': ('زائر', 'Guest'),
+            'daily_comparison': ('مقارنة الأيام', 'Daily comparison'),
+            'highest_lowest': ('الأعلى والأقل أداءً', 'Highest and lowest performance'),
+            'performance': ('الأداء', 'Performance'),
+            'top_products': ('أكثر المنتجات طلبًا', 'Top ordered products'),
+            'order_type': ('نوع الطلب', 'Order type'),
+            'order_distribution': ('توزيع الطلبات', 'Order distribution'),
+            'payment': ('الدفع', 'Payment'),
+            'payment_methods': ('طرق الدفع', 'Payment methods'),
+            'best_customer': ('العميل الأفضل', 'Best customer'),
+            'most_frequent': ('الأكثر ترددًا', 'Most frequent'),
+            'latest_orders': ('آخر الطلبات', 'Latest orders'),
+            'order': ('الطلب', 'Order'),
+            'customer': ('العميل', 'Customer'),
+            'total': ('الإجمالي', 'Total'),
+            'date': ('التاريخ', 'Date'),
+            'details': ('التفاصيل', 'Details'),
+            'view_details': ('عرض التفاصيل', 'View details'),
+            'back_orders': ('العودة إلى آخر الطلبات', 'Back to latest orders'),
+            'order_details': ('تفاصيل الطلب', 'Order details'),
+            'select_order': ('اختر طلبًا لعرض تفاصيله.', 'Select an order to view its details.'),
+            'top_ten': ('أفضل 10', 'Top 10'),
+            'top_customers_desc': ('الترتيب حسب الطلبات المنفذة ثم إجمالي المشتريات.', 'Ranked by completed orders, then total purchases.'),
+            'operational_control': ('التحكم التشغيلي', 'Operational control'),
+            'store_status': ('حالة المتجر', 'Store status'),
+            'closing': ('الإغلاق', 'Closing'),
+            'closing_settings': ('إعدادات الإغلاق', 'Closing settings'),
+            'closed_message': ('رسالة الإغلاق', 'Closing message'),
+            'reopen_at': ('وقت إعادة الفتح', 'Reopen at'),
+            'allow_browse_closed': ('السماح بعرض قائمة المنتجات أثناء الإغلاق', 'Allow browsing the product list while closed'),
+            'save_settings': ('حفظ الإعدادات', 'Save settings'),
+            'branches_pos': ('الفروع ونقاط البيع', 'Branches and points of sale'),
+            'manage_branches': ('إدارة الفروع', 'Manage branches'),
+            'local_orders': ('الطلبات المحلية', 'Dine-in orders'),
+            'manage_tables': ('إدارة الطاولات', 'Manage tables'),
+            'table_name': ('اسم أو رقم الطاولة', 'Table name or number'),
+            'select_branch': ('اختر الفرع', 'Select branch'),
+            'add_table': ('إضافة طاولة', 'Add table'),
+            'product_availability': ('توفر الأصناف', 'Product availability'),
+            'manage_product_list': ('إدارة قائمة المنتجات', 'Manage product list'),
+            'product_instruction': ('اختر نقطة البيع أولًا، ثم عدّل توفر المنتجات لهذا الفرع فقط.', 'Select a point of sale first, then manage product availability for that branch.'),
+            'select_pos': ('اختر نقطة البيع', 'Select point of sale'),
+            'state_new': ('جديد', 'New'),
+            'state_accepted': ('تم الاعتماد', 'Accepted'),
+            'state_scheduled': ('مجدول', 'Scheduled'),
+            'state_preparing': ('قيد التحضير', 'Preparing'),
+            'state_partially_ready': ('جاهز جزئيًا', 'Partially ready'),
+            'state_ready': ('جاهز', 'Ready'),
+            'state_completed': ('مكتمل', 'Completed'),
+            'state_rejected': ('مرفوض', 'Rejected'),
+            'state_cancelled': ('ملغي', 'Cancelled'),
+            'healthy': ('مستقر', 'Healthy'),
         }
+        return {key: value[0] if ar else value[1] for key, value in pairs.items()}
 
     def _render(self, template, values=None, manager=None, requested=None):
         values = dict(values or {})
@@ -688,10 +740,11 @@ class FlexSysOperationsQrMenuController(http.Controller):
     @http.route(['/self-order/logout', '/qr-menu/customer/logout'], type='http', auth='public', website=True, csrf=False)
     def customer_logout(self, **kwargs):
         # Customer logout is completely separate from manager logout.
-        # End the authenticated website session and return to the customer
-        # choice page: Login / Register / Continue as Guest.
+        # Resolve the public brand URL before clearing the authenticated
+        # website session, then return to the branded customer start page.
+        public_base_url = self._public_base_url()
         request.session.logout(keep_db=True)
-        return request.redirect('/qr-menu?logged_out=1')
+        return request.redirect(f'{public_base_url}?logged_out=1')
 
     @http.route('/operations/login', type='http', auth='public', website=True, csrf=False)
     def operations_platform_login(self, **kwargs):
@@ -1623,6 +1676,15 @@ class FlexSysOperationsQrMenuController(http.Controller):
             return request.not_found()
         request.session['flexsys_public_brand'] = brand
         return self.customer_phone_login(**post)
+
+
+    @http.route('/<string:brand>/logout', type='http', auth='public', website=True, csrf=False, sitemap=False)
+    def branded_logout(self, brand, **kwargs):
+        if not self._valid_public_brand(brand):
+            return request.not_found()
+        public_base_url = f'/{brand.strip().lower()}'
+        request.session.logout(keep_db=True)
+        return request.redirect(f'{public_base_url}?logged_out=1')
 
     @http.route('/<string:brand>/register', type='http', auth='public', website=True, methods=['GET', 'POST'], csrf=True, sitemap=False)
     def branded_register(self, brand, **post):

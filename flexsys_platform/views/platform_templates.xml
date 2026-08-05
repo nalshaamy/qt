@@ -44,12 +44,12 @@
                     </div>
                     <form method="post" action="/flexsys/login">
                         <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
-                        <label>Username</label>
+                        <label t-esc="ui_text['username']"/>
                         <input name="login" type="text" autocomplete="username" required="required" autofocus="autofocus"/>
-                        <label>Password</label>
+                        <label t-esc="ui_text['password']"/>
                         <input name="password" type="password" autocomplete="current-password" required="required"/>
                         <div t-if="error" class="fs-alert fs-alert-danger"><span class="fa fa-exclamation-circle"/><t t-esc="error"/></div>
-                        <button type="submit" class="fs-btn fs-btn-primary">Sign in</button>
+                        <button type="submit" class="fs-btn fs-btn-primary" t-esc="ui_text['sign_in']"/>
                     </form>
                 </div>
             </div>
@@ -146,7 +146,7 @@
 
                         <section>
                             <div t-if="len(applications) &gt; 1" class="fs-section-head">
-                                <div><h2 t-esc="ui_text['workspaces']"/><p>Only applications available to your role are shown.</p></div>
+                                <div><h2 t-esc="ui_text['workspaces']"/><p t-esc="ui_text['applications_note']"/></div>
                             </div>
                             <div class="fs-app-grid">
                                 <a t-foreach="applications" t-as="app" t-att-href="'/flexsys/open/%s' % app.code" class="fs-app-card">
@@ -164,15 +164,15 @@
                                 </a>
                                 <div t-if="not applications" class="fs-empty-state">
                                     <span class="fa fa-th-large"/>
-                                    <h3>No workspaces available</h3>
-                                    <p>Ask an administrator to assign an application permission to your account.</p>
+                                    <h3 t-esc="ui_text['no_workspaces']"/>
+                                    <p t-esc="ui_text['assign_permission']"/>
                                 </div>
                             </div>
                         </section>
 
                         <section t-if="can_view_activity" class="fs-activity-section">
                             <div class="fs-section-head">
-                                <div><h2 t-esc="ui_text['recent_activity']"/><p>Latest platform events in the current context.</p></div>
+                                <div><h2 t-esc="ui_text['recent_activity']"/><p t-esc="ui_text['activity_note']"/></div>
                             </div>
                             <div class="fs-panel">
                                 <div t-if="recent_logs" class="fs-activity-list">
@@ -190,8 +190,8 @@
                                 </div>
                                 <div t-else="" class="fs-empty-state fs-empty-compact">
                                     <span class="fa fa-history"/>
-                                    <h3>No recent activity</h3>
-                                    <p>Platform events will appear here as users work.</p>
+                                    <h3 t-esc="ui_text['no_activity']"/>
+                                    <p t-esc="ui_text['activity_will_appear']"/>
                                 </div>
                             </div>
                         </section>
@@ -206,14 +206,14 @@
             <div class="fs-platform-page fs-workspace-page">
                 <div class="fs-shell">
                     <header class="fs-launcher-header">
-                        <div class="fs-brand"><a href="/flexsys" class="fs-brand-mark">FS</a><div><h1 t-esc="application.name"/><p>Workspace</p></div></div>
-                        <div class="fs-user-context"><span class="fs-user-pill" t-esc="platform_user.name"/><a href="/flexsys" class="fs-btn fs-btn-ghost"><span class="fa fa-th-large"/> Mission Control</a></div>
+                        <div class="fs-brand"><a href="/flexsys" class="fs-brand-mark">FS</a><div><h1 t-esc="application.name"/><p t-esc="ui_text['workspace']"/></div></div>
+                        <div class="fs-user-context"><span class="fs-user-pill" t-esc="platform_user.name"/><a href="/flexsys" class="fs-btn fs-btn-ghost"><span class="fa fa-th-large"/> <t t-esc="ui_text['mission_control']"/></a></div>
                     </header>
                     <t t-call="flexsys_platform.command_palette"/>
                     <main>
                         <section class="fs-workspace-hero">
-                            <div><span class="fs-eyebrow"><span t-attf-class="fa #{application.icon}"/> Workspace</span><h2 t-esc="application.workspace_title or application.name"/><p t-esc="application.workspace_subtitle or application.summary"/></div>
-                            <div class="fs-workspace-context"><strong t-esc="company.name"/><span t-if="branch" t-esc="branch_label or branch.name"/><span t-else="">All branches</span></div>
+                            <div><span class="fs-eyebrow"><span t-attf-class="fa #{application.icon}"/> <t t-esc="ui_text['workspace']"/></span><h2 t-esc="application.workspace_title or application.name"/><p t-esc="application.workspace_subtitle or application.summary"/></div>
+                            <div class="fs-workspace-context"><strong t-esc="company.name"/><span t-if="branch" t-esc="branch_label or branch.name"/><span t-else="" t-esc="ui_text['all_branches']"/></div>
                         </section>
                         <section t-if="metric_items" class="fs-kpi-grid">
                             <article t-foreach="metric_items" t-as="item" class="fs-kpi-card">
@@ -221,7 +221,7 @@
                             </article>
                         </section>
                         <section t-if="action_items">
-                            <div class="fs-section-head"><div><h2>Quick actions</h2><p>Common tasks for this workspace.</p></div></div>
+                            <div class="fs-section-head"><div><h2 t-esc="ui_text['quick_actions']"/><p t-esc="ui_text['quick_actions_note']"/></div></div>
                             <div class="fs-action-grid"><a t-foreach="action_items" t-as="item" t-att-href="workspace_action_urls.get(item.id, item.action_url or '#')" class="fs-action-card"><span t-attf-class="fa #{item.icon}"/><div><strong t-esc="item.title"/><small t-esc="item.description"/></div><span class="fa fa-arrow-right"/></a></div>
                         </section>
                     </main>
@@ -235,13 +235,13 @@
             <div class="fs-platform-page fs-search-page">
                 <div class="fs-shell fs-launcher">
                     <header class="fs-launcher-header">
-                        <div class="fs-brand"><a href="/flexsys" class="fs-brand-mark">FS</a><div><h1>Search</h1><p>Universal Search</p></div></div>
-                        <div class="fs-user-context"><span class="fs-user-pill" t-esc="platform_user.name"/><a href="/flexsys" class="fs-btn fs-btn-ghost"><span class="fa fa-th-large"/> Mission Control</a></div>
+                        <div class="fs-brand"><a href="/flexsys" class="fs-brand-mark">FS</a><div><h1 t-esc="ui_text['search_title']"/><p t-esc="ui_text['universal_search']"/></div></div>
+                        <div class="fs-user-context"><span class="fs-user-pill" t-esc="platform_user.name"/><a href="/flexsys" class="fs-btn fs-btn-ghost"><span class="fa fa-th-large"/> <t t-esc="ui_text['mission_control']"/></a></div>
                     </header>
                     <t t-call="flexsys_platform.command_palette"/>
                     <main>
                         <section class="fs-search-hero">
-                            <div><span class="fs-eyebrow"><span class="fa fa-search"/> Universal Search</span><h2>Find anything in FlexSys</h2><p><t t-esc="company.name"/><t t-if="branch"> · <t t-esc="branch.name"/></t></p></div>
+                            <div><span class="fs-eyebrow"><span class="fa fa-search"/> <t t-esc="ui_text['universal_search']"/></span><h2 t-esc="ui_text['find_anything']"/><p><t t-esc="company.name"/><t t-if="branch"> · <t t-esc="branch.name"/></t></p></div>
                             <form action="/flexsys/search" method="get" class="fs-global-search fs-global-search-page" role="search">
                                 <span class="fa fa-search" aria-hidden="true"/>
                                 <input type="search" name="q" t-att-value="query" minlength="2" maxlength="100" autofocus="autofocus" t-att-placeholder="ui_text['search_placeholder']" aria-label="Search FlexSys"/>
@@ -249,7 +249,7 @@
                             </form>
                         </section>
                         <section class="fs-search-results">
-                            <div class="fs-section-head"><div><h2>Results</h2><p t-if="query"><t t-esc="len(results)"/> result(s) for “<t t-esc="query"/>”</p><p t-else="">Enter at least two characters to search.</p></div></div>
+                            <div class="fs-section-head"><div><h2 t-esc="ui_text['results']"/><p t-if="query"><t t-esc="len(results)"/> <t t-esc="ui_text['results_for']"/> “<t t-esc="query"/>”</p><p t-else="" t-esc="ui_text['enter_two_chars']"/></div></div>
                             <div t-if="results" class="fs-search-list">
                                 <a t-foreach="results" t-as="result" t-att-href="result['url']" class="fs-search-result">
                                     <span t-attf-class="fs-search-result-icon fa #{result['icon']}"/>
@@ -257,8 +257,8 @@
                                     <span class="fa fa-arrow-right fs-app-arrow"/>
                                 </a>
                             </div>
-                            <div t-elif="query" class="fs-empty-state"><span class="fa fa-search"/><h3>No results found</h3><p>Try an order number, customer name, or mobile number.</p></div>
-                            <div t-else="" class="fs-empty-state"><span class="fa fa-keyboard"/><h3>Start typing</h3><p>Universal Search respects your permissions, company, and branch context.</p></div>
+                            <div t-elif="query" class="fs-empty-state"><span class="fa fa-search"/><h3 t-esc="ui_text['no_results']"/><p t-esc="ui_text['try_search']"/></div>
+                            <div t-else="" class="fs-empty-state"><span class="fa fa-keyboard"/><h3 t-esc="ui_text['start_typing']"/><p t-esc="ui_text['search_permissions_note']"/></div>
                         </section>
                     </main>
                 </div>
