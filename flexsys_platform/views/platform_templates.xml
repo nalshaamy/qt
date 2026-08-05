@@ -1,0 +1,367 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <template id="flexsys_layout" name="FlexSys Standalone Layout">
+        <html t-att-lang="ui_lang or request.env.lang or 'en_US'" t-att-dir="'rtl' if is_rtl else 'ltr'">
+            <head>
+                <meta charset="utf-8"/>
+                <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+                <meta name="theme-color" content="#173b5b"/>
+                <meta name="flexsys-language" t-att-content="ui_lang"/>
+                <link rel="canonical" t-att-href="request.httprequest.url_root.rstrip('/') + request.httprequest.path.replace('/en/flexsys', '/flexsys').replace('/ar/flexsys', '/flexsys')"/>
+                <title>FlexSys</title>
+                <t t-call-assets="web.assets_frontend" t-js="false"/>
+            </head>
+            <body t-att-dir="'rtl' if is_rtl else 'ltr'" t-attf-class="fs-standalone-body #{'fs-dir-rtl' if is_rtl else 'fs-dir-ltr'}">
+                <t t-out="0"/>
+                <t t-call-assets="web.assets_frontend" t-css="false"/>
+            </body>
+        </html>
+    </template>
+
+    <template id="command_palette" name="FlexSys Command Palette">
+        <button type="button" class="fs-command-trigger" hidden="hidden" data-fs-command-open="1" aria-label="Open command palette">
+            <span class="fa fa-search"/><span>Search or run a command</span><kbd>Ctrl K</kbd>
+        </button>
+        <div class="fs-command-backdrop" data-fs-command-backdrop="1" hidden="hidden">
+            <section class="fs-command-dialog" role="dialog" aria-modal="true" aria-label="FlexSys command palette">
+                <header class="fs-command-search">
+                    <span class="fa fa-search" aria-hidden="true"/>
+                    <input type="search" data-fs-command-input="1" maxlength="100" autocomplete="off" placeholder="Search applications, orders, customers..." aria-label="Search commands"/>
+                    <kbd>Esc</kbd>
+                </header>
+                <div class="fs-command-results" data-fs-command-results="1" role="listbox"/>
+                <footer class="fs-command-footer"><span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span><span><kbd>Enter</kbd> Open</span></footer>
+            </section>
+        </div>
+    </template>
+
+    <template id="login_page" name="FlexSys Platform Login">
+        <t t-call="flexsys_platform.flexsys_layout">
+            <main class="fs-platform-page fs-login-v2" aria-labelledby="fs-login-title">
+                <div class="fs-login-shell">
+                    <section class="fs-login-brand-panel" aria-label="FlexSys">
+                        <div class="fs-login-brand-content">
+                            <img class="fs-login-brand-logo" src="/flexsys_platform/static/src/img/flexsys_mark.svg" alt="FlexSys"/>
+                            <h1>FlexSys</h1>
+                            <p class="fs-login-tagline" t-esc="ui_text['smart_operations_platform']"/>
+                            <span class="fs-login-brand-line" aria-hidden="true"/>
+                            <strong class="fs-login-value" t-esc="ui_text['one_platform']"/>
+                            <p class="fs-login-value-note" t-esc="ui_text['secure_access']"/>
+                            <div class="fs-login-capabilities" aria-hidden="true">
+                                <span>Mission Control</span><i/> <span>Workspaces</span><i/> <span>Operations</span>
+                            </div>
+                        </div>
+                        <div class="fs-login-wave" aria-hidden="true">
+                            <span/><span/><span/><span/>
+                        </div>
+                    </section>
+
+                    <section class="fs-login-form-panel">
+                        <div class="fs-login-language">
+                            <a t-att-href="'/flexsys/login?lang=%s' % ('en_US' if is_rtl else 'ar_001')"
+                               class="fs-language-switch" t-att-aria-label="ui_text['switch_language']">
+                                <span class="fa fa-globe" aria-hidden="true"/>
+                                <span t-esc="ui_text['language_name']"/>
+                                <span class="fa fa-chevron-down" aria-hidden="true"/>
+                            </a>
+                        </div>
+
+                        <div class="fs-login-form-wrap">
+                            <header class="fs-login-form-head">
+                                <h2 id="fs-login-title" t-esc="ui_text['welcome_back']"/>
+                                <p t-esc="ui_text['continue_to_flexsys']"/>
+                            </header>
+
+                            <form method="post" action="/flexsys/login" class="fs-login-form" data-fs-login-form="1">
+                                <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                                <input type="hidden" name="lang" t-att-value="ui_lang"/>
+
+                                <label for="fs-login-username" t-esc="ui_text['username']"/>
+                                <div class="fs-login-field">
+                                    <span class="fa fa-user-o" aria-hidden="true"/>
+                                    <input id="fs-login-username" name="login" type="text" autocomplete="username"
+                                           required="required" autofocus="autofocus"/>
+                                </div>
+
+                                <label for="fs-login-password" t-esc="ui_text['password']"/>
+                                <div class="fs-login-field">
+                                    <span class="fa fa-lock" aria-hidden="true"/>
+                                    <input id="fs-login-password" name="password" type="password"
+                                           autocomplete="current-password" required="required"/>
+                                    <button type="button" class="fs-password-toggle" data-fs-password-toggle="1"
+                                            t-att-aria-label="ui_text['show_password']" data-show-label="Show password" data-hide-label="Hide password">
+                                        <span class="fa fa-eye" aria-hidden="true"/>
+                                    </button>
+                                </div>
+
+                                <div t-if="error" class="fs-alert fs-alert-danger" role="alert">
+                                    <span class="fa fa-exclamation-circle"/><t t-esc="error"/>
+                                </div>
+
+                                <button type="submit" class="fs-btn fs-login-submit" data-fs-login-submit="1"
+                                        t-att-data-loading-label="ui_text['loading']">
+                                    <span data-fs-login-label="1" t-esc="ui_text['sign_in']"/>
+                                    <span data-fs-login-icon="1" t-attf-class="fa #{'fa-arrow-left' if is_rtl else 'fa-arrow-right'}" aria-hidden="true"/>
+                                </button>
+                            </form>
+                        </div>
+
+                        <footer class="fs-login-footer">
+                            © 2026 FlexSys. <t t-esc="ui_text['copyright']"/>
+                        </footer>
+                    </section>
+                </div>
+            </main>
+        </t>
+    </template>
+
+    <template id="launcher_page" name="FlexSys Mission Control">
+        <t t-call="flexsys_platform.flexsys_layout">
+            <div class="fs-platform-page fs-launcher">
+                <div class="fs-shell">
+                    <header class="fs-mission-header">
+                        <div class="fs-mission-topbar">
+                            <div class="fs-brand fs-brand-on-dark">
+                                <div class="fs-brand-mark">FS</div>
+                                <div><h1>FlexSys</h1><p t-esc="ui_text['smart_operations_platform']"/></div>
+                            </div>
+                            <div class="fs-mission-actions">
+                                <form method="post" action="/flexsys/language" class="fs-inline-language-form">
+                                    <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                                    <input type="hidden" name="next" value="/flexsys"/>
+                                    <span class="fa fa-globe" aria-hidden="true"/>
+                                    <select name="lang" t-att-aria-label="ui_text['language']" onchange="this.form.submit()">
+                                        <option value="ar_001" t-att-selected="ui_lang == 'ar_001'">العربية</option>
+                                        <option value="en_US" t-att-selected="ui_lang == 'en_US'">English</option>
+                                    </select>
+                                </form>
+                                <span class="fs-user-pill fs-user-pill-dark" t-esc="platform_user.name"/>
+                                <form method="post" action="/flexsys/logout" class="fs-logout-form">
+                                    <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                                    <button type="submit" class="fs-btn fs-btn-light"><span class="fa fa-sign-out"/><t t-esc="ui_text['sign_out']"/></button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="fs-mission-content">
+                            <div class="fs-welcome-content">
+                                <span class="fs-eyebrow"><span class="fa fa-compass"/> <t t-esc="ui_text['mission_control']"/></span>
+                                <h2><t t-esc="ui_text['welcome']"/>, <t t-esc="platform_user.name"/></h2>
+                                <p t-esc="ui_text['manage_context']"/>
+                            </div>
+                            <div class="fs-health-summary">
+                                <span t-attf-class="fs-status-chip fs-status-#{platform_health}">
+                                    <span class="fs-status-dot"/><t t-esc="platform_health.title()"/>
+                                </span>
+                                <strong t-esc="ui_text['platform_status']"/>
+                            </div>
+                        </div>
+
+                        <div class="fs-mission-controls">
+                            <form method="post" action="/flexsys/context" class="fs-context-switcher">
+                                <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                                <span class="fs-context-icon fa fa-building" aria-hidden="true"/>
+                                <div class="fs-context-fields">
+                                    <label>
+                                        <span t-esc="ui_text['company']"/>
+                                        <select name="company_id" aria-label="Company" onchange="this.form.submit()">
+                                            <option t-foreach="allowed_companies" t-as="item"
+                                                    t-att-value="item.id" t-att-selected="item == company"
+                                                    t-esc="item.name"/>
+                                        </select>
+                                    </label>
+                                    <label>
+                                        <span t-esc="ui_text['branch']"/>
+                                        <select name="branch_id" aria-label="Branch" onchange="this.form.submit()">
+                                            <option value="" t-esc="ui_text['all_branches']"/>
+                                            <option t-foreach="allowed_branches" t-as="item"
+                                                    t-att-value="item.id" t-att-selected="item == branch"
+                                                    t-esc="branch_labels.get(item.id, item.name)"/>
+                                        </select>
+                                    </label>
+                                </div>
+                            </form>
+
+                            <form action="/flexsys/search" method="get" class="fs-global-search fs-global-search-in-header" role="search"><input type="hidden" name="back" value="/flexsys"/>
+                                <span class="fa fa-search" aria-hidden="true"/>
+                                <input type="search" name="q" minlength="2" maxlength="100" t-att-placeholder="ui_text['search_placeholder']" aria-label="Search FlexSys"/>
+                                <button type="submit" class="fs-btn fs-btn-light"> <t t-esc="ui_text['search']"/></button>
+                            </form>
+                        </div>
+                    </header>
+                    <t t-call="flexsys_platform.command_palette"/>
+
+                    <main>
+
+                        <section class="fs-kpi-grid" aria-label="Platform overview">
+                            <a href="#applications" class="fs-kpi-card fs-kpi-link" data-fs-app-filter="all">
+                                <span class="fs-kpi-icon fa fa-th-large"/>
+                                <div><span t-esc="ui_text['applications']"/><strong t-esc="len(applications)"/><small t-esc="ui_text['view_applications']"/></div>
+                                <span class="fa fa-arrow-right fs-kpi-arrow"/>
+                            </a>
+                            <a href="#applications" class="fs-kpi-card fs-kpi-link" data-fs-app-filter="healthy">
+                                <span class="fs-kpi-icon fa fa-check-circle"/>
+                                <div><span t-esc="ui_text['healthy']"/><strong t-esc="health_counts['healthy']"/><small t-esc="ui_text['all_systems_operational']"/></div>
+                                <span class="fa fa-arrow-right fs-kpi-arrow"/>
+                            </a>
+                            <a href="#applications" class="fs-kpi-card fs-kpi-link" data-fs-app-filter="attention">
+                                <span class="fs-kpi-icon fa fa-exclamation-triangle"/>
+                                <div><span t-esc="ui_text['needs_attention']"/><strong t-esc="health_counts['degraded'] + health_counts['unavailable']"/><small t-esc="ui_text['review_attention_items']"/></div>
+                                <span class="fa fa-arrow-right fs-kpi-arrow"/>
+                            </a>
+                            <a t-att-href="'#recent-activity' if can_view_activity else '#applications'" class="fs-kpi-card fs-kpi-link">
+                                <span class="fs-kpi-icon fa fa-users"/>
+                                <div><span t-esc="ui_text['active_sessions']"/><strong t-esc="active_sessions"/><small t-esc="ui_text['live_sessions_now']"/></div>
+                                <span class="fa fa-arrow-right fs-kpi-arrow"/>
+                            </a>
+                        </section>
+
+                        <section id="applications">
+                            <div t-if="len(applications) &gt; 1" class="fs-section-head">
+                                <div><h2 t-esc="ui_text['workspaces']"/><p t-esc="ui_text['applications_note']"/></div>
+                            </div>
+                            <div class="fs-app-grid">
+                                <a t-foreach="applications" t-as="app" t-att-href="'/flexsys/open/%s' % app.code" t-att-data-health="app.health_status" class="fs-app-card fs-app-card-compact">
+                                    <span t-attf-class="fa #{app.icon} fs-app-icon"/>
+                                    <div class="fs-app-content">
+                                        <div class="fs-app-title-row">
+                                            <h3 t-esc="app.name"/>
+                                            <span t-attf-class="fs-status-chip fs-status-#{app.health_status}">
+                                                <span class="fs-status-dot"/><t t-esc="health_labels.get(app.health_status)"/>
+                                            </span>
+                                        </div>
+                                        <p t-esc="app.summary"/>
+                                    </div>
+                                    <span class="fa fa-arrow-right fs-app-arrow"/>
+                                </a>
+                                <div t-if="not applications" class="fs-empty-state">
+                                    <span class="fa fa-th-large"/>
+                                    <h3 t-esc="ui_text['no_workspaces']"/>
+                                    <p t-esc="ui_text['assign_permission']"/>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section id="recent-activity" t-if="can_view_activity" class="fs-activity-section">
+                            <div class="fs-section-head">
+                                <div><h2 t-esc="ui_text['recent_activity']"/><p t-esc="ui_text['activity_note']"/></div>
+                            </div>
+                            <div class="fs-panel">
+                                <div t-if="recent_logs" class="fs-activity-list">
+                                    <article t-foreach="recent_logs" t-as="log" class="fs-activity-item">
+                                        <span t-attf-class="fs-activity-icon fa #{'fa-shield' if log.event_type == 'security' else 'fa-sign-in' if log.event_type == 'authentication' else 'fa-bolt'}"/>
+                                        <div class="fs-activity-content">
+                                            <strong t-esc="(log.description or log.action.replace('_', ' ').title())"/>
+                                            <span>
+                                                <t t-if="log.platform_user_id"><t t-esc="log.platform_user_id.name"/> · </t>
+                                                <t t-esc="log.action.replace('_', ' ').title()"/>
+                                            </span>
+                                        </div>
+                                        <time t-field="log.create_date"/>
+                                    </article>
+                                </div>
+                                <div t-else="" class="fs-empty-state fs-empty-compact">
+                                    <span class="fa fa-history"/>
+                                    <h3 t-esc="ui_text['no_activity']"/>
+                                    <p t-esc="ui_text['activity_will_appear']"/>
+                                </div>
+                            </div>
+                        </section>
+                    </main>
+                </div>
+            </div>
+        </t>
+    </template>
+
+    <template id="workspace_page" name="FlexSys Workspace">
+        <t t-call="flexsys_platform.flexsys_layout">
+            <div class="fs-platform-page fs-workspace-page">
+                <div class="fs-shell">
+                    <header class="fs-launcher-header">
+                        <div class="fs-brand"><a href="/flexsys" class="fs-brand-mark">FS</a><div><h1 t-esc="application.name"/><p t-esc="ui_text['workspace']"/></div></div>
+                        <div class="fs-user-context">
+                            <form method="post" action="/flexsys/language" class="fs-inline-language-form fs-inline-language-light">
+                                <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                                <input type="hidden" name="next" t-att-value="request.httprequest.path"/>
+                                <span class="fa fa-globe" aria-hidden="true"/>
+                                <select name="lang" t-att-aria-label="ui_text['language']" onchange="this.form.submit()">
+                                    <option value="ar_001" t-att-selected="ui_lang == 'ar_001'">العربية</option>
+                                    <option value="en_US" t-att-selected="ui_lang == 'en_US'">English</option>
+                                </select>
+                            </form>
+                            <span class="fs-user-pill" t-esc="platform_user.name"/>
+                            <a href="/flexsys" class="fs-btn fs-btn-ghost"><span class="fa fa-th-large"/> <t t-esc="ui_text['mission_control']"/></a>
+                        </div>
+                    </header>
+                    <t t-call="flexsys_platform.command_palette"/>
+                    <main>
+                        <section class="fs-workspace-hero">
+                            <div><span class="fs-eyebrow"><span t-attf-class="fa #{application.icon}"/> <t t-esc="ui_text['workspace']"/></span><h2 t-esc="application.workspace_title or application.name"/><p t-esc="application.workspace_subtitle or application.summary"/></div>
+                            <div class="fs-workspace-context"><strong t-esc="company.name"/><span t-if="branch" t-esc="branch_label or branch.name"/><span t-else="" t-esc="ui_text['all_branches']"/></div>
+                        </section>
+                        <section t-if="metric_items" class="fs-kpi-grid">
+                            <article t-foreach="metric_items" t-as="item" class="fs-kpi-card">
+                                <span t-attf-class="fs-kpi-icon fa #{item.icon}"/><div><span t-esc="item.title"/><strong t-esc="metrics.get(item.metric_key or item.code, 0)"/></div>
+                            </article>
+                        </section>
+                        <section t-if="action_items">
+                            <div class="fs-section-head"><div><h2 t-esc="ui_text['quick_actions']"/><p t-esc="ui_text['quick_actions_note']"/></div></div>
+                            <div class="fs-action-grid"><a t-foreach="action_items" t-as="item" t-att-href="workspace_action_urls.get(item.id, item.action_url or '#')" class="fs-action-card"><span t-attf-class="fa #{item.icon}"/><div><strong t-esc="item.title"/><small t-esc="item.description"/></div><span class="fa fa-arrow-right"/></a></div>
+                        </section>
+                    </main>
+                </div>
+            </div>
+        </t>
+    </template>
+
+    <template id="search_page" name="FlexSys Universal Search">
+        <t t-call="flexsys_platform.flexsys_layout">
+            <div class="fs-platform-page fs-search-page">
+                <div class="fs-shell fs-launcher">
+                    <header class="fs-launcher-header">
+                        <div class="fs-brand"><a href="/flexsys" class="fs-brand-mark">FS</a><div><h1 t-esc="ui_text['search_title']"/><p t-esc="ui_text['universal_search']"/></div></div>
+                        <div class="fs-user-context">
+                            <form method="post" action="/flexsys/language" class="fs-inline-language-form fs-inline-language-light">
+                                <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                                <input type="hidden" name="next" t-att-value="request.httprequest.path"/>
+                                <span class="fa fa-globe" aria-hidden="true"/>
+                                <select name="lang" t-att-aria-label="ui_text['language']" onchange="this.form.submit()">
+                                    <option value="ar_001" t-att-selected="ui_lang == 'ar_001'">العربية</option>
+                                    <option value="en_US" t-att-selected="ui_lang == 'en_US'">English</option>
+                                </select>
+                            </form>
+                            <span class="fs-user-pill" t-esc="platform_user.name"/>
+                            <a href="/flexsys" class="fs-btn fs-btn-ghost"><span class="fa fa-th-large"/> <t t-esc="ui_text['mission_control']"/></a>
+                        </div>
+                    </header>
+                    <t t-call="flexsys_platform.command_palette"/>
+                    <main>
+                        <a t-att-href="back_url" class="fs-back-link"><span class="fa fa-arrow-left"/> <t t-esc="ui_text['back']"/></a>
+                        <section class="fs-search-hero">
+                            <div><span class="fs-eyebrow"><span class="fa fa-search"/> <t t-esc="ui_text['universal_search']"/></span><h2 t-esc="ui_text['find_anything']"/><p><t t-esc="company.name"/><t t-if="branch"> · <t t-esc="branch.name"/></t></p></div>
+                            <form action="/flexsys/search" method="get" class="fs-global-search fs-global-search-page" role="search"><input type="hidden" name="back" t-att-value="back_url"/>
+                                <span class="fa fa-search" aria-hidden="true"/>
+                                <input type="search" name="q" t-att-value="query" minlength="2" maxlength="100" autofocus="autofocus" t-att-placeholder="ui_text['search_placeholder']" aria-label="Search FlexSys"/>
+                                <button type="submit" class="fs-btn fs-btn-primary"> <t t-esc="ui_text['search']"/></button>
+                            </form>
+                        </section>
+                        <section class="fs-search-results">
+                            <div class="fs-section-head"><div><h2 t-esc="ui_text['results']"/><p t-if="query"><t t-esc="len(results)"/> <t t-esc="ui_text['results_for']"/> “<t t-esc="query"/>”</p><p t-else="" t-esc="ui_text['enter_two_chars']"/></div></div>
+                            <div t-if="results" class="fs-search-list">
+                                <a t-foreach="results" t-as="result" t-att-href="result['url']" class="fs-search-result">
+                                    <span t-attf-class="fs-search-result-icon fa #{result['icon']}"/>
+                                    <div class="fs-search-result-content"><div class="fs-search-result-title"><strong t-esc="result['title']"/><span class="fs-status-chip" t-esc="result['type']"/></div><p t-if="result['subtitle']" t-esc="result['subtitle']"/><small><span t-attf-class="fa #{result['application_icon']}"/> <t t-esc="result['application_name']"/></small></div>
+                                    <span class="fa fa-arrow-right fs-app-arrow"/>
+                                </a>
+                            </div>
+                            <div t-elif="query" class="fs-empty-state"><span class="fa fa-search"/><h3 t-esc="ui_text['no_results']"/><p t-esc="ui_text['try_search']"/></div>
+                            <div t-else="" class="fs-empty-state"><span class="fa fa-keyboard"/><h3 t-esc="ui_text['start_typing']"/><p t-esc="ui_text['search_permissions_note']"/></div>
+                        </section>
+                    </main>
+                </div>
+            </div>
+        </t>
+    </template>
+
+</odoo>

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_flexsys_platform_user_list" model="ir.ui.view"><field name="name">flexsys.platform.user.list</field><field name="model">flexsys.platform.user</field><field name="arch" type="xml"><list><field name="name"/><field name="login"/><field name="email"/><field name="default_company_id"/><field name="default_branch_id"/><field name="active"/></list></field></record>
+    <record id="view_flexsys_platform_user_form" model="ir.ui.view"><field name="name">flexsys.platform.user.form</field><field name="model">flexsys.platform.user</field><field name="arch" type="xml"><form string="Platform User"><sheet><group><group><field name="name"/><field name="login"/><field name="email"/><field name="new_password" password="True"/><field name="active"/></group><group><field name="language"/><field name="timezone"/><field name="last_login" readonly="1"/></group></group><notebook><page string="Access"><group><field name="role_ids" widget="many2many_tags"/><field name="company_ids" widget="many2many_tags"/><field name="default_company_id" domain="[('id', 'in', company_ids)]"/><field name="branch_ids" widget="many2many_tags" domain="[('company_id', 'in', company_ids)]"/><field name="default_branch_id" domain="[('id', 'in', branch_ids)]"/></group></page></notebook></sheet></form></field></record>
+    <record id="action_flexsys_platform_users" model="ir.actions.act_window"><field name="name">Users</field><field name="res_model">flexsys.platform.user</field><field name="view_mode">list,form</field></record>
+
+    <record id="view_flexsys_platform_role_list" model="ir.ui.view"><field name="name">flexsys.platform.role.list</field><field name="model">flexsys.platform.role</field><field name="arch" type="xml"><list><field name="sequence" widget="handle"/><field name="name"/><field name="code"/><field name="active"/></list></field></record>
+    <record id="view_flexsys_platform_role_form" model="ir.ui.view"><field name="name">flexsys.platform.role.form</field><field name="model">flexsys.platform.role</field><field name="arch" type="xml"><form><sheet><group><field name="name"/><field name="code"/><field name="sequence"/><field name="active"/></group><field name="permission_ids" widget="many2many_tags"/></sheet></form></field></record>
+    <record id="action_flexsys_platform_roles" model="ir.actions.act_window"><field name="name">Roles</field><field name="res_model">flexsys.platform.role</field><field name="view_mode">list,form</field></record>
+
+    <record id="view_flexsys_platform_branch_list" model="ir.ui.view"><field name="name">flexsys.platform.branch.list</field><field name="model">flexsys.platform.branch</field><field name="arch" type="xml"><list><field name="sequence" widget="handle"/><field name="name"/><field name="code"/><field name="company_id"/><field name="active"/></list></field></record>
+    <record id="action_flexsys_platform_branches" model="ir.actions.act_window"><field name="name">Branches</field><field name="res_model">flexsys.platform.branch</field><field name="view_mode">list,form</field></record>
+
+
+    <record id="view_flexsys_platform_session_list" model="ir.ui.view">
+        <field name="name">flexsys.platform.session.list</field>
+        <field name="model">flexsys.platform.session</field>
+        <field name="arch" type="xml">
+            <list create="false" delete="false" edit="false">
+                <field name="user_id"/><field name="company_id"/><field name="branch_id"/>
+                <field name="last_activity_at"/><field name="expires_at"/><field name="ip_address"/><field name="active"/>
+            </list>
+        </field>
+    </record>
+    <record id="action_flexsys_platform_sessions" model="ir.actions.act_window">
+        <field name="name">Sessions</field><field name="res_model">flexsys.platform.session</field>
+        <field name="view_mode">list,form</field><field name="context">{'create': False}</field>
+    </record>
+
+    <record id="view_flexsys_platform_application_list" model="ir.ui.view"><field name="name">flexsys.platform.application.list</field><field name="model">flexsys.platform.application</field><field name="arch" type="xml"><list><field name="sequence" widget="handle"/><field name="name"/><field name="code"/><field name="version"/><field name="category"/><field name="module_name"/><field name="url"/><field name="required_permission_code"/><field name="search_enabled"/><field name="search_provider_model" optional="hide"/><field name="health_status" widget="badge"/><field name="active"/></list></field></record>
+    <record id="action_flexsys_platform_applications" model="ir.actions.act_window"><field name="name">Applications</field><field name="res_model">flexsys.platform.application</field><field name="view_mode">list,form</field></record>
+
+
+    <record id="view_flexsys_workspace_item_list" model="ir.ui.view"><field name="name">flexsys.platform.workspace.item.list</field><field name="model">flexsys.platform.workspace.item</field><field name="arch" type="xml"><list><field name="sequence" widget="handle"/><field name="application_id"/><field name="item_type"/><field name="code"/><field name="title"/><field name="size"/><field name="permission_code"/><field name="active"/></list></field></record>
+    <record id="action_flexsys_workspace_items" model="ir.actions.act_window"><field name="name">Workspace Items</field><field name="res_model">flexsys.platform.workspace.item</field><field name="view_mode">list,form</field></record>
+
+    <record id="view_flexsys_system_log_list" model="ir.ui.view"><field name="name">flexsys.system.log.list</field><field name="model">flexsys.system.log</field><field name="arch" type="xml"><list create="false" delete="false" edit="false"><field name="create_date"/><field name="event_type"/><field name="action"/><field name="platform_user_id"/><field name="application_code"/><field name="company_id"/><field name="branch_id"/><field name="description"/></list></field></record>
+    <record id="action_flexsys_system_logs" model="ir.actions.act_window"><field name="name">System Log</field><field name="res_model">flexsys.system.log</field><field name="view_mode">list,form</field><field name="context">{'create': False}</field></record>
+
+    <menuitem id="menu_flexsys_platform_root" name="FlexSys" sequence="5" web_icon="flexsys_platform,static/src/img/icon.png" groups="base.group_system"/>
+    <menuitem id="menu_flexsys_platform_admin" name="Administration" parent="menu_flexsys_platform_root" sequence="90"/>
+    <menuitem id="menu_flexsys_platform_users" name="Users" parent="menu_flexsys_platform_admin" action="action_flexsys_platform_users" sequence="10"/>
+    <menuitem id="menu_flexsys_platform_roles" name="Roles" parent="menu_flexsys_platform_admin" action="action_flexsys_platform_roles" sequence="20"/>
+    <menuitem id="menu_flexsys_platform_sessions" name="Sessions" parent="menu_flexsys_platform_admin" action="action_flexsys_platform_sessions" sequence="25"/>
+    <menuitem id="menu_flexsys_platform_branches" name="Branches" parent="menu_flexsys_platform_admin" action="action_flexsys_platform_branches" sequence="30"/>
+    <menuitem id="menu_flexsys_platform_applications" name="Applications" parent="menu_flexsys_platform_admin" action="action_flexsys_platform_applications" sequence="40"/>
+    <menuitem id="menu_flexsys_platform_workspace_items" name="Workspace Items" parent="menu_flexsys_platform_admin" action="action_flexsys_workspace_items" sequence="45"/>
+    <menuitem id="menu_flexsys_platform_logs" name="System Log" parent="menu_flexsys_platform_admin" action="action_flexsys_system_logs" sequence="50"/>
+</odoo>

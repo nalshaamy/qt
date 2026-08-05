@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- The bootstrap service is idempotent and runs on install and upgrade. -->
+    <function model="flexsys.platform.application" name="_ensure_operations_seed_data"/>
+</odoo>
