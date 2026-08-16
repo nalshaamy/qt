@@ -8,6 +8,45 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.4.1 — Test-only fix: wrong-class helper reference
+
+**Confirmed live on Odoo.sh**: 1 error / 223 tests -
+`test_bug10_reopened_ready_order_has_single_effective_stage` raised
+`AttributeError: 'TestWorkflow' object has no attribute
+'_create_pos_order'`.
+
+### Root cause
+`_create_pos_order()` is a helper local to `TestPosSync`'s own class,
+never part of the shared `FlexSysKdsTestCommon` base - this new BUG-10
+test (added in v7.4.0) was written in `TestWorkflow`, which doesn't
+have it.
+
+### Fix
+Rewritten to drive `kds.order`/`kds.order.line` directly instead,
+matching `test_workflow.py`'s own established pattern (see
+`test_reopen_from_ready_lands_on_preparing_not_new`, the test
+immediately above it) rather than needing a real `pos.order` at all -
+what's actually under test is `_effective_stage()`'s own classification
+logic, which operates purely on `kds.order.line` state, independent of
+how those lines got there. Also corrected a second, related inaccuracy
+found while rewriting it: the original version assumed a Ready line's
+qty change resets it to `'preparing'` - the real production path
+(`_system_reset_for_delta_sync()`, called from
+`pos_order.py::_flexsys_kds_diff_lines()`) actually resets a modified
+Ready line to `'new'`, not `'preparing'`. Simplified to a line left
+mid-preparation with a second line added alongside it - already the
+exact "one new, one further along" mix under test, without fabricating
+an inaccurate path.
+
+Audited the rest of `test_workflow.py` for the same class of mistake
+(any other `TestPosSync`-local helper referenced from the wrong class)
+- confirmed clean.
+
+Test-only change; no production code touched. No test count change
+(223).
+
+---
+
 ## v7.4.0 — BUG-08 review, BUG-09 (qty delta), BUG-10 (single authoritative stage)
 
 Three items from the latest dev request: BUG-08 confirmed already fully

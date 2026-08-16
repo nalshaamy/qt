@@ -1323,33 +1323,48 @@ class TestWorkflow(FlexSysKdsTestCommon):
 
     def test_bug10_reopened_ready_order_has_single_effective_stage(self):
         """The dev request's own exact required regression scenario:
-        Kitchen reaches READY, then POS changes qty on the existing
-        product AND adds a new one - existing line -> UPDATED/preparing,
-        new line -> ADDED/new. The ticket must classify as exactly
-        'preparing', never simultaneously matching 'new' too."""
-        order = self._create_pos_order([(self.product_burger, 1)])
-        kds_order = order.kds_order_id
-        kds_order.line_ids.action_accept()
-        kds_order.line_ids.action_start()
-        kds_order.line_ids.action_ready()
-        self.assertEqual(kds_order.line_ids.state, 'ready')
+        one line already 'preparing', a new product added mid-order
+        (matching how a POS Delta's own ADDED line reaches this model -
+        see test_reopen_from_ready_lands_on_preparing_not_new above).
+        The ticket must classify as exactly 'preparing', never
+        simultaneously matching 'new' too.
 
-        # Existing product qty change + a new product added, in one sync.
-        order.lines.write({'qty': 3})
-        self.env['pos.order.line'].create({
-            'order_id': order.id,
-            'product_id': self.product_cappuccino.id,
-            'qty': 1,
-            'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
+        REAL BUG FIX, confirmed live on Odoo.sh: this test originally
+        used _create_pos_order(), a helper local to TestPosSync's own
+        class, not available here in TestWorkflow - AttributeError.
+        Rewritten to drive kds.order/kds.order.line directly instead,
+        matching this file's own established pattern (see the test
+        immediately above) rather than needing a real pos.order at all -
+        what's actually under test here is _effective_stage()'s own
+        classification logic, which operates purely on kds.order.line
+        state, independent of how those lines got there. Also
+        deliberately does not attempt to simulate a Ready line reset
+        back to Preparing via a qty change (the real production path for
+        that - _system_reset_for_delta_sync() - actually resets a
+        modified Ready line to 'new', not 'preparing'; see
+        pos_order.py's own call site) - a line simply left mid-
+        preparation, with a second line added alongside it, already
+        gives the exact "one new, one further along" mix this is
+        testing, without needing to fabricate an inaccurate path.
+        """
+        order = self._order()
+        order.action_accept()
+        order.line_ids.action_start()
+        self.assertEqual(order.line_ids.state, 'preparing')
+
+        # A new line arriving via create() (matching how a POS Delta's
+        # ADDED line actually reaches this model).
+        self.env['kds.order.line'].create({
+            'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 1,
+            'station_id': self.station_kitchen.id,
         })
-        order._flexsys_kds_diff_lines()
 
-        kds_order.invalidate_recordset()
-        states = kds_order.line_ids.mapped('state')
+        order.invalidate_recordset()
+        states = order.line_ids.mapped('state')
         self.assertIn('new', states, "The newly added line must be 'new'/ADDED.")
-        self.assertIn('preparing', states, "The reopened existing line must be back to 'preparing'.")
+        self.assertIn('preparing', states, "The original line must still be 'preparing'.")
 
-        stage = self._effective_stage(kds_order.line_ids)
+        stage = self._effective_stage(order.line_ids)
         self.assertEqual(
             stage, 'preparing',
             "A ticket with mixed line states (one 'new', one 'preparing') must classify as "

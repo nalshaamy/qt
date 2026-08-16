@@ -1,6 +1,6 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.4.0**
+**Version: 19.0.7.4.1**
 **Status as of this document: code-complete, including the "Runtime
 Regression Fix Package" (BUG-01 through BUG-06), two rounds of Odoo.sh
 runtime test failures fixed, BUG-07 (station-scoped completion) fully
