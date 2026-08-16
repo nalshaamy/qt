@@ -8,6 +8,88 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.2.1 — BUG-07 integration fixes: Expeditor + outdated test shortcuts
+
+**Confirmed live on Odoo.sh**: 0 failures / 5 errors / 182 tests
+reached, after the v7.2.0 BUG-07 guard exposed integration problems in
+Expeditor and several outdated Workflow tests. All fixed without
+weakening the BUG-07 guard itself.
+
+### 1. Expeditor completion reconciled with the BUG-07 guard
+**Root cause**: `kds.expeditor.task.action_complete()` called the
+general `order.action_complete()`, whose new BUG-07 guard requires
+`is_fully_completed` - every production line, across every station,
+individually reached `'completed'`. Under Expeditor, production lines
+are only ever expected to reach `'ready'` and stop there; final
+completion has always been the Packing task's own responsibility, never
+each production station's - the guard was checking the wrong
+criterion for this lifecycle entirely.
+
+**Fix**: new dedicated `kds.order._finalize_via_expeditor()`, using
+`is_expeditor_ready` (every non-cancelled line Ready-or-Completed - the
+correct criterion for this lifecycle) instead of `is_fully_completed`.
+Still routes through the exact same authoritative `_wf_transition()`
+every other transition in this module uses - full audit trail,
+notification, timestamp - only the precondition check differs, matching
+each lifecycle's own actual requirements:
+
+```
+Production Stations READY -> Expeditor/Packing -> Expeditor COMPLETED
+    -> _finalize_via_expeditor() -> Overall Order COMPLETED   (Expeditor)
+
+Station READY -> Station COMPLETE (per station, independently)
+    -> action_complete() (once every station has) -> Overall Order COMPLETED   (non-Expeditor)
+```
+
+Production lines are explicitly confirmed to stay at `'ready'` even
+after the whole order completes via Expeditor - never force-rewritten,
+matching "do not force every production station line to become
+COMPLETED... unless that is the intended lifecycle" (it explicitly
+isn't, here). 2 new explicit regression tests, one per required
+scenario (Expeditor enabled / disabled).
+
+### 2. Missing `AccessError` import
+`tests/test_workflow.py` used `AccessError` in a new BUG-07 security
+test without importing it - one-line fix.
+
+### 3-4. Outdated Workflow tests calling `action_complete()` while the line was still `'new'`
+**Root cause**: these tests drove the **order-level** state machine
+(`order.action_accept()`/`action_start_preparing()`/`action_ready()` -
+standalone, admin-level methods that only ever move the order's own
+aggregate state, never touch line state) but never separately
+progressed the **line** through its own required states -
+`order.line_ids.action_complete()` then correctly rejected
+`'new' -> 'completed'` as an invalid transition. This was a real gap
+in these tests, not something to weaken `_line_transition()`'s own
+validation to paper over - fixed by driving the line through its own
+Accept/Start/Ready alongside each order-level call. A full, precise,
+sequential audit of the entire test suite (every `action_complete()`
+call, confirming a line-level `action_ready()` genuinely precedes it
+within the same test) found and fixed **3 affected tests total**
+(`test_full_happy_path_order`, `test_direct_override_transition_
+requires_override_permission`, and one more found only by the wider
+sequential audit -
+`test_reopen_completed_order_via_dedicated_action`, which the dev
+report's own two named failures hadn't listed but the same root cause
+applied to).
+
+### Files changed
+`models/kds_order.py` (new `_finalize_via_expeditor()`),
+`models/kds_expeditor_task.py` (calls the new method),
+`tests/test_workflow.py` (import fix, 3 corrected tests),
+`tests/test_expeditor.py` (2 new regression tests).
+
+**Total: 207 tests** (up from 205).
+
+No database migration required. The BUG-07 station-level completion
+guard itself is completely unchanged and unweakened - every fix either
+gave Expeditor's genuinely different lifecycle its own correct,
+appropriately-scoped finalization path, or corrected a test that had
+fallen out of sync with the authoritative workflow's own real
+requirements.
+
+---
+
 ## v7.2.0 — BUG-07 fully closed: station-scoped completion, real remaining gap fixed
 
 Follow-up to a partial BUG-07 implementation already in place (the

@@ -1,12 +1,12 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.2.0**
+**Version: 19.0.7.2.1**
 **Status as of this document: code-complete, including the "Runtime
 Regression Fix Package" (BUG-01 through BUG-06), two rounds of Odoo.sh
-runtime test failures fixed, and BUG-07 (station-scoped completion)
-fully closed. 205 automated tests, all `py_compile`/XML/JS checks
-passing. Not yet signed off on a live instance — see "What still needs
-a human" at the end.**
+runtime test failures fixed, BUG-07 (station-scoped completion) fully
+closed, and its own Expeditor integration reconciled. 207 automated
+tests, all `py_compile`/XML/JS checks passing. Not yet signed off on a
+live instance — see "What still needs a human" at the end.**
 
 This document maps directly to that request's own section structure
 (A/B/C/D) and states, for each item, what's actually been verified and
@@ -237,23 +237,29 @@ remain genuinely unchanged, each completing independently, with the
 overall order only reaching `COMPLETED` once every required station
 has. Implemented through a real, validated, audited line-level
 `action_complete()` (not frontend-only filtering) with order-level
-aggregation via a new `is_fully_completed` field - and, this round
-specifically, a guard added to the order-level `action_complete()`
-itself so it can no longer be force-called (from the order form or the
-backend controller) to bypass this while another station still has
-active production. Regression test
-(`test_bug07_three_station_order_completes_independently_per_station`)
-routes one order to Kitchen + Coffee + Bar and completes each station
-one at a time, asserting the other two remain untouched at every step
-and the order only reaches `'completed'` after the third.
+aggregation via a new `is_fully_completed` field, a guard on the
+order-level `action_complete()` itself so it can no longer be
+force-called (from the order form or the backend controller) to bypass
+this while another station still has active production, **and a
+dedicated `_finalize_via_expeditor()` finalization path** (v7.2.1) so
+an Expeditor-enabled order's genuinely different lifecycle - production
+lines stay at Ready, the Packing task's own completion is what
+finalizes the order - isn't forced through the same
+`is_fully_completed` criterion that's correct for the non-Expeditor
+case but wrong for this one. Regression tests:
+`test_bug07_three_station_order_completes_independently_per_station`
+(three real stations, completing one at a time) plus explicit
+Expeditor-enabled/disabled coverage in `test_expeditor.py`.
 
 **What still needs a human**: same category as everything else in this
 document - a live two-screen check that completing one station's
 "Complete" button on the actual KDS screen (not just the model-level
 test) correctly leaves the other stations' own screens fully
-interactive and unaffected, and that the order form's "Complete" button
+interactive and unaffected, that the order form's "Complete" button
 now shows a clear, honest error (not a confusing generic one) when
-production is still active elsewhere.
+production is still active elsewhere, and that a live Expeditor/Packing
+completion flow correctly finalizes the order end-to-end on a real
+instance.
 
 ---
 
@@ -486,7 +492,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 205 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 207 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

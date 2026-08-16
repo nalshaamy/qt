@@ -638,6 +638,66 @@ class KdsOrder(models.Model):
         self.line_ids.filtered(lambda l: l.state != 'cancelled')\
             .with_context(kds_workflow_write=True).write({'state': 'completed'})
 
+    def _finalize_via_expeditor(self, bypass_check=False):
+        """REAL BUG FIX, confirmed live on Odoo.sh (BUG-07 integration
+        with Expeditor - "Expeditor completion fails even when
+        production is legitimately ready for final packing completion"):
+        dedicated, authoritative finalization path for an Expeditor-
+        enabled order, called ONLY by
+        kds.expeditor.task.action_complete() once the Packing task
+        itself has genuinely finished - never called directly from a
+        controller or the order form.
+
+        Deliberately distinct from action_complete()'s own guard just
+        above (is_fully_completed, which requires every production
+        LINE, across every station, to have *individually* reached
+        'completed'): that's the correct criterion for the general,
+        non-Expeditor station-scoped completion flow this order-level
+        guard exists for, but it is the WRONG criterion here. An
+        Expeditor-enabled order's production lines are only ever
+        expected to reach 'Ready' and stop there - final completion is
+        the Packing task's own responsibility, never each individual
+        production station's, and "do not force every production
+        station line to become COMPLETED merely to satisfy the final
+        order guard unless that is the intended lifecycle" (it
+        genuinely isn't, for this lifecycle specifically). Uses
+        is_expeditor_ready (every non-cancelled line Ready-or-Completed
+        - the same criterion the Expeditor task's own action_complete()
+        already checks immediately before calling this) as its own
+        correct, appropriate criterion instead.
+
+        Still routes through the exact same authoritative
+        _wf_transition() as action_complete() above and every other
+        transition in this module - full audit trail, notification,
+        timestamp - not a second, parallel, unauthoritative mechanism;
+        only the *precondition check* differs, matching each lifecycle's
+        own actual requirements:
+
+            Production Stations READY
+            -> Expeditor/Packing
+            -> Expeditor COMPLETED
+            -> _finalize_via_expeditor() (this method)
+            -> Overall Order COMPLETED
+
+        versus action_complete()'s own (non-Expeditor):
+
+            Station READY -> Station COMPLETE (per station, independently)
+            -> action_complete() (once every station has)
+            -> Overall Order COMPLETED
+        """
+        for order in self:
+            if not order.expeditor_enabled:
+                raise UserError(_(
+                    "FlexSys KDS: order %s has no active Expeditor/Packing station - "
+                    "use the normal per-station Complete action instead."
+                ) % order.name)
+            if not order.is_expeditor_ready:
+                raise UserError(_(
+                    "FlexSys KDS: cannot finalize order %s via Expeditor - a required "
+                    "production line is not yet Ready."
+                ) % order.name)
+        self._wf_transition('completed', 'complete', time_field='completion_time', bypass_check=bypass_check)
+
     def action_cancel(self, bypass_check=False):
         self._wf_transition('cancelled', 'cancel', time_field='cancelled_at', bypass_check=bypass_check)
         # FIX (audit finding "POS Cancellation Propagation", IMPORTANT -

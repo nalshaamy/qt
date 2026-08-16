@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError
 from odoo.tests import tagged
 
 from .common import FlexSysKdsTestCommon
@@ -27,13 +27,30 @@ class TestWorkflow(FlexSysKdsTestCommon):
         order = self._order()
         self.assertEqual(order.state, 'new')
         order.action_accept()
+        order.line_ids.action_accept()
         self.assertEqual(order.state, 'accepted')
         order.action_start_preparing()
+        order.line_ids.action_start()
         self.assertEqual(order.state, 'preparing')
         order.action_ready()
+        order.line_ids.action_ready()
         # DESIGN REVERSAL (v5.4): Ready no longer auto-completes -
         # Complete is a separate, deliberate manual step again.
         self.assertEqual(order.state, 'ready')
+        # REAL BUG FIX, confirmed live on Odoo.sh ("outdated Workflow
+        # tests skipping valid state transitions"): this test exercised
+        # the ORDER-level state machine (action_accept()/
+        # action_start_preparing()/action_ready() - standalone,
+        # admin-level methods that only ever move the order's own
+        # aggregate state, never touch line state at all) but never
+        # separately progressed the LINE through its own required
+        # states - order.line_ids.action_complete() then correctly
+        # rejected 'new' -> 'completed' as an invalid transition (a
+        # real gap this test had, not something to weaken
+        # _line_transition() to paper over). Now drives the line
+        # through its own Accept/Start/Ready alongside each order-level
+        # call, matching a realistic scenario where both progress
+        # together, before attempting completion.
         order.line_ids.action_complete()
         self.assertEqual(order.state, 'completed')
 
@@ -64,8 +81,14 @@ class TestWorkflow(FlexSysKdsTestCommon):
         # 'completed' as valid starting states.
         order = self._order()
         order.action_accept()
+        order.line_ids.action_accept()
         order.action_start_preparing()
+        order.line_ids.action_start()
         order.action_ready()
+        order.line_ids.action_ready()
+        # REAL BUG FIX, confirmed live on Odoo.sh (same class as
+        # test_full_happy_path_order above): the line itself was never
+        # progressed alongside the order-level calls.
         order.line_ids.action_complete()
         self.assertEqual(order.state, 'completed')
         order.action_reopen()
@@ -86,8 +109,15 @@ class TestWorkflow(FlexSysKdsTestCommon):
         comment in models/kds_order.py."""
         order = self._order()
         order.action_accept()
+        order.line_ids.action_accept()
         order.action_start_preparing()
+        order.line_ids.action_start()
         order.action_ready()
+        order.line_ids.action_ready()
+        # REAL BUG FIX, confirmed live on Odoo.sh (same as
+        # test_full_happy_path_order above): the line itself was never
+        # progressed alongside the order-level calls, so
+        # action_complete() correctly rejected 'new' -> 'completed'.
         order.line_ids.action_complete()
         # DESIGN REVERSAL (v5.4): Complete is a separate manual step
         # again, called explicitly above.

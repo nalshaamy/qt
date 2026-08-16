@@ -242,8 +242,20 @@ class KdsExpeditorTask(models.Model):
                 ) % task.order_id.name)
         self._transition('completed', 'complete', extra_vals={'completion_time': fields.Datetime.now()},
                           bypass_check=bypass_check)
+        # REAL BUG FIX, confirmed live on Odoo.sh: this used to call the
+        # general order.action_complete() - which, after the BUG-07
+        # guard was added, requires every production line across every
+        # station to have *individually* reached 'completed' first (the
+        # correct criterion for the non-Expeditor, per-station
+        # completion flow, but the wrong one here - an Expeditor order's
+        # production lines are only ever expected to reach 'Ready', not
+        # be force-completed one by one). Switched to the dedicated
+        # _finalize_via_expeditor() - see that method's own docstring in
+        # kds_order.py for the full explanation of why this lifecycle
+        # needs its own finalization path rather than reusing
+        # action_complete()'s.
         for task in self:
-            task.order_id.action_complete(bypass_check=True)
+            task.order_id._finalize_via_expeditor(bypass_check=True)
 
     def action_cancel(self, bypass_check=False):
         self._transition('cancelled', 'cancel', bypass_check=bypass_check)

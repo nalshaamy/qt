@@ -479,3 +479,82 @@ class TestExpeditor(FlexSysKdsTestCommon):
         self.assertTrue(
             order.expeditor_task_ids.filtered(lambda t: t.state not in ('cancelled', 'completed')),
             "The Packing task must have been activated, same as the normal action_ready() path.")
+
+    # -----------------------------------------------------------------
+    # Dev request "Odoo.sh BUG-07 Integration Fixes": Expeditor
+    # finalization was failing after the BUG-07 guard was added to
+    # action_complete() - fixed with a dedicated _finalize_via_expeditor()
+    # path on kds.order (see that method's own docstring for the full
+    # explanation). These two tests explicitly name and cover both
+    # required scenarios from the dev request's own regression matrix.
+    # -----------------------------------------------------------------
+    def test_bug07_expeditor_enabled_finalizes_without_completing_production_lines_individually(self):
+        """Expeditor Enabled scenario, explicit: Production Stations
+        READY -> Expeditor/Packing -> Expeditor COMPLETE -> Overall
+        Order COMPLETED, without violating the BUG-07 guard - and
+        without ever force-completing each production line
+        individually (they stay at 'ready', per "do not force every
+        production station line to become COMPLETED... unless that is
+        the intended lifecycle" - it explicitly isn't, here)."""
+        order = self._order_two_stations()
+        order.action_accept()
+        order.line_ids.action_start()
+        order.line_ids.action_ready()
+        self.assertTrue(order.expeditor_enabled)
+        for line in order.line_ids:
+            self.assertEqual(
+                line.state, 'ready',
+                "Production lines must stay at Ready under Expeditor - never "
+                "individually force-completed.")
+        task = order.expeditor_task_ids
+        task.action_start()
+        task.action_ready()
+
+        task.action_complete()  # should not raise - this is the real regression check
+
+        order.invalidate_recordset()
+        self.assertEqual(task.state, 'completed')
+        self.assertEqual(order.state, 'completed')
+        for line in order.line_ids:
+            line.invalidate_recordset()
+            self.assertEqual(
+                line.state, 'ready',
+                "Even after the whole order is Completed via Expeditor, each "
+                "production line's own state remains 'ready', not force-rewritten "
+                "to 'completed' - completion here is the Expeditor task's own "
+                "responsibility, never each production station's.")
+
+    def test_bug07_expeditor_disabled_each_station_completes_independently(self):
+        """Expeditor Disabled scenario, explicit: each production
+        station completes independently; after the final required
+        station completes, the overall order becomes COMPLETED - the
+        exact same guarantee test_workflow.py's own
+        test_bug07_three_station_order_completes_independently_per_station
+        already covers, confirmed here too since this class's own
+        company has Expeditor active by default (setUpClass) and this
+        needs it explicitly deactivated to test the non-Expeditor path."""
+        self.station_expeditor.active = False
+        order = self._order_two_stations()
+        self.assertFalse(order.expeditor_enabled)
+        order.action_accept()
+        order.line_ids.action_start()
+        order.line_ids.action_ready()
+        kitchen_line = order.line_ids.filtered(lambda l: l.station_id == self.station_kitchen)
+        coffee_line = order.line_ids.filtered(lambda l: l.station_id == self.station_coffee)
+
+        kitchen_line.action_complete()
+
+        order.invalidate_recordset()
+        coffee_line.invalidate_recordset()
+        self.assertEqual(kitchen_line.state, 'completed')
+        self.assertEqual(coffee_line.state, 'ready', "Coffee must remain unchanged.")
+        self.assertNotEqual(order.state, 'completed', "Still waiting on Coffee.")
+
+        coffee_line.action_complete()
+
+        order.invalidate_recordset()
+        self.assertEqual(coffee_line.state, 'completed')
+        self.assertEqual(
+            order.state, 'completed',
+            "Once the final required station completes, the overall order must "
+            "reach Completed.")
