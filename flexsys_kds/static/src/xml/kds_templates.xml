@@ -202,7 +202,7 @@
                             <span class="fs-variant-pill" t-if="line.variant_info and line.state !== 'cancelled'" t-esc="cleanVariantInfo(line.variant_info)"/>
                             <span class="fs-line-badge fs-line-badge-cancelled" t-if="line.state === 'cancelled'">CANCELLED</span>
                             <span class="fs-line-badge" t-elif="line.line_change and line.line_change !== 'none'"
-                                  t-esc="line.line_change_label or line.line_change"/>
+                                  t-esc="lineChangeLabel(line)"/>
                         </div>
                         <div class="fs-line-note-row" t-if="line.note and line.state !== 'cancelled'">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="13" rx="2"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg>

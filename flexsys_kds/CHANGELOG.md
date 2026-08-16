@@ -8,6 +8,189 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.4.0 — BUG-08 review, BUG-09 (qty delta), BUG-10 (single authoritative stage)
+
+Three items from the latest dev request: BUG-08 confirmed already fully
+addressed by v7.3.0 (no code change needed this round - the exact same
+requirements, re-verified), BUG-09 (new), BUG-10 (new, and a genuine
+architectural fix that also structurally guarantees BUG-08's own "one
+tab" guarantee going forward).
+
+### BUG-08 (re-reported): confirmed already implemented
+Every requirement in this round's report - preserve the station stage
+where cancellation occurred, show CANCELLED prominently, remove/disable
+action buttons, ~5 minute retention, realtime removal, full audit
+preservation - matches v7.3.0's own `stationLifecycle()`/
+`completed_at` work exactly. No production code changed for this item;
+the existing 5 regression tests already cover it.
+
+### BUG-09: POS quantity delta not communicated to kitchen
+"1 x Pizza -> UPDATED" alone can't tell the kitchen whether 2 more
+units are now needed or 2 fewer are - especially ambiguous once
+preparation has already started. New `qty_delta` field
+(`kds_order_line.py`) - a real backend field, not inferred from
+transient frontend state (the dev request's own explicit requirement) -
+computed in `_flexsys_kds_diff_lines()` as `previous_delta +
+this_sync's_own_change`, so **repeated** changes before any operator
+acknowledgement correctly accumulate (1->3->5 shows +4 overall, not
+just the last sync's own +2). Displayed as `UPDATED (+2)`/`UPDATED
+(-2)` on both screens. Cleared - alongside `line_change` itself, which
+was never actually being reset before this round, a separate real gap
+found while implementing this - only by a genuine, interactive
+operator action (`bypass_check=False`) in `_line_transition()`, never
+by a trusted internal/system transition (Auto Accept, etc.) - "must not
+disappear automatically merely because the next polling/realtime
+synchronization occurs... using the existing acknowledgement/workflow
+mechanism." 6 new tests: increase, decrease, accumulation across
+repeated changes, acknowledgement clearing, the qty-to-zero edge case
+(still cancels, no stale delta), and independent deltas across multiple
+simultaneously-modified products/stations.
+
+### BUG-10: reopened READY order counted in two stage tabs at once
+**Root cause**: every tab filter/count on both screens ran its own
+independent check ("does ANY line match this tab's own state(s)?"),
+each entirely oblivious to the others. A reopened order with one line
+back at 'new' (freshly added by a POS Delta) and another still
+'preparing' satisfied both checks simultaneously - the same physical
+ticket counted under NEW *and* PREPARING at once, live and confirmed
+("NEW = 1, PREPARING = 1" for one ticket).
+
+**Fix, architectural, at the backend/workflow layer** (not frontend
+rendering, per the dev request's own explicit requirement): new
+`_effective_stage()` - one authoritative value per station-card,
+computed once on the backend (`controllers/kds.py`, mirrored in
+`controllers/kds_kiosk.py`) and included in the payload as
+`effective_stage`. Both screens' tab filters, count badges, card status
+text, border color, and main-action-button logic were all rewritten to
+read this single value directly, replacing several separately-
+maintained local computations that happened to mostly agree via BUG-02's
+own "anyStarted before anyNew" precedence - that precedence is now the
+one structurally-enforced source, not a coincidence of parallel
+implementations. Correctly incorporates BUG-08's own "preserved last
+stage while cancelled" logic as a natural part of the same single
+computation, rather than a separate parallel check - a ticket can now
+never belong to more than one workflow tab, by construction. 5 new
+tests, including the dev request's own exact required regression
+scenario (Kitchen reaches Ready, POS changes qty on the existing
+product AND adds a new one in the same sync) and the additional
+COMPLETED -> PREPARING reopen case.
+
+### Files changed
+`models/kds_order_line.py` (qty_delta field, acknowledgement clearing),
+`models/pos_order.py` (delta computation), `controllers/kds.py`,
+`controllers/kds_kiosk.py` (`_effective_stage()`, payload fields,
+simplified tab/count/status logic), `static/src/js/kds_order_card.js`,
+`static/src/js/kds_app.js` (mirrored simplification, dead code
+removed), `static/src/js/kds_i18n.js` (delta label already added in
+v7.3.0), `tests/test_pos_sync.py`, `tests/test_workflow.py` (11 new
+tests).
+
+**Total: 223 tests** (up from 212). No database migration required
+beyond the new `qty_delta` field (auto-added on upgrade, defaults 0.0).
+
+---
+
+## v7.3.0 — BUG-08: Cancelled Lines Break Station Card Lifecycle / Terminal Cleanup
+
+Implements the formal "BUG-08" dev request - two related cancellation
+lifecycle problems reproduced during actual Odoo.sh runtime testing.
+Fixed as a genuine workflow/lifecycle issue, not a frontend filtering
+patch: new model field + timestamp, both controllers' retention
+queries, and both KDS screens' full frontend lifecycle logic.
+
+### Root cause, Scenario A (mixed COMPLETED + CANCELLED lines never leave the screen)
+The completed-line retention/grace-period check throughout both
+controllers keyed off `order_id.completion_time` - an ORDER-wide
+timestamp only ever set once **every** station across the whole order
+has completed (BUG-07's own `is_fully_completed`), with an "or unset"
+fallback meaning a completed line on a still-active multi-station order
+was shown **indefinitely**, for as long as any other station remained
+active - exactly the reported symptom. New per-line `completed_at`
+field (`kds_order_line.py`, stamped by `action_complete()`, mirroring
+the existing `cancelled_at`) gives each station's own completion its
+own timestamp, entirely independent of what any other station on the
+same order is doing. Both controllers' search domains and payload
+filters rewritten to use it - and the payload filter now applies the
+grace-period check *symmetrically* to completed lines the same way it
+already did to cancelled ones (a separate, real gap: it previously let
+every completed line through unconditionally).
+
+### Root cause, Scenario B (fully cancelled station disappears from its own workflow filter)
+Two compounding bugs. (1) The Ready/Preparing/New tab filters and count
+badges only ever matched a *literal* current line state - a station
+whose every line got cancelled matched none of them, vanishing from its
+own last-relevant tab and only remaining reachable under ALL. (2)
+`mainAction()`'s own button-selection logic required
+`activeLines.length > 0` for every real check (allReady, allCompleted) -
+a station with zero active lines (everything cancelled) satisfied none
+of them and fell through to the final, unconditional `return {action:
+'ready', ...}` fallback, offering a live READY button for a station
+with nothing left to do at all.
+
+### Fix
+New `stationLifecycle()` helper (implemented identically three times -
+`controllers/kds_kiosk.py`, `kds_order_card.js`, `kds_app.js` - plus a
+Python port in the test suite, all kept in lockstep) classifies a
+station whose every line is terminal (completed and/or cancelled, none
+genuinely active) two ways: at least one line genuinely `completed`
+means the work finished (existing `allCompleted` handling applies
+unchanged); zero completed (every terminal line `cancelled`) means
+nothing here ever finished - the card instead preserves the **last
+operational stage** it actually reached, using each line's own
+`preparation_start_time`/`ready_time` (present regardless of
+cancellation - cancelling a line never erases its own history): NEW if
+neither was ever set, PREPARING if `preparation_start_time` was set,
+READY if `ready_time` was set (always true for a genuinely completed
+line too, which is why that path is handled separately above).
+
+- **`mainAction()`/`onMainActionClick`**: checked first, before any
+  length-dependent branch - a pure-cancellation station returns
+  `{action: null}` unconditionally, authoritatively from the same
+  frontend logic that decides every other action, never just hidden
+  with CSS (dev request's own point 2).
+- **Tab filters and counts (NEW/PREPARING/READY)**: each gained an
+  explicit `|| stationLifecycle(o).lastStage === '<tab>'` branch (a
+  genuinely new, explicit PREPARING branch on the backend, which
+  previously fell through to a generic literal-state-only check) - the
+  card temporarily reappears under its own last operational stage *and*
+  under ALL, never a generic catch-all CANCELLED bucket (per the dev
+  request's own explicit "Important" note).
+- **`statusText`/`borderClass`**: a pure-cancellation station now shows
+  a clear `CANCELLED (was PREPARING)`-style label with the muted
+  cancelled visual, instead of misleadingly falling through to a
+  default `PREPARING` label the way an empty-lines edge case previously
+  did.
+- **Station isolation** (point 5): every check operates on one
+  station's own lines only - cancelling Coffee's lines never touches
+  Kitchen's or Bar's own lifecycle computation in any way, confirmed by
+  the new multi-station regression test.
+
+### Tests: 5 new, matching the dev request's own required scenarios exactly
+Mixed terminal states (completed + cancelled, retention timing and
+audit-history preservation both verified explicitly), cancel during
+PREPARING/NEW/READY (each preserving its own last stage), and multi-
+station isolation (Kitchen completes, Bar stays active, only Coffee
+follows its own cancelled lifecycle). This project has no JS test
+harness (an established limitation) - these verify the underlying model
+data (`completed_at`/`cancelled_at`/`ready_time`/
+`preparation_start_time`) is correct and replicate the frontend
+lifecycle algorithm in Python against it, the same pattern already
+established for BUG-07's own payload-filter tests.
+
+### Files changed
+`models/kds_order_line.py` (new field + timestamp stamping),
+`controllers/kds.py`, `controllers/kds_kiosk.py` (retention queries +
+payload fields), `static/src/js/kds_order_card.js`,
+`static/src/js/kds_app.js`, `static/src/js/kds_i18n.js` (new label),
+`tests/test_workflow.py` (5 new tests).
+
+**Total: 212 tests** (up from 207). No database migration required
+beyond the new field (auto-added on upgrade, defaults empty - existing
+completed lines simply won't have a `completed_at` until their next
+transition, matching how `cancelled_at` was introduced originally).
+
+---
+
 ## v7.2.2 — Final 2 Odoo.sh failures: cron + a stale test assertion
 
 **Confirmed live on Odoo.sh**: 1 failure / 1 error / 207 tests executed

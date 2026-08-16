@@ -410,11 +410,28 @@ class PosOrder(models.Model):
                     # back to New) is workflow-significant - that part
                     # now goes through _system_reset_for_delta_sync()
                     # instead of being bundled into this same raw write.
+                    #
+                    # BUG-09 FIX ("POS Quantity Delta Is Not Explicitly
+                    # Communicated to Kitchen"): qty_delta accumulates
+                    # (kline.qty_delta + this sync's own increment), not
+                    # just this one sync's own change - "the delta tells
+                    # kitchen staff what changed since the previously
+                    # ACKNOWLEDGED production quantity", and
+                    # _line_transition() only clears it on a real
+                    # interactive operator action, not on every POS sync
+                    # - so if 1->3 then 3->5 both happen before anyone on
+                    # the line taps anything, the kitchen correctly sees
+                    # +4 overall (2 more, then 2 more again), not just
+                    # the last sync's own +2, which would understate how
+                    # much this line has actually grown since it was last
+                    # genuinely seen.
+                    qty_increment = line.qty - kline.qty
                     kline.write({
                         'qty': line.qty,
                         'note': _pos_note(line),
                         'variant_info': _pos_line_variant_info(line),
                         'line_change': 'updated',
+                        'qty_delta': kline.qty_delta + qty_increment,
                     })
                     if kline.state == 'ready':
                         kline._system_reset_for_delta_sync('new')

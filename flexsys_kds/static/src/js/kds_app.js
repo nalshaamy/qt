@@ -161,65 +161,29 @@ export class FlexSysKdsScreen extends Component {
             orders = orders.filter((o) => o.priority !== "normal");
         } else if (filter === "late") {
             orders = orders.filter((o) => o.sla_status === "late");
-        } else if (filter === "new") {
-            // BUG FIX (found via a live pilot report - same fix applied
-            // to the public kiosk): a strict `state === "new"` check
-            // meant a line auto-accepted on creation (Auto Accept
-            // enabled on its station) never counted as "New" here, even
-            // though the card's own displayed status text has always
-            // grouped 'new' and 'accepted' together as "needs Start
-            // pressed next" (see kds_order_card.js's own statusText
-            // getter). The order was never actually missing - it always
-            // showed correctly under "ALL" - the New tab specifically
-            // was silently excluding it.
-            orders = orders.filter((o) => o.lines.some((l) => l.state === "new" || l.state === "accepted"));
-        } else if (filter === "ready") {
-            // REAL BUG FIX, confirmed at runtime (dev request "Runtime
-            // Regression Fix Package", BUG-03): this used to check
-            // order.state === "ready" directly - but order.state only
-            // becomes "ready" once EVERY station on a multi-station
-            // order has finished (aggregated across the whole order),
-            // not once THIS station's own portion is done. A station
-            // whose own lines were genuinely all Ready, while another
-            // station on the same shared order was still Preparing,
-            // correctly kept order.state at "preparing" - so this
-            // station's own finished ticket never matched "ready" here
-            // and vanished from both the Ready tab AND the Preparing
-            // tab, showing PREPARING=0 and READY=0 simultaneously for a
-            // ticket that had, from this station's own point of view,
-            // genuinely finished. Reverted to a per-line, per-station
-            // check - the same "are my own active lines all ready/
-            // completed" question the card's own statusText/mainAction
-            // already correctly ask (see KdsOrderCard.activeLines).
-            //
-            // BUG-07 FIX ("Station COMPLETE does not transition from
-            // READY"): explicitly excludes "every line completed" now,
-            // not just order.state === "completed" - completion is per-
-            // station now (see kds_order.py's is_fully_completed), so a
-            // station that already completed its own portion (while
-            // order.state itself might still be "preparing", waiting on
-            // other stations) would otherwise satisfy the ready-OR-
-            // completed check below too, showing under both Ready and
-            // Completed at once. Ready means "ready to be completed
-            // here", not "already was".
-            orders = orders.filter((o) => {
-                if (o.state === "cancelled") return false;
-                const lines = o.lines.filter((l) => l.state !== "cancelled");
-                const allCompleted = lines.length > 0 && lines.every((l) => l.state === "completed");
-                return !allCompleted && lines.length > 0
-                    && lines.every((l) => l.state === "ready" || l.state === "completed");
-            });
-        } else if (filter === "completed") {
-            // BUG-07 FIX: matches the Ready tab's own already-established
-            // per-station principle (BUG-03) - a station whose own lines
-            // are all completed shows here, independent of whether every
-            // other station on the same order is done too (order.state
-            // === "completed" is a subset of this, not a separate
-            // condition).
-            orders = orders.filter((o) => {
-                const lines = o.lines.filter((l) => l.state !== "cancelled");
-                return lines.length > 0 && lines.every((l) => l.state === "completed");
-            });
+        } else if (filter === "new" || filter === "preparing" || filter === "ready" || filter === "completed") {
+            // REAL BUG FIX, confirmed live on Odoo.sh (BUG-10, "Reopened
+            // READY Order Appears in Multiple Stage Tabs"): each of
+            // these four tabs used to run its own INDEPENDENT check
+            // ("does ANY line match this tab's own state(s)?"), each
+            // entirely oblivious to the others - a reopened order with
+            // one line back at "new" (freshly added/reset by a POS
+            // Delta) and another still "preparing" satisfied BOTH
+            // checks at once, so the same physical ticket counted under
+            // NEW *and* PREPARING simultaneously ("NEW = 1, PREPARING =
+            // 1" for one ticket, reported live), on top of everything
+            // BUG-03/BUG-07/BUG-08 already had to separately account
+            // for (per-station Ready visibility, completion, preserved-
+            // last-stage-while-cancelled). Replaced with
+            // order.effective_stage - one authoritative value, computed
+            // once on the backend (see controllers/kds.py's own
+            // _effective_stage() for the full algorithm), used
+            // identically here and for the card's own displayed status
+            // text (KdsOrderCard's own statusText getter) -
+            // structurally guaranteeing a ticket belongs to exactly one
+            // tab, rather than relying on several independently-written
+            // checks to happen to agree.
+            orders = orders.filter((o) => o.effective_stage === filter);
         } else if (filter !== "all") {
             orders = orders.filter((o) => o.lines.some((l) => l.state === filter));
         }
@@ -296,29 +260,20 @@ export class FlexSysKdsScreen extends Component {
 
     get counts() {
         const orders = this.state.orders;
+        // REAL BUG FIX (BUG-10) - see filteredOrders' own detailed
+        // comment. One authoritative value per order, computed once,
+        // drives every count below - eliminating the possibility of the
+        // same ticket incrementing more than one bucket at once.
+        const byStage = {};
+        for (const o of orders) {
+            byStage[o.effective_stage] = (byStage[o.effective_stage] || 0) + 1;
+        }
         return {
             all: orders.length,
-            new: orders.filter((o) => o.lines.some((l) => l.state === "new" || l.state === "accepted")).length,
-            preparing: orders.filter((o) => o.lines.some((l) => l.state === "preparing")).length,
-            // BUG-03 fix (see filteredOrders' own detailed comment):
-            // station-scoped "my own lines are all done", not
-            // order.state === "ready" (which requires every station on
-            // a multi-station order to be done).
-            // BUG-07 FIX: explicitly excludes "every line completed" too
-            // now - see filteredOrders' own matching comment.
-            ready: orders.filter((o) => {
-                if (o.state === "cancelled") return false;
-                const lines = o.lines.filter((l) => l.state !== "cancelled");
-                const allCompleted = lines.length > 0 && lines.every((l) => l.state === "completed");
-                return !allCompleted && lines.length > 0
-                    && lines.every((l) => l.state === "ready" || l.state === "completed");
-            }).length,
-            // BUG-07 FIX: station-scoped "my own lines are all completed",
-            // matching the Ready count's own per-station principle.
-            completed: orders.filter((o) => {
-                const lines = o.lines.filter((l) => l.state !== "cancelled");
-                return lines.length > 0 && lines.every((l) => l.state === "completed");
-            }).length,
+            new: byStage.new || 0,
+            preparing: byStage.preparing || 0,
+            ready: byStage.ready || 0,
+            completed: byStage.completed || 0,
             late: orders.filter((o) => o.sla_status === "late").length,
             priority: orders.filter((o) => o.priority !== "normal").length,
         };

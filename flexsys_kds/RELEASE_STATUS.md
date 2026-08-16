@@ -1,14 +1,16 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.2.2**
+**Version: 19.0.7.4.0**
 **Status as of this document: code-complete, including the "Runtime
 Regression Fix Package" (BUG-01 through BUG-06), two rounds of Odoo.sh
 runtime test failures fixed, BUG-07 (station-scoped completion) fully
-closed, its own Expeditor integration reconciled, and the
-reconciliation cron's own completion path brought in line with the same
-architecture. 207 automated tests, all `py_compile`/XML/JS checks
-passing. Not yet signed off on a live instance — see "What still needs
-a human" at the end.**
+closed with its Expeditor integration reconciled, BUG-08 (cancelled-line
+station lifecycle / terminal cleanup) implemented and re-confirmed,
+BUG-09 (POS quantity delta communication), and BUG-10 (single
+authoritative station-card stage, eliminating multi-tab duplication).
+223 automated tests, all `py_compile`/XML/JS checks passing. Not yet
+signed off on a live instance — see "What still needs a human" at the
+end.**
 
 This document maps directly to that request's own section structure
 (A/B/C/D) and states, for each item, what's actually been verified and
@@ -263,6 +265,78 @@ production is still active elsewhere, and that a live Expeditor/Packing
 completion flow correctly finalizes the order end-to-end on a real
 instance.
 
+## BUG-08: cancelled-line station lifecycle / terminal cleanup
+Two related problems: (A) a station whose lines are a mix of COMPLETED
+and CANCELLED could remain visible indefinitely - traced to the
+completed-line retention check keying off the order's own aggregate
+`completion_time` rather than each line's own completion, a timestamp
+that (since BUG-07) may never get set while other stations are still
+active. (B) a station cancelled mid-workflow (e.g. while Preparing)
+disappeared from its own tab entirely, reachable only under ALL, and
+could still expose a workflow action (READY) despite having zero
+remaining work.
+
+Fixed with a new per-line `completed_at` field (mirroring the existing
+`cancelled_at`) giving each station's own completion its own
+independent timestamp, and a new `stationLifecycle()` helper
+(implemented identically on both screens) that preserves a station's
+**last operational stage** (NEW/PREPARING/READY) when every one of its
+lines is cancelled with nothing ever completed - the card temporarily
+reappears under that stage and under ALL, clearly marked cancelled,
+with every workflow action authoritatively withheld (not just hidden
+with CSS) until retention expiry removes it. Station isolation
+confirmed explicitly: cancelling one station's lines never affects any
+other station's own lifecycle on the same order. 5 new regression
+tests, matching the dev request's own required scenarios one-to-one.
+
+**What still needs a human**: same category as everything else in this
+document - a live check that a station cancelled mid-Preparing actually
+reappears under the Preparing tab (not just ALL) on both real screens,
+that no workflow button renders for it, and that it disappears cleanly
+once its own retention window passes.
+
+**Re-confirmed (v7.4.0)**: a follow-up report re-described the exact
+same requirements - reviewed against v7.3.0's own implementation and
+confirmed already fully addressed; no production code changed for this
+item that round.
+
+## BUG-09: POS quantity delta not communicated to kitchen
+A plain "UPDATED" badge alone can't tell the kitchen whether a quantity
+increased or decreased, or by how much - especially ambiguous once
+preparation has already started. New `qty_delta` field
+(`kds_order_line.py`) - a real backend field, not inferred from
+transient frontend state - accumulates across repeated POS syncs before
+any operator acknowledgement, and displays as `UPDATED (+2)`/`UPDATED
+(-2)` on both screens. Cleared only by a genuine, interactive operator
+action, never by a trusted internal/system transition - a separate,
+real pre-existing gap (`line_change` itself was never actually being
+reset) found and fixed while implementing this. 6 new regression tests.
+
+**What still needs a human**: a live check that the delta badge reads
+correctly and stays visible through a real POS terminal's own quantity
+change screen, across a real realtime sync cycle.
+
+## BUG-10: reopened READY order counted in two stage tabs at once
+Root cause: every tab filter/count on both screens ran its own
+independent per-tab check, each oblivious to the others - a reopened
+order with one line back at 'new' and another still 'preparing'
+satisfied two tabs' worth of checks simultaneously. Fixed
+architecturally, at the backend/workflow layer: new `_effective_stage()`
+computes one authoritative value per station-card, included in the
+payload, and both screens' tab filters/counts/status text/border
+color/main-action logic were all rewritten to read this single value -
+a ticket can now never belong to more than one workflow tab, by
+construction, rather than by several independently-written checks
+happening to agree. Also naturally incorporates BUG-08's own preserved-
+last-stage logic as part of the same single computation. 5 new
+regression tests, including the dev request's own exact required
+scenario.
+
+**What still needs a human**: a live check on both screens that a
+reopened Ready order (qty change + new product added in one POS sync)
+shows up under PREPARING only, with NEW = 0 and PREPARING = 1, exactly
+as the dev request's own regression scenario specifies.
+
 ---
 
 ## What still needs a human
@@ -494,7 +568,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 207 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 223 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

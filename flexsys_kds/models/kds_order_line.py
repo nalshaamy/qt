@@ -73,6 +73,23 @@ class KdsOrderLine(models.Model):
         ('updated', 'Updated'),
         ('removed', 'Removed'),
     ], default='none', string='Post-send Change')
+    # BUG-09 FIX ("POS Quantity Delta Is Not Explicitly Communicated to
+    # Kitchen"): the generic 'updated' badge alone is operationally
+    # ambiguous - 1->3 (prepare 2 more) and 3->1 (2 no longer needed)
+    # both looked identical. Stores the actual delta from the previous
+    # quantity at the moment a POS Delta Sync changes this line (set in
+    # pos_order.py::_flexsys_kds_diff_lines()) - a real backend field,
+    # not something inferred only from transient frontend state (the
+    # dev request's own explicit requirement), so it survives a page
+    # reload/reconnect and is available to every consumer (both KDS
+    # screens, any future integration) consistently. Persists until the
+    # next line-level action clears it, alongside line_change itself -
+    # see _line_transition()'s own handling of KDS_LINE_ACKNOWLEDGE_FIELDS
+    # below for "must not disappear automatically merely because the
+    # next polling/realtime synchronization occurs... until the kitchen
+    # recognizes/processes it, using the existing acknowledgement
+    # mechanism."
+    qty_delta = fields.Float(default=0.0)
 
     station_received_time = fields.Datetime()
     # REAL BUG FIX, confirmed live (Odoo Server Error: "Invalid field
@@ -89,6 +106,17 @@ class KdsOrderLine(models.Model):
     accepted_time = fields.Datetime()
     preparation_start_time = fields.Datetime()
     ready_time = fields.Datetime()
+    # BUG-08 FIX ("Cancelled Lines Break Station Card Lifecycle"): the
+    # completed-line retention/grace-period check throughout this
+    # module's controllers used to key off order_id.completion_time -
+    # semantically wrong since BUG-07 introduced per-station completion:
+    # a line whose own station finished has no reason to wait on
+    # order.completion_time, which only gets set once EVERY station
+    # across the whole order is done, and may never get set at all if
+    # other stations are still active. This line's own completion needs
+    # its own timestamp, independent of whether the rest of the order
+    # has finished yet - stamped by action_complete() below.
+    completed_at = fields.Datetime()
     prep_duration = fields.Float(string='Prep Duration (min)', compute='_compute_prep_duration', store=True)
 
     sla_status = fields.Selection([
@@ -279,6 +307,24 @@ class KdsOrderLine(models.Model):
             line._kds_check_action(action_to_check, station=line.station_id, bypass=bypass_check)
             vals = dict(extra_vals or {})
             vals['state'] = new_state
+            # BUG-09 FIX ("must not disappear automatically merely
+            # because the next polling/realtime synchronization occurs...
+            # until the kitchen recognizes/processes it, using the
+            # existing acknowledgement/workflow mechanism where
+            # appropriate"): a genuine, real HUMAN operator action on
+            # this line (bypass_check=False - every interactive click on
+            # either KDS screen) is exactly that acknowledgement point -
+            # the operator has now seen and acted on the line in its
+            # current (post-delta) state, so the ADDED/UPDATED badge and
+            # its qty_delta have served their purpose and clear here.
+            # Deliberately NOT cleared for a bypass_check=True (trusted
+            # internal/system) transition - Auto Accept, for instance,
+            # is the system acting on the kitchen's behalf, not a human
+            # actually seeing the change, so the badge must survive that
+            # to still reach a real person.
+            if not bypass_check:
+                vals['line_change'] = 'none'
+                vals['qty_delta'] = 0.0
             line.with_context(kds_workflow_write=True).write(vals)
             # AUDIT FIX ("State Transition Consistency", MEDIUM): this
             # used to only log an event for override transitions - a real
@@ -427,7 +473,9 @@ class KdsOrderLine(models.Model):
         card when Expeditor isn't governing that order at all (see
         kds_order_card.js/controllers/kds_kiosk.py's own mainAction()).
         """
-        self._line_transition('completed', 'complete', bypass_check=bypass_check)
+        self._line_transition(
+            'completed', 'complete', extra_vals={'completed_at': fields.Datetime.now()},
+            bypass_check=bypass_check)
         orders_to_advance = self.env['kds.order']
         for line in self:
             if line.order_id.is_fully_completed and line.order_id.state != 'completed':

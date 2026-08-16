@@ -46,6 +46,7 @@ export const KDS_LABELS = {
     filterReady: "READY",
     filterCompleted: "COMPLETED",
     filterCancelled: "CANCELLED",
+    wasStage: "was",
     filterLate: "LATE",
     filterPriority: "PRIORITY",
 

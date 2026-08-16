@@ -46,6 +46,59 @@ def _kds_error(exc):
     return {'ok': False, 'error': str(exc)}
 
 
+def _effective_stage(lines):
+    """BUG-10 FIX ("Reopened READY Order Appears in Multiple Stage
+    Tabs"): the single, authoritative source of truth for which ONE
+    workflow tab a station's card belongs to - "separate Ticket/Station
+    Aggregate State from Individual Line State... the aggregate-state
+    contract should be authoritative in the backend payload/workflow
+    layer," per the dev request's own explicit requirement.
+
+    Root cause this replaces: both KDS screens' tab filters used to run
+    an INDEPENDENT `.some()` check per tab ("does ANY line match 'new'?"
+    / "...'preparing'?" / ...) - each one entirely oblivious to the
+    others. A reopened order with one line back at 'new' (freshly
+    added/reset by a POS Delta) and another still 'preparing' correctly
+    satisfied BOTH independent checks at once, so the same physical
+    ticket counted under NEW *and* PREPARING simultaneously - exactly
+    "NEW = 1, PREPARING = 1" for one ticket, reported live. Computing
+    ONE value here, used identically for both the tab filter/count logic
+    AND the card's own displayed status text (previously two separately
+    -maintained pieces of logic that happened to mostly agree, per
+    BUG-02's own earlier "anyStarted before anyNew" precedence fix -
+    this makes that precedence the single, structurally-enforced
+    source, not a coincidence of two parallel implementations), makes a
+    ticket belonging to more than one tab at once structurally
+    impossible rather than something each call site has to
+    independently get right.
+
+    Returns exactly one of: 'new', 'preparing', 'ready', 'completed',
+    or a BUG-08 "preserved last stage" value ('new'/'preparing'/'ready')
+    for a station where every line is cancelled with nothing ever
+    completed - that reuses the very same value this function already
+    returns for the genuine, non-cancelled case, so a cancelled-while-
+    Preparing station and a genuinely-still-preparing station both
+    correctly land under the same PREPARING tab, exactly as BUG-08's own
+    "the card should remain temporarily visible under PREPARING"
+    requires. `lines` here must already be pre-filtered to the display
+    grace-period set (this function does not itself apply retention).
+    """
+    active = [l for l in lines if l.state != 'cancelled']
+    if not active:
+        if not lines:
+            return 'new'
+        ever_ready = any(l.ready_time for l in lines)
+        ever_preparing = any(l.preparation_start_time for l in lines)
+        return 'ready' if ever_ready else 'preparing' if ever_preparing else 'new'
+    if all(l.state == 'completed' for l in active):
+        return 'completed'
+    if all(l.state in ('ready', 'completed') for l in active):
+        return 'ready'
+    if any(l.state in ('preparing', 'ready', 'completed') for l in active):
+        return 'preparing'
+    return 'new'
+
+
 class FlexSysKdsController(http.Controller):
     """
     Point 1 (security hardening): every route below either (a) delegates the
@@ -153,41 +206,40 @@ class FlexSysKdsController(http.Controller):
 
         # UX DECISION (see COMPLETED_GRACE_MINUTES/CANCELLED_GRACE_MINUTES
         # above): a line shows on screen if it's genuinely active (not
-        # completed, not cancelled), OR its order completed within the
-        # completed grace window, OR the line itself was cancelled within
-        # the cancelled grace window. The line's own cancelled_at (not the
-        # order's) is checked here deliberately - a single cancelled item
-        # on an otherwise-active order, and a fully cancelled order (whose
-        # cascade sets cancelled_at on every affected line individually -
-        # see kds_order.py::action_cancel(), kds_order_line.py::
-        # action_cancel()) both correctly fall under this same check,
-        # without needing a separate order-level clause here.
+        # completed, not cancelled), OR it's terminal (completed or
+        # cancelled) but still within its OWN grace window.
         #
-        # BUG-07 FIX ("Station COMPLETE does not transition from READY"):
-        # a completed line's own OR-branch now also accepts
-        # order_id.completion_time being unset (False) - not just within
-        # the grace window. Necessary consequence of completion now
-        # being per-station (kds_order_line.py's own action_complete()):
-        # a station can mark ITS OWN line 'completed' well before the
-        # order's own completion_time is ever set (that field is only
-        # stamped once EVERY station has completed, via
-        # kds.order.action_complete()'s own _wf_transition). Without this,
-        # Kitchen's own "DONE" card would vanish from the screen instantly
-        # the moment Kitchen completed its own line, rather than staying
-        # visible (as a "DONE" card - see the frontend's own allCompleted
-        # check) for as long as the order is still waiting on other
-        # stations - the grace-period countdown itself only starts once
-        # completion_time is actually set, i.e. once the whole order is
-        # genuinely done.
+        # BUG-08 FIX ("Cancelled Lines Break Station Card Lifecycle /
+        # Terminal Cleanup"), confirmed live - a real retention bug, not
+        # just a display issue: this used to key the completed-line
+        # grace check off order_id.completion_time (an ORDER-wide
+        # timestamp, only ever set once EVERY station across the whole
+        # order has completed - see kds.order.action_complete()'s own
+        # _wf_transition), with an "or unset" fallback meaning a
+        # completed line on a still-active multi-station order was
+        # ALWAYS shown, indefinitely, for as long as any OTHER station
+        # remained active - "the presence of a cancelled [or, as it
+        # turned out, ANY still-active-elsewhere] line appears to
+        # prevent the normal completed-retention cleanup from
+        # considering the station portion fully finished," exactly as
+        # reported. completed_at (kds_order_line.py, new field, stamped
+        # by this line's own action_complete()) is this station's own
+        # completion timestamp, entirely independent of what any other
+        # station on the same order is doing - the correct signal for a
+        # per-station retention check, now that BUG-07 made completion
+        # genuinely per-station. A still-active-elsewhere order's
+        # completed line for THIS station now correctly expires from
+        # THIS station's own screen after COMPLETED_GRACE_MINUTES,
+        # exactly like a single-station order's completed line always
+        # has - completion elsewhere on the order no longer keeps a
+        # finished station's own card alive indefinitely.
         completed_cutoff = fields.Datetime.now() - timedelta(minutes=COMPLETED_GRACE_MINUTES)
         cancelled_cutoff = fields.Datetime.now() - timedelta(minutes=CANCELLED_GRACE_MINUTES)
         lines = request.env['kds.order.line'].search([
             ('station_id', '=', station.id),
             '|', '|',
                 ('state', 'not in', ('completed', 'cancelled')),
-                '&', ('state', '=', 'completed'),
-                    '|', ('order_id.completion_time', '=', False),
-                         ('order_id.completion_time', '>=', completed_cutoff),
+                '&', ('state', '=', 'completed'), ('completed_at', '>=', completed_cutoff),
                 '&', ('state', '=', 'cancelled'), ('cancelled_at', '>=', cancelled_cutoff),
         ])
         orders = lines.mapped('order_id').sorted(
@@ -208,30 +260,25 @@ class FlexSysKdsController(http.Controller):
             # "Cancel Order -> immediately disappears", even though the
             # grace-period logic upstream was completely correct. Split
             # into two sets: `display_lines` (what actually goes in the
-            # payload - cancelled-within-grace included, matching the
-            # search's own condition exactly) and `active_line_sla`
-            # (still correctly excludes cancelled entirely - a cancelled
-            # line's SLA status is not a meaningful input to the order's
-            # own late/warning/normal badge).
-            # BUG-07 FIX ("Station COMPLETE does not transition from
-            # READY") + a separate, pre-existing gap found while fixing
-            # it: this downstream filter must mirror the search domain's
-            # own completed/cancelled grace-period conditions exactly -
-            # "the cancellation grace-period logic and the payload
-            # filtering logic must not contradict each other," per this
-            # exact bug's own explicit instruction. It previously only
-            # re-checked the cancelled grace window (l.state != 'cancelled'
-            # already let every completed line through unconditionally,
-            # with no completion-time check of its own at all) - an
-            # already-expired completed line (past its own grace window)
-            # could have stayed visible here indefinitely, contradicting
-            # the search domain above that would have already excluded
-            # it. Now checks both explicitly, matching completed_cutoff's
-            # own "unset OR within window" condition from the search.
+            # payload - terminal-but-within-grace lines included,
+            # matching the search's own condition exactly) and
+            # `active_line_sla` (still correctly excludes cancelled
+            # entirely - a cancelled line's SLA status is not a
+            # meaningful input to the order's own late/warning/normal
+            # badge).
+            #
+            # BUG-08 FIX (see the search domain's own detailed comment
+            # above for the full root-cause explanation): mirrors that
+            # same fix here - completed_at (per-line), not
+            # order_id.completion_time, and symmetrically applies the
+            # same grace-period condition to a completed line as to a
+            # cancelled one, rather than letting every completed line
+            # through unconditionally the way an earlier version of
+            # this exact filter did.
             display_lines = order.line_ids.filtered(
                 lambda l, sid=station.id, cc=cancelled_cutoff, cpc=completed_cutoff: l.station_id.id == sid and (
                     (l.state not in ('completed', 'cancelled'))
-                    or (l.state == 'completed' and (not l.order_id.completion_time or l.order_id.completion_time >= cpc))
+                    or (l.state == 'completed' and l.completed_at and l.completed_at >= cpc)
                     or (l.state == 'cancelled' and l.cancelled_at and l.cancelled_at >= cc)
                 ))
             if not display_lines:
@@ -273,6 +320,12 @@ class FlexSysKdsController(http.Controller):
                 'priority_label': order_labels['priority'].get(order.priority),
                 'state': order.state,
                 'state_label': order_labels['state'].get(order.state),
+                # BUG-10 FIX: see _effective_stage()'s own docstring -
+                # the single authoritative value both the tab filters/
+                # counts AND the card's own displayed status now use, so
+                # a ticket can never belong to more than one workflow
+                # tab at once.
+                'effective_stage': _effective_stage(display_lines),
                 'sla_status': live_sla_status,
                 'sla_status_label': order_labels['sla_status'].get(live_sla_status),
                 'customer_name': order.customer_name,
@@ -294,6 +347,21 @@ class FlexSysKdsController(http.Controller):
                     'sla_status_label': line_labels['sla_status'].get(l.sla_status),
                     'line_change': l.line_change,
                     'line_change_label': line_labels['line_change'].get(l.line_change),
+                    'qty_delta': l.qty_delta,
+                    # BUG-08 FIX ("Preserve Last Operational State"): these
+                    # two let the frontend determine, for a station whose
+                    # every line is now terminal (completed/cancelled)
+                    # with none genuinely completed, what tab the card
+                    # should still be shown under (NEW/PREPARING/READY) -
+                    # whichever operational stage this line actually
+                    # reached before being cancelled, not just "it's
+                    # gone now". A cancelled line that was never Started
+                    # has neither set; one cancelled while Preparing has
+                    # preparation_start_time only; one cancelled after
+                    # reaching Ready (or genuinely Completed, which
+                    # always implies Ready first) has both.
+                    'preparation_start_time': l.preparation_start_time and l.preparation_start_time.isoformat() + 'Z',
+                    'ready_time': l.ready_time and l.ready_time.isoformat() + 'Z',
                 } for l in display_lines],
             })
         return result

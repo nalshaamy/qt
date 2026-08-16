@@ -995,3 +995,114 @@ class TestPosSync(FlexSysKdsTestCommon):
             "A second modification must update the existing delta line, not create a "
             "second, separate delta line for the same POS line.")
         self.assertEqual(non_original.qty, 10)
+
+    # -----------------------------------------------------------------
+    # Dev request "BUG-09 - POS Quantity Delta Is Not Explicitly
+    # Communicated to Kitchen": a plain "UPDATED" badge alone can't tell
+    # the kitchen whether 2 more units are now needed or 2 fewer are.
+    # qty_delta (kds_order_line.py, new field) makes this explicit and
+    # backend-authoritative - "the backend should retain enough previous/
+    # current quantity information to calculate the delta reliably; this
+    # should not be inferred only from transient frontend state."
+    # -----------------------------------------------------------------
+    def test_qty_increase_stores_positive_delta(self):
+        order = self._create_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+
+        order.lines.write({'qty': 3})
+
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 3)
+        self.assertEqual(line.qty_delta, 2, "1 -> 3 must record a delta of +2.")
+
+    def test_qty_decrease_stores_negative_delta(self):
+        order = self._create_pos_order([(self.product_burger, 3)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+
+        order.lines.write({'qty': 1})
+
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 1)
+        self.assertEqual(line.qty_delta, -2, "3 -> 1 must record a delta of -2.")
+
+    def test_repeated_qty_changes_accumulate_delta(self):
+        """'the delta tells kitchen staff what changed since the
+        previously ACKNOWLEDGED production quantity' - two POS syncs
+        before any operator acknowledgement must accumulate, not just
+        reflect the last sync's own change."""
+        order = self._create_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+
+        order.lines.write({'qty': 3})  # +2
+        order.lines.write({'qty': 5})  # +2 more, before any acknowledgement
+
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 5)
+        self.assertEqual(line.qty_delta, 4, "Two consecutive +2 changes must accumulate to +4 overall.")
+
+    def test_operator_acknowledgement_clears_qty_delta(self):
+        """'must not disappear automatically merely because the next
+        polling/realtime synchronization occurs... using the existing
+        acknowledgement/workflow mechanism' - a real interactive
+        operator action on the line is that acknowledgement point."""
+        order = self._create_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        order.lines.write({'qty': 3})
+        line.invalidate_recordset()
+        self.assertEqual(line.qty_delta, 2)
+
+        line.action_ready()  # a real, interactive operator action (bypass_check=False)
+
+        line.invalidate_recordset()
+        self.assertEqual(
+            line.qty_delta, 0,
+            "A genuine operator action on the line acknowledges the delta - it must clear, "
+            "not persist forever once the kitchen has actually seen and acted on it.")
+        self.assertEqual(line.line_change, 'none')
+
+    def test_qty_reduced_to_zero_does_not_leave_a_stale_delta(self):
+        """Qty -> 0 cancels the line entirely (BUG-04) rather than
+        recording a delta on a line that no longer needs any
+        preparation - confirms this still-existing behavior is
+        unaffected by the new qty_delta field."""
+        order = self._create_pos_order([(self.product_burger, 3)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+
+        order.lines.write({'qty': 0})
+
+        line.invalidate_recordset()
+        self.assertEqual(line.state, 'cancelled')
+
+    def test_qty_delta_preserved_across_multiple_products_independently(self):
+        """Multiple products modified simultaneously, routed to
+        different stations - each line's own qty_delta must be
+        independent, never bleeding into another product's own line."""
+        order = self._create_pos_order([(self.product_burger, 1), (self.product_cappuccino, 2)])
+        kds_order = order.kds_order_id
+        kds_order.line_ids.action_accept()
+        kds_order.line_ids.action_start()
+        burger_pos_line = order.lines.filtered(lambda l: l.product_id == self.product_burger)
+        coffee_pos_line = order.lines.filtered(lambda l: l.product_id == self.product_cappuccino)
+
+        burger_pos_line.write({'qty': 4})   # +3
+        coffee_pos_line.write({'qty': 1})   # -1
+
+        burger_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_burger)
+        coffee_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        self.assertEqual(burger_line.qty_delta, 3)
+        self.assertEqual(coffee_line.qty_delta, -1)

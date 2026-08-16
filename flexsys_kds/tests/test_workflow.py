@@ -1072,3 +1072,332 @@ class TestWorkflow(FlexSysKdsTestCommon):
         order.line_ids.action_complete()  # should not raise while notifying
         order.invalidate_recordset()
         self.assertEqual(order.state, 'completed')
+
+    # -----------------------------------------------------------------
+    # Dev request "BUG-08 - Cancelled Lines Break Station Card Lifecycle
+    # / Terminal Cleanup": model-level regression coverage for the
+    # frontend lifecycle logic (controllers/kds_kiosk.py's own
+    # stationLifecycle()/mainAction(), mirrored identically in
+    # kds_order_card.js/kds_app.js) - this project has no JS test
+    # harness (an established limitation throughout its history), so
+    # these tests verify the underlying MODEL DATA those functions
+    # depend on is correct (per-line completed_at/cancelled_at/
+    # ready_time/preparation_start_time), and replicate the exact
+    # frontend lifecycle-classification algorithm in Python against
+    # that data, the same established pattern already used for BUG-07's
+    # own payload-filter tests above.
+    # -----------------------------------------------------------------
+    @staticmethod
+    def _station_lifecycle(lines):
+        """Python port of stationLifecycle() (controllers/kds_kiosk.py /
+        kds_order_card.js / kds_app.js) - kept deliberately in lockstep
+        with those three copies. Takes a kds.order.line recordset (all
+        lines for one station on one order)."""
+        active = lines.filtered(lambda l: l.state != 'cancelled')
+        if active:
+            return {'has_active_work': True}
+        has_any_completed = any(l.state == 'completed' for l in lines)
+        if has_any_completed or not lines:
+            return {'has_active_work': False, 'all_cancelled': False}
+        ever_ready = any(l.ready_time for l in lines)
+        ever_preparing = any(l.preparation_start_time for l in lines)
+        last_stage = 'ready' if ever_ready else 'preparing' if ever_preparing else 'new'
+        return {'has_active_work': False, 'all_cancelled': True, 'last_stage': last_stage}
+
+    def test_bug08_mixed_completed_and_cancelled_lines_are_terminal(self):
+        """Test 1 (dev request's own numbering) - Mixed terminal states.
+        Item A -> COMPLETED, Item B -> CANCELLED: station has no active
+        work, is terminal, disappears after retention, audit remains."""
+        from datetime import timedelta
+        from odoo.fields import Datetime
+        order = self._make_order([(self.product_burger, 1), (self.product_cappuccino, 1)])
+        self._route_line_to_station(order.line_ids, self.station_kitchen)
+        order = order.with_user(self.admin)
+        item_a = order.line_ids.filtered(lambda l: l.product_id == self.product_burger)
+        item_b = order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        order.line_ids.action_accept()
+        order.line_ids.action_start()
+        order.line_ids.action_ready()
+        item_a.action_complete()
+        item_b.action_cancel(reason='changed mind')
+
+        self.assertTrue(item_a.completed_at, "action_complete() must stamp completed_at.")
+        self.assertTrue(item_b.cancelled_at)
+
+        lifecycle = self._station_lifecycle(order.line_ids)
+        self.assertTrue(
+            lifecycle['has_active_work'],
+            "At least one line (Item A) genuinely completed - has_active_work correctly "
+            "routes this through the normal (pre-BUG-08) 'allCompleted' handling, not the "
+            "special all-cancelled case; a completed line is never itself cancelled, so it "
+            "always satisfies this regardless of Item B's own cancellation.")
+        self.assertFalse(
+            lifecycle.get('all_cancelled'),
+            "At least one line genuinely completed - not a pure-cancellation lifecycle.")
+
+        # Within both grace windows: both lines still visible.
+        completed_cutoff = Datetime.now() - timedelta(minutes=5)
+        cancelled_cutoff = Datetime.now() - timedelta(minutes=5)
+        display_lines = order.line_ids.filtered(
+            lambda l, cpc=completed_cutoff, cc=cancelled_cutoff: (
+                l.state not in ('completed', 'cancelled')
+                or (l.state == 'completed' and l.completed_at and l.completed_at >= cpc)
+                or (l.state == 'cancelled' and l.cancelled_at and l.cancelled_at >= cc)
+            ))
+        self.assertEqual(len(display_lines), 2, "Both terminal lines still within their own grace window.")
+
+        # After retention expiry (both timestamps aged past their cutoffs
+        # directly, via the trusted internal write context): the card
+        # must disappear entirely, never lingering "indefinitely" just
+        # because one of its lines was cancelled.
+        order.line_ids.with_context(kds_workflow_write=True).write({
+            'completed_at': Datetime.now() - timedelta(minutes=20),
+            'cancelled_at': Datetime.now() - timedelta(minutes=20),
+        })
+        display_lines_after = order.line_ids.filtered(
+            lambda l, cpc=completed_cutoff, cc=cancelled_cutoff: (
+                l.state not in ('completed', 'cancelled')
+                or (l.state == 'completed' and l.completed_at and l.completed_at >= cpc)
+                or (l.state == 'cancelled' and l.cancelled_at and l.cancelled_at >= cc)
+            ))
+        self.assertFalse(
+            display_lines_after,
+            "A cancelled line must never keep a completed card visible indefinitely - once both "
+            "lines are past their own retention window, the station must disappear.")
+
+        # Audit history: never touched by any of the above.
+        self.assertTrue(self.env['kds.event'].search([('order_id', '=', order.id)]))
+        self.assertEqual(item_a.state, 'completed')
+        self.assertEqual(item_b.state, 'cancelled')
+
+    def test_bug08_cancel_during_preparing_preserves_last_stage(self):
+        """Test 2 - Cancel during PREPARING: station=PREPARING, then all
+        lines cancelled -> temporarily remains under PREPARING (and
+        ALL), READY button absent, disappears after retention."""
+        order = self._order()
+        order.action_accept()
+        order.line_ids.action_start()
+        self.assertEqual(order.line_ids.state, 'preparing')
+
+        order.line_ids.action_cancel(reason='kitchen out of stock')
+
+        lifecycle = self._station_lifecycle(order.line_ids)
+        self.assertFalse(lifecycle['has_active_work'])
+        self.assertTrue(lifecycle['all_cancelled'])
+        self.assertEqual(
+            lifecycle['last_stage'], 'preparing',
+            "A station cancelled while Preparing must preserve that as its last operational stage, "
+            "not silently reset to some other bucket.")
+        self.assertTrue(
+            order.line_ids.preparation_start_time,
+            "The line's own preparation_start_time - what the frontend keys this determination "
+            "off - must survive cancellation, preserving the station's own operational history.")
+        self.assertFalse(order.line_ids.ready_time, "Never reached Ready before being cancelled.")
+
+    def test_bug08_cancel_during_new_preserves_last_stage(self):
+        """Test 3 - Cancel during NEW: station=NEW, then all lines
+        cancelled -> temporarily remains under NEW, START absent,
+        disappears after retention."""
+        order = self._order()
+        self.assertEqual(order.line_ids.state, 'new')
+
+        order.line_ids.action_cancel(reason='customer left')
+
+        lifecycle = self._station_lifecycle(order.line_ids)
+        self.assertFalse(lifecycle['has_active_work'])
+        self.assertTrue(lifecycle['all_cancelled'])
+        self.assertEqual(
+            lifecycle['last_stage'], 'new',
+            "A station cancelled before ever starting must preserve NEW as its last stage.")
+        self.assertFalse(order.line_ids.preparation_start_time)
+        self.assertFalse(order.line_ids.ready_time)
+
+    def test_bug08_cancel_during_ready_preserves_last_stage(self):
+        """Test 4 - Cancel during READY: station=READY, then all lines
+        cancelled -> temporarily remains under READY, COMPLETE absent,
+        disappears after retention."""
+        order = self._order()
+        order.action_accept()
+        order.line_ids.action_start()
+        order.line_ids.action_ready()
+        self.assertEqual(order.line_ids.state, 'ready')
+
+        order.line_ids.action_cancel(reason='order changed after ready')
+
+        lifecycle = self._station_lifecycle(order.line_ids)
+        self.assertFalse(lifecycle['has_active_work'])
+        self.assertTrue(lifecycle['all_cancelled'])
+        self.assertEqual(
+            lifecycle['last_stage'], 'ready',
+            "A station cancelled while Ready must preserve READY as its last operational stage.")
+        self.assertTrue(order.line_ids.ready_time)
+
+    def test_bug08_multi_station_isolation(self):
+        """Test 5 - Multi-station isolation: one order routed to Kitchen
+        + Coffee + Bar; cancel all Coffee lines only. Coffee follows its
+        own cancelled lifecycle; Kitchen and Bar remain unchanged."""
+        station_bar = self.env['kds.station'].create({
+            'name': 'Test Bar BUG08', 'code': 'TESTBAR08', 'target_prep_time': 3,
+        })
+        product_pie = self.env['product.product'].create({
+            'name': 'Apple Pie (BUG08 test)', 'type': 'consu', 'sale_ok': True, 'available_in_pos': True,
+        })
+        order = self._make_order([
+            (self.product_burger, 1), (self.product_cappuccino, 1), (product_pie, 1),
+        ])
+        kitchen_line = order.line_ids.filtered(lambda l: l.product_id == self.product_burger)
+        coffee_line = order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        bar_line = order.line_ids.filtered(lambda l: l.product_id == product_pie)
+        self._route_line_to_station(kitchen_line, self.station_kitchen)
+        self._route_line_to_station(coffee_line, self.station_coffee)
+        self._route_line_to_station(bar_line, station_bar)
+        order = order.with_user(self.admin)
+        order.line_ids.action_accept()
+        order.line_ids.action_start()
+        # Kitchen finishes fully (COMPLETED); Coffee stays Preparing
+        # (about to be cancelled); Bar stays Preparing (must remain
+        # completely untouched throughout).
+        kitchen_line.action_ready()
+        kitchen_line.action_complete()
+
+        coffee_line.action_cancel(reason='out of milk')
+
+        coffee_lifecycle = self._station_lifecycle(coffee_line)
+        self.assertFalse(coffee_lifecycle['has_active_work'])
+        self.assertTrue(coffee_lifecycle['all_cancelled'])
+        self.assertEqual(coffee_lifecycle['last_stage'], 'preparing',
+                          "Coffee follows its own cancelled-while-Preparing lifecycle.")
+
+        kitchen_line.invalidate_recordset()
+        bar_line.invalidate_recordset()
+        self.assertEqual(kitchen_line.state, 'completed',
+                          "Kitchen's own lifecycle must be completely unaffected by Coffee's "
+                          "cancellation - station isolation.")
+        self.assertEqual(bar_line.state, 'preparing',
+                          "Bar's own lifecycle must be completely unaffected by Coffee's "
+                          "cancellation - station isolation.")
+        kitchen_lifecycle = self._station_lifecycle(kitchen_line)
+        self.assertTrue(
+            kitchen_lifecycle['has_active_work'],
+            "Kitchen's own lifecycle correctly routes through the normal (pre-BUG-08) "
+            "'allCompleted' handling, not the special all-cancelled case - "
+            "has_active_work here really means 'the ordinary lifecycle path applies "
+            "(including its own existing allCompleted/allReady checks)', not literally "
+            "'still cooking'; a completed line is never cancelled, so it always satisfies "
+            "this. Coffee's cancellation must not have changed that in any way.")
+        bar_lifecycle = self._station_lifecycle(bar_line)
+        self.assertTrue(bar_lifecycle['has_active_work'],
+                         "Bar still has genuinely active work, completely untouched.")
+
+    # -----------------------------------------------------------------
+    # Dev request "BUG-10 - Reopened READY Order Appears in Multiple
+    # Stage Tabs": both KDS screens' tab filters/counts now read a
+    # single, backend-computed order.effective_stage value (controllers/
+    # kds.py's own _effective_stage(), mirrored in kds_kiosk.py) instead
+    # of running independent per-tab checks that could each
+    # independently match the same ticket. This project has no JS test
+    # harness (an established limitation) - this Python port, kept in
+    # lockstep with the three controller/JS copies, verifies the
+    # algorithm itself returns exactly one value for every mixed-state
+    # scenario the dev request describes.
+    # -----------------------------------------------------------------
+    @staticmethod
+    def _effective_stage(lines):
+        """Python port of _effective_stage() (controllers/kds.py /
+        controllers/kds_kiosk.py) - kept deliberately in lockstep with
+        those two copies."""
+        active = [l for l in lines if l.state != 'cancelled']
+        if not active:
+            if not lines:
+                return 'new'
+            ever_ready = any(l.ready_time for l in lines)
+            ever_preparing = any(l.preparation_start_time for l in lines)
+            return 'ready' if ever_ready else 'preparing' if ever_preparing else 'new'
+        if all(l.state == 'completed' for l in active):
+            return 'completed'
+        if all(l.state in ('ready', 'completed') for l in active):
+            return 'ready'
+        if any(l.state in ('preparing', 'ready', 'completed') for l in active):
+            return 'preparing'
+        return 'new'
+
+    def test_bug10_reopened_ready_order_has_single_effective_stage(self):
+        """The dev request's own exact required regression scenario:
+        Kitchen reaches READY, then POS changes qty on the existing
+        product AND adds a new one - existing line -> UPDATED/preparing,
+        new line -> ADDED/new. The ticket must classify as exactly
+        'preparing', never simultaneously matching 'new' too."""
+        order = self._create_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        kds_order.line_ids.action_accept()
+        kds_order.line_ids.action_start()
+        kds_order.line_ids.action_ready()
+        self.assertEqual(kds_order.line_ids.state, 'ready')
+
+        # Existing product qty change + a new product added, in one sync.
+        order.lines.write({'qty': 3})
+        self.env['pos.order.line'].create({
+            'order_id': order.id,
+            'product_id': self.product_cappuccino.id,
+            'qty': 1,
+            'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
+        })
+        order._flexsys_kds_diff_lines()
+
+        kds_order.invalidate_recordset()
+        states = kds_order.line_ids.mapped('state')
+        self.assertIn('new', states, "The newly added line must be 'new'/ADDED.")
+        self.assertIn('preparing', states, "The reopened existing line must be back to 'preparing'.")
+
+        stage = self._effective_stage(kds_order.line_ids)
+        self.assertEqual(
+            stage, 'preparing',
+            "A ticket with mixed line states (one 'new', one 'preparing') must classify as "
+            "exactly ONE effective stage - 'preparing' takes priority, matching the same "
+            "precedence already established for the card's own display text (BUG-02) - "
+            "never simultaneously 'new' too.")
+
+    def test_bug10_new_order_with_only_new_lines_is_new(self):
+        order = self._order()
+        self.assertEqual(self._effective_stage(order.line_ids), 'new')
+
+    def test_bug10_all_ready_is_ready_not_preparing(self):
+        order = self._order()
+        order.action_accept()
+        order.line_ids.action_start()
+        order.line_ids.action_ready()
+        self.assertEqual(self._effective_stage(order.line_ids), 'ready')
+
+    def test_bug10_all_completed_is_completed(self):
+        order = self._order()
+        order.action_accept()
+        order.line_ids.action_start()
+        order.line_ids.action_ready()
+        order.line_ids.action_complete()
+        self.assertEqual(self._effective_stage(order.line_ids), 'completed')
+
+    def test_bug10_completed_reopened_with_new_line_is_preparing_not_new(self):
+        """Additional Checks: COMPLETED -> PREPARING reopen transition
+        must also classify as exactly 'preparing', never 'new' or
+        'completed'."""
+        order = self._make_order([(self.product_burger, 1)])
+        self._route_line_to_station(order.line_ids, self.station_kitchen)
+        original_line = order.line_ids
+        original_line.with_user(self.admin).action_accept()
+        original_line.with_user(self.admin).action_start()
+        original_line.with_user(self.admin).action_ready()
+        original_line.with_user(self.admin).action_complete()
+        self.assertEqual(order.state, 'completed')
+
+        self.env['kds.order.line'].create({
+            'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 1,
+            'station_id': self.station_kitchen.id,
+        })
+
+        order.invalidate_recordset()
+        stage = self._effective_stage(order.line_ids)
+        self.assertEqual(
+            stage, 'preparing',
+            "A completed order reopened by a new line must classify as 'preparing', not "
+            "'new' (the original line stays historically completed - BUG-02B) and not "
+            "'completed' (new work genuinely remains).")

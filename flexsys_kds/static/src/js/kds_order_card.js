@@ -24,6 +24,20 @@ export class KdsOrderCard extends Component {
         this.labels = KDS_LABELS;
     }
 
+    // BUG-09 FIX ("POS Quantity Delta Is Not Explicitly Communicated to
+    // Kitchen") - see controllers/kds_kiosk.py's own matching
+    // qtyDeltaSuffix() for the full explanation. A plain method (not a
+    // getter) since it needs the specific `line` being rendered, called
+    // per-line from the template - OWL templates can't cleanly build a
+    // conditional string like this inline the way a JS template literal
+    // can.
+    lineChangeLabel(line) {
+        const label = line.line_change_label || line.line_change;
+        if (line.line_change !== "updated" || !line.qty_delta) return label;
+        const sign = line.qty_delta > 0 ? "+" : "";
+        return `${label} (${sign}${line.qty_delta})`;
+    }
+
     // CANCELLATION VISIBILITY (dev request): a cancelled line must never
     // count toward "is this order still waiting on something" -
     // matching the backend's own established pattern for the exact same
@@ -39,19 +53,57 @@ export class KdsOrderCard extends Component {
         return this.props.order.lines.filter((l) => l.state !== "cancelled");
     }
 
+    // BUG-08 FIX ("Cancelled Lines Break Station Card Lifecycle /
+    // Terminal Cleanup") - see the matching, more detailed comment on
+    // the public kiosk's own stationLifecycle() in controllers/
+    // kds_kiosk.py for the full explanation. Same logic here: a station
+    // whose every line is terminal (completed and/or cancelled, none
+    // genuinely active) is classified two ways - at least one line
+    // genuinely 'completed' means this station's work finished
+    // (handled by the existing allCompleted getter below); zero
+    // completed (every terminal line 'cancelled') means nothing here
+    // ever finished, and the card should instead preserve the last
+    // operational stage (NEW/PREPARING/READY) this station actually
+    // reached before cancellation, per point 1 of the dev request
+    // ("Preserve Last Operational State").
+    get stationLifecycle() {
+        const lines = this.props.order.lines;
+        const active = this.activeLines;
+        if (active.length > 0) {
+            return { hasActiveWork: true };
+        }
+        const hasAnyCompleted = lines.some((l) => l.state === "completed");
+        if (hasAnyCompleted || !lines.length) {
+            return { hasActiveWork: false, allCancelled: false };
+        }
+        const everReady = lines.some((l) => l.ready_time);
+        const everPreparing = lines.some((l) => l.preparation_start_time);
+        const lastStage = everReady ? "ready" : everPreparing ? "preparing" : "new";
+        return { hasActiveWork: false, allCancelled: true, lastStage };
+    }
+
     get borderClass() {
         // CANCELLATION VISIBILITY (dev request, point 2): takes priority
         // over everything else - a fully-cancelled order needs no
         // further alert-coloring (late/warning/priority all stop
         // mattering once there's nothing left to prepare).
         if (this.props.order.state === "cancelled") return "fs-card-cancelled";
+        // BUG-08 FIX: a station cancelled with nothing ever completed
+        // gets the same muted "cancelled" treatment as a fully-cancelled
+        // order, not the "ready" green it would otherwise fall through
+        // to once activeLines is empty.
+        const lifecycle = this.stationLifecycle;
+        if (!lifecycle.hasActiveWork && lifecycle.allCancelled) return "fs-card-cancelled";
+        // BUG-10 FIX: driven by order.effective_stage - see
+        // kds_app.js's own filteredOrders/counts for the full
+        // explanation of why this single backend-authoritative value
+        // replaced several separately-maintained local checks.
         // 'completed' counts the same as 'ready' here (both are "done" -
         // green border) - the real COMPLETED tab (dev request) distinguishes
         // them at the tab/statusText level, not the border color.
-        const lines = this.activeLines;
-        const allReady = lines.length > 0 && lines.every((l) => l.state === "ready" || l.state === "completed");
+        const isReadyOrDone = this.props.order.effective_stage === "ready" || this.props.order.effective_stage === "completed";
         if (this.props.order.sla_status === "late") return "fs-card-late";
-        if (allReady) return "fs-card-ready";
+        if (isReadyOrDone) return "fs-card-ready";
         if (this.props.order.sla_status === "warning") return "fs-card-warning";
         if (this.props.order.priority !== "normal") return "fs-card-priority";
         return "fs-card-normal";
@@ -65,9 +117,10 @@ export class KdsOrderCard extends Component {
     // to mean "this station's own work here is finished" - on a genuine
     // multi-station order, Kitchen's own card needs to reflect that
     // Kitchen is done independently of whether Coffee/Bar are.
+    // BUG-10 FIX: now reads order.effective_stage directly rather than
+    // re-deriving it locally.
     get allCompleted() {
-        const lines = this.activeLines;
-        return lines.length > 0 && lines.every((l) => l.state === "completed");
+        return this.props.order.effective_stage === "completed";
     }
 
     get statusText() {
@@ -76,45 +129,32 @@ export class KdsOrderCard extends Component {
         // cancelled") takes priority - checked before Completed, since a
         // cancelled order was never going to complete.
         if (this.props.order.state === "cancelled") return this.labels.filterCancelled || "CANCELLED";
-        // BUG-07 FIX ("Station COMPLETE does not transition from READY"):
-        // allCompleted (THIS station's own lines) is the single source
-        // of truth for showing "COMPLETED" - it naturally covers the
-        // whole-order-done case too (if every station is done, this
-        // station's own lines are necessarily 'completed' as well),
-        // matching the bug report's own wording ("Kitchen: READY ->
-        // COMPLETED") - no separate order.state === "completed" check
-        // needed, since it's a subset of this same condition, not a
-        // genuinely different one. Everything else here is still
-        // deliberately computed from this station's own lines (matching
-        // borderClass's own logic) rather than the order-level `state`
-        // field for the New/Preparing cases, which reflects the *whole*
-        // multi-station order and can lag behind what this specific
-        // station's screen should show.
-        if (this.allCompleted) return this.labels.filterCompleted;
-        const lines = this.activeLines;
-        const allReady = lines.length > 0 && lines.every((l) => l.state === "ready" || l.state === "completed");
-        const anyNew = lines.some((l) => l.state === "new" || l.state === "accepted");
-        // REAL BUG FIX, confirmed at runtime (dev request "Runtime
-        // Regression Fix Package", BUG-02/02B): anyStarted checked
-        // BEFORE anyNew below - previously anyNew alone decided "NEW"
-        // status, meaning a single freshly-added line (a POS Delta
-        // adding one more item to an order already Preparing/Ready)
-        // made the *entire* card flip back to showing "NEW" and
-        // "START", even while other lines on the same order were
-        // already Preparing/Ready/Completed - reading exactly like "the
-        // complete order had never started" even though the order's own
-        // state field never actually changed and nothing was actually
-        // lost. "PREPARING" now correctly takes priority whenever *any*
-        // line has been touched already, regardless of whether a
-        // newly-added line also needs its own Start - the Start button/
-        // action itself (see mainAction below) still correctly targets
-        // that specific new line either way; only the status text was
-        // misleading.
-        const anyStarted = lines.some((l) => l.state === "preparing" || l.state === "ready" || l.state === "completed");
-        if (allReady) return this.labels.filterReady;
-        if (anyStarted) return this.labels.filterPreparing;
-        if (anyNew) return this.labels.filterNew;
-        return this.labels.filterPreparing;
+        // BUG-08 FIX ("visually indicate that the remaining station work
+        // is cancelled... the operator should understand: this station
+        // was preparing this order, but all remaining work was
+        // cancelled"): checked before the rest below, same priority as
+        // the fully-cancelled-order case just above. effective_stage
+        // for this exact case already returns the *preserved* stage
+        // value, which must be labeled as cancelled-at-that-stage here,
+        // not mistaken for genuinely active work.
+        const lifecycle = this.stationLifecycle;
+        const stageLabels = {
+            new: this.labels.filterNew, preparing: this.labels.filterPreparing,
+            ready: this.labels.filterReady, completed: this.labels.filterCompleted,
+        };
+        if (!lifecycle.hasActiveWork && lifecycle.allCancelled) {
+            return `${this.labels.filterCancelled || "CANCELLED"} (${this.labels.wasStage || "was"} ${stageLabels[this.props.order.effective_stage]})`;
+        }
+        // BUG-10 FIX: driven by the same single authoritative
+        // order.effective_stage every tab filter/count now uses (see
+        // kds_app.js's own filteredOrders/counts) - previously a
+        // separately-maintained local computation (anyNew/anyStarted/
+        // allReady/allCompleted) that happened to mostly agree with the
+        // tab logic via BUG-02's own "anyStarted before anyNew"
+        // precedence - now there is structurally only one answer to
+        // "what stage is this card in", not two parallel
+        // implementations that could drift.
+        return stageLabels[this.props.order.effective_stage] || this.labels.filterPreparing;
     }
 
     get elapsedLabel() {
@@ -141,33 +181,32 @@ export class KdsOrderCard extends Component {
         if (this.props.order.state === "cancelled") {
             return { action: null, label: this.labels.filterCancelled || "CANCELLED" };
         }
-        const lines = this.activeLines;
-        const anyNew = lines.some((l) => l.state === "new");
-        const anyAccepted = lines.some((l) => l.state === "accepted");
-        const anyPreparing = lines.some((l) => l.state === "preparing");
-        if (anyNew || anyAccepted) return { action: "start", label: this.labels.actionStart };
-        if (anyPreparing) return { action: "ready", label: this.labels.actionReady };
-        // BUG-07 FIX ("Station COMPLETE does not transition from READY"):
-        // order.state can no longer be used here to distinguish "this
-        // station's own portion still needs a Complete tap" from "this
-        // station already completed its own portion" - order.state now
-        // only becomes "completed" once EVERY station has completed its
-        // own lines (see kds_order.py's is_fully_completed), so on a
-        // genuine multi-station order, Kitchen's own card would
-        // incorrectly keep showing an actionable "COMPLETE" button
-        // forever if it kept checking order.state === "completed" the
-        // old way, even after Kitchen itself was done - it would just be
-        // waiting on Coffee/Bar. this.allCompleted (getter above) checks
-        // THIS station's own lines specifically, independent of every
-        // other station on the same order.
-        const allLinesDone = lines.length > 0 && lines.every((l) => l.state === "ready" || l.state === "completed");
-        if (allLinesDone) {
-            if (this.allCompleted) {
-                return { action: null, label: this.labels.filterCompleted };
-            }
-            return { action: "complete_station", label: this.labels.actionComplete };
+        // REAL BUG FIX, confirmed live on Odoo.sh (BUG-08, point 2: "No
+        // Active Work = No Workflow Actions... authoritative from
+        // backend payload/workflow eligibility, not only hidden with
+        // CSS") - checked before effective_stage is even consulted,
+        // since a "preserved last stage" of e.g. 'preparing' (BUG-08)
+        // must NOT be mistaken for a genuinely active preparing station
+        // that still needs a READY tap.
+        const lifecycle = this.stationLifecycle;
+        if (!lifecycle.hasActiveWork && lifecycle.allCancelled) {
+            return { action: null, label: this.labels.filterCancelled || "CANCELLED" };
         }
-        return { action: "ready", label: this.labels.actionReady };
+        // BUG-10 FIX: driven by the same single authoritative
+        // order.effective_stage every tab filter/count now uses - see
+        // kds_app.js's own filteredOrders/counts, and controllers/
+        // kds.py's own _effective_stage(), for the full explanation.
+        // BUG-07's own reasoning still applies throughout: computed
+        // per-station on the backend, never from the order's own
+        // aggregate `state` field, so Kitchen's own button is correct
+        // independent of whatever Coffee/Bar are still doing.
+        switch (this.props.order.effective_stage) {
+            case "new": return { action: "start", label: this.labels.actionStart };
+            case "preparing": return { action: "ready", label: this.labels.actionReady };
+            case "ready": return { action: "complete_station", label: this.labels.actionComplete };
+            case "completed": return { action: null, label: this.labels.filterCompleted };
+            default: return { action: null, label: this.labels.filterCancelled || "CANCELLED" };
+        }
     }
 
     get hasCustomerName() {
