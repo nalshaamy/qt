@@ -339,22 +339,110 @@ class KdsOrder(models.Model):
         order that a race condition left stranded - the reconciliation
         cron's whole purpose is to finish correcting exactly that
         anomaly, all the way to where the order should already be, not
-        stop one step short of it. Every current guard is still fully
-        respected: action_complete() is only ever reached if
-        action_ready() did NOT hand off to Expeditor/Packing instead
-        (expeditor_enabled), and only for an order that genuinely, still,
-        has every line accounted for (is_expeditor_ready re-checked
-        after action_ready(), not assumed) - Expeditor-gated orders,
-        orders with active production or packing work, and orders where
-        a cancelled/reopened line changed the picture in between are all
-        left exactly where action_ready() correctly left them.
+        stop one step short of it.
+
+        REAL BUG FIX, confirmed live on Odoo.sh a second time ("BUG-07
+        guard correctly rejecting the cron's own recovery attempt"):
+        the completion step above originally called the order-level
+        action_complete() directly - correct back when it unconditionally
+        cascaded 'completed' to every line, but exactly the architecture
+        BUG-07 replaced. action_complete() now requires
+        is_fully_completed (every line already individually
+        'completed'), which a just-recovered order's lines never are
+        yet (they're 'ready', having just been confirmed by
+        is_expeditor_ready above) - so the guard correctly refused,
+        leaving the order recovered only as far as 'ready'. Fixed by
+        routing through the same authoritative, station-level lifecycle
+        the runtime UI itself uses, split by whether Expeditor governs
+        this order - never a second, alternate completion path:
+
+          (A) Expeditor DISABLED: completes through the real per-line
+              action_complete() (the same one every station's own
+              "Complete" button on both KDS screens already calls) on
+              every remaining Ready line at once - its own aggregation
+              (is_fully_completed) then correctly finalizes the order
+              via action_complete() only once every line, across every
+              station, is done.
+          (B) Expeditor ENABLED: action_ready() above already activated
+              the Packing task if one didn't already exist - and
+              deliberately stops there. Packing is a genuine, multi-step
+              MANUAL process (Start -> Mark Ready -> Complete); a task
+              still sitting at 'waiting' represents real physical work
+              that hasn't happened yet, which this cron has no business
+              simulating or force-completing - production lines and
+              Expeditor's own task history are never rewritten merely to
+              reach a tidier end state. Only if the task itself
+              independently got stuck already sitting at 'ready' (the
+              same class of race this whole cron recovers from, one
+              level down) does its own action_complete() get called -
+              which correctly routes through _finalize_via_expeditor()
+              internally, the exact same Expeditor-aware path the
+              runtime UI uses, never an invented shortcut around it.
+
+        Idempotent either way, by construction: re-running this cron
+        against an order it already fully recovered is a no-op (nothing
+        left in New/Accepted/Preparing to find, or nothing left at
+        'ready' to act on) - safe to run on every cron tick regardless
+        of whether the previous tick already found and fixed something.
         """
         stuck_orders = self.search([('state', 'in', ('new', 'accepted', 'preparing'))])
         for order in stuck_orders:
             if order.is_expeditor_ready:
                 order.action_ready(bypass_check=True)
-                if order.state == 'ready' and not order.expeditor_enabled:
-                    order.action_complete(bypass_check=True)
+                # REAL BUG FIX, confirmed live on Odoo.sh (BUG-07's own
+                # order-level guard correctly rejecting this): calling
+                # the order-level action_complete() directly used to
+                # work here, back when it unconditionally cascaded
+                # 'completed' to every line - but that's exactly the
+                # architecture BUG-07 replaced. action_complete() now
+                # requires is_fully_completed (every line already
+                # individually 'completed'), which a just-recovered
+                # order's lines never are yet (they're 'ready', having
+                # just been pushed there by action_ready() above) - so
+                # the guard correctly refused, leaving the order
+                # recovered only as far as 'ready', one step short of
+                # where the (non-Expeditor) case should finish.
+                #
+                # Fixed by routing through the SAME authoritative,
+                # station-level lifecycle the runtime UI itself uses -
+                # never inventing a second, alternate completion path:
+                #
+                #   (A) Expeditor DISABLED: complete through the real
+                #       per-line action_complete() (the same one every
+                #       station's own "Complete" button on both KDS
+                #       screens already calls) on every remaining Ready
+                #       line at once - its own aggregation cascade
+                #       (is_fully_completed) then correctly finalizes
+                #       the order via action_complete() only once every
+                #       line, across every station, is done.
+                #   (B) Expeditor ENABLED: action_ready() above already
+                #       activated the Packing task if one didn't already
+                #       exist - deliberately stops there. Packing is a
+                #       genuine, multi-step MANUAL process (Start ->
+                #       Mark Ready -> Complete); a task that's still
+                #       'waiting' represents real physical work that
+                #       hasn't happened yet, which this cron has no
+                #       business simulating or force-completing. If the
+                #       task itself independently got stuck already
+                #       sitting at 'ready' (the same class of race this
+                #       whole cron exists to recover from, one level
+                #       down), its own action_complete() is called -
+                #       which correctly routes through
+                #       _finalize_via_expeditor() internally, the same
+                #       Expeditor-aware path the runtime UI uses.
+                #
+                # Idempotent either way: re-running this cron against an
+                # order it already fully recovered is a no-op (nothing
+                # left in New/Accepted/Preparing to find, or nothing
+                # left at 'ready' to act on).
+                if order.expeditor_enabled:
+                    stuck_task = order.expeditor_task_ids.filtered(lambda t: t.state == 'ready')
+                    if stuck_task:
+                        stuck_task.action_complete(bypass_check=True)
+                else:
+                    stuck_lines = order.line_ids.filtered(lambda l: l.state == 'ready')
+                    if stuck_lines:
+                        stuck_lines.action_complete(bypass_check=True)
 
     # ---------------------------------------------------------------
     # Access: order-level actions may touch several stations at once,

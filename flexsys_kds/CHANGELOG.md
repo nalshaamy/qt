@@ -8,6 +8,67 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.2.2 — Final 2 Odoo.sh failures: cron + a stale test assertion
+
+**Confirmed live on Odoo.sh**: 1 failure / 1 error / 207 tests executed
+- both direct fallout from v7.2.1's own Expeditor fix, confirming the
+new architecture was correct but two spots hadn't caught up to it yet.
+
+### 1. Stale test assertion, production code was already correct
+`test_expeditor_completion_finalizes_the_order` still asserted
+`all(l.state == 'completed' for l in order.line_ids)` - the *old*
+expectation, from when `action_complete()` unconditionally cascaded to
+every line. Under the current, correct architecture
+(`_finalize_via_expeditor()`, v7.2.1), production lines under Expeditor
+are only ever expected to reach `'ready'` and stay there - completion
+is the Packing task's own event, never each production line's own
+history being rewritten. Updated the assertion to confirm exactly
+that: every line remains at `'ready'`, never force-completed, even
+after the whole order finalizes via Expeditor.
+
+### 2. Reconciliation cron still used the pre-BUG-07 completion path
+**Root cause**: after recovering a stuck order to `'ready'`, the cron's
+own completion step called the order-level `action_complete()`
+directly - correct back when it unconditionally cascaded to every
+line, but exactly the architecture BUG-07 replaced. The new guard
+correctly rejected it, since a just-recovered order's lines are
+`'ready'`, not yet individually `'completed'`.
+
+**Fix**: routes through the same authoritative, station-level lifecycle
+the runtime UI itself uses, split by whether Expeditor governs the
+order - never a second, alternate completion path:
+- **(A) Expeditor disabled**: completes through the real per-line
+  `action_complete()` on every remaining Ready line at once - the same
+  method every station's own "Complete" button already calls - whose
+  own aggregation then correctly finalizes the order.
+- **(B) Expeditor enabled**: deliberately stops after `action_ready()`
+  activates the Packing task (if one didn't already exist) - Packing is
+  a genuine, multi-step *manual* process (Start -> Mark Ready ->
+  Complete); a task still at `'waiting'` represents real physical work
+  that hasn't happened yet, which this cron has no business simulating.
+  Only completes the task (via its own `action_complete()`, correctly
+  routing through `_finalize_via_expeditor()`) if the task itself
+  independently got stuck already sitting at `'ready'` - the same class
+  of race this cron recovers from, one level down.
+
+Idempotent either way, by construction - re-running against an
+already-recovered order is a no-op.
+
+### Files changed
+`models/kds_order.py` (cron logic + updated docstring),
+`tests/test_expeditor.py` (1 corrected assertion).
+
+No test count change (207) - both fixes corrected existing
+tests/logic to match the already-correct v7.2.1 architecture; no new
+scenarios needed covering.
+
+No database migration required. The BUG-07 station-level completion
+guard remains completely unweakened throughout - both fixes route
+existing callers through the correct authoritative path rather than
+loosening what the guard itself checks.
+
+---
+
 ## v7.2.1 — BUG-07 integration fixes: Expeditor + outdated test shortcuts
 
 **Confirmed live on Odoo.sh**: 0 failures / 5 errors / 182 tests

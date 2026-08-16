@@ -1,12 +1,14 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.2.1**
+**Version: 19.0.7.2.2**
 **Status as of this document: code-complete, including the "Runtime
 Regression Fix Package" (BUG-01 through BUG-06), two rounds of Odoo.sh
 runtime test failures fixed, BUG-07 (station-scoped completion) fully
-closed, and its own Expeditor integration reconciled. 207 automated
-tests, all `py_compile`/XML/JS checks passing. Not yet signed off on a
-live instance — see "What still needs a human" at the end.**
+closed, its own Expeditor integration reconciled, and the
+reconciliation cron's own completion path brought in line with the same
+architecture. 207 automated tests, all `py_compile`/XML/JS checks
+passing. Not yet signed off on a live instance — see "What still needs
+a human" at the end.**
 
 This document maps directly to that request's own section structure
 (A/B/C/D) and states, for each item, what's actually been verified and

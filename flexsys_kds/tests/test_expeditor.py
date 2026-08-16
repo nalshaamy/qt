@@ -274,7 +274,25 @@ class TestExpeditor(FlexSysKdsTestCommon):
         order.invalidate_recordset()
         self.assertEqual(order.state, 'completed',
                           "Completing the Expeditor task must finalize the parent order.")
-        self.assertTrue(all(l.state == 'completed' for l in order.line_ids))
+        # REAL BUG FIX, confirmed live on Odoo.sh ("Expeditor test still
+        # expects all production lines to become COMPLETED" - inconsistent
+        # with the new station-level lifecycle): production lines under
+        # Expeditor are only ever expected to reach 'ready' and stop
+        # there - final completion has always been the Packing task's
+        # own responsibility, not each production station's (see
+        # kds_order.py::_finalize_via_expeditor()'s own docstring for the
+        # full explanation). Forcing them to 'completed' here too would
+        # mean rewriting genuine production history to satisfy an old
+        # assertion, not reflecting what the intended business workflow
+        # actually does - explicitly not done, per that same guidance.
+        for line in order.line_ids:
+            line.invalidate_recordset()
+            self.assertEqual(
+                line.state, 'ready',
+                "Production lines remain at their genuine 'ready' state, never "
+                "force-rewritten to 'completed', when the order finalizes via "
+                "Expeditor - completion there is the Packing task's own event, "
+                "not each production line's own history being altered.")
 
     def test_packing_duration_computed_from_start_to_ready(self):
         order = self._order()
