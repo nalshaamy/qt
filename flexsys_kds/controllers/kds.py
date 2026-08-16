@@ -3,7 +3,7 @@ import hmac
 from datetime import timedelta
 
 from odoo import _, fields, http
-from odoo.exceptions import AccessError
+from odoo.exceptions import AccessError, UserError
 from odoo.http import request
 
 # UX DECISION, per the formal dev request "Add COMPLETED Tab to KDS
@@ -394,6 +394,22 @@ class FlexSysKdsController(http.Controller):
             return {'ok': True, 'state': line.state}
         except AccessError as e:
             return _kds_error(e)
+        # REAL BUG FIX, found via a proactive sweep for hidden
+        # regressions (not a reported failure): every workflow action
+        # method in this module (_line_transition/_wf_transition) has
+        # always raised UserError for an invalid transition ("cannot
+        # move line from 'X' to 'Y'") - a pre-existing gap, not
+        # something this round introduced, but one BUG-07's own
+        # action_complete() guard made significantly more likely to be
+        # hit in practice (any attempt to complete a station/order that
+        # isn't actually eligible now always raises it). Uncaught here,
+        # it would have propagated as a raw, unhandled server error
+        # instead of the clean {'ok': False, 'error': ...} JSON response
+        # the frontend on both KDS screens actually expects and handles
+        # gracefully (showing the message to the operator, not crashing
+        # the screen).
+        except UserError as e:
+            return _kds_error(e)
 
     @http.route('/flexsys_kds/order/action', type='jsonrpc', auth='user')
     def order_action(self, order_id, action):
@@ -412,6 +428,14 @@ class FlexSysKdsController(http.Controller):
             method()
             return {'ok': True, 'state': order.state}
         except AccessError as e:
+            return _kds_error(e)
+        # Same fix as line_action's own matching comment above - this is
+        # specifically the route through which action_complete()'s own
+        # new BUG-07 guard ("cannot complete order ... yet - Station X
+        # still has active production") is actually reachable from the
+        # order form/admin UI, and must surface as a clean error
+        # message, not an unhandled crash.
+        except UserError as e:
             return _kds_error(e)
 
     @http.route('/flexsys_kds/print/reprint', type='jsonrpc', auth='user')
@@ -436,6 +460,14 @@ class FlexSysKdsController(http.Controller):
                 order, station, reason, reason_note, bypass_check=True)
             return {'ok': True, 'job_id': job.id}
         except AccessError as e:
+            return _kds_error(e)
+        # Same fix as line_action/order_action's own matching comment
+        # above - create_reprint() raises ValidationError (a UserError
+        # subclass in Odoo's own exception hierarchy, so this catches it
+        # too) when no reason is supplied. Found via the same proactive
+        # sweep, not a reported failure - genuinely reachable if this
+        # route is ever called with an empty reason.
+        except UserError as e:
             return _kds_error(e)
 
 

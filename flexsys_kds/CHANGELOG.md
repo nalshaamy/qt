@@ -8,6 +8,66 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.4.2 — Proactive regression sweep (not from a reported failure)
+
+Requested directly by the person, after several rounds of "fix one
+thing, break another": a deliberate audit of every central method
+touched across recent rounds (`bypass_check`, `action_complete`'s
+BUG-07 guard, `_effective_stage`) and every one of its call sites, to
+find hidden regressions before they get reported. Two genuine bugs
+found and fixed; none of them had a failing test yet.
+
+### 1. `_activate_expeditor_task()`'s own fail-safe was broken by BUG-07's guard
+A narrow-race fail-safe ("Expeditor station got deactivated between the
+`expeditor_enabled` check and this method actually running - complete
+normally rather than leaving the order stuck at Ready forever") still
+called the order-level `action_complete()` directly - correct before
+BUG-07, but that method's own guard (`is_fully_completed`) rejects it,
+since lines at this exact point are freshly `'ready'`, never yet
+individually completed. The fail-safe meant to prevent an order getting
+stuck would itself now raise and leave it stuck. Fixed by routing
+through the real, per-line `action_complete()` instead - the same one
+every station's own "Complete" button already calls. New regression
+test (`test_activate_expeditor_task_fail_safe_completes_via_real_line_workflow`).
+
+### 2. Both controllers' JSON-RPC routes never caught `UserError`
+Every workflow action method has always raised `UserError` for an
+invalid transition - a pre-existing gap, not introduced this round, but
+one BUG-07's own `action_complete()` guard made significantly more
+likely to be hit in practice (any premature completion attempt now
+always raises it). `controllers/kds.py`'s `except AccessError` blocks
+never caught it; `controllers/kds_kiosk.py`'s `kiosk_action()` - a
+**public, unauthenticated** endpoint - had no exception handling at
+all. Uncaught, either would have surfaced as a raw, unhandled server
+error instead of the clean `{'ok': False, 'error': ...}` response both
+screens' own frontend JS already expects and displays gracefully.
+Fixed: `UserError` now caught alongside `AccessError` in
+`line_action`/`order_action`/`reprint` (backend), and `kiosk_action`
+gained proper exception handling entirely (kiosk_print's own reason is
+always hardcoded non-empty, so not at risk in practice - left as is).
+
+### Also corrected while sweeping
+Two stale comments in `controllers/kds_kiosk.py` describing `'complete'`
+as an order-level action (accurate when first written in v5.4, wrong
+since BUG-07 made it line-level).
+
+### Confirmed clean (no issue found)
+`_line_transition`'s permission check still correctly applies for every
+non-bypass call; a normal Operator assigned to only one station of a
+multi-station order can still trigger the order's own completion
+cascade (station-membership overlap, not full-order assignment, is
+what's required); `_finalize_via_expeditor()`'s own guard criterion
+(`is_expeditor_ready`) is consistent with the Expeditor task's own
+pre-completion safety check; `qty_delta`/`effective_stage` are
+consistently wired end-to-end on both screens; the order form's
+"Complete" button needs no special handling (Odoo's own web client
+already displays `UserError` cleanly for `type="object"` buttons,
+unlike the raw JSON-RPC controllers above).
+
+**Total: 224 tests** (up from 223). No database migration required.
+
+---
+
 ## v7.4.1 — Test-only fix: wrong-class helper reference
 
 **Confirmed live on Odoo.sh**: 1 error / 223 tests -

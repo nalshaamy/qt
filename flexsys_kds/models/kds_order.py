@@ -584,7 +584,24 @@ class KdsOrder(models.Model):
             # between that check and this one. Fail safe: complete
             # normally rather than leaving the order stuck at 'ready'
             # forever with no task and no path forward.
-            self.action_complete(bypass_check=bypass_check)
+            #
+            # REAL BUG FIX, found via a proactive sweep for regressions
+            # (not a reported failure): this called the order-level
+            # action_complete() directly - correct before BUG-07, but
+            # that method now requires is_fully_completed (every line
+            # already individually 'completed') via its own guard. This
+            # exact call site is reached right after action_ready()'s
+            # own flow, when lines are freshly 'ready', never yet
+            # individually completed - the guard would have correctly
+            # rejected this fail-safe's own call, leaving the order
+            # stuck exactly where this code was written to prevent it
+            # getting stuck. Fixed by routing through the real, per-line
+            # action_complete() (the same one every station's own
+            # "Complete" button already calls) instead - its own
+            # aggregation then correctly finalizes the order via
+            # action_complete() once every line is done, matching how
+            # every other completion path in this module already works.
+            self.line_ids.filtered(lambda l: l.state != 'cancelled').action_complete(bypass_check=bypass_check)
             return self.env['kds.expeditor.task']
         task = self.env['kds.expeditor.task'].create({
             'order_id': self.id,

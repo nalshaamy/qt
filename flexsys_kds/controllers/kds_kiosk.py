@@ -11,12 +11,14 @@ surface is deliberately narrow:
   scoped to exactly one station's `code`, checked again server-side on
   every line action so a valid token for Station A can't be used to
   touch a line that actually belongs to Station B by guessing IDs).
-- Only 'accept' / 'start' / 'ready' (line-level) and 'complete'
-  (order-level, added v5.4 alongside the manual-Complete design
-  reversal - see kds_order.py::action_ready()) are allowed actions. No
-  cancel, no reprint, no reopen, no cross-station move - anything
-  requiring Supervisor+ judgement stays behind a real Odoo login in the
-  backend, on purpose. 'complete' fits this same Operator-tier bar
+- Only 'accept' / 'start' / 'ready' / 'complete' (all line-level -
+  'complete' was order-level when first added in v5.4, alongside the
+  manual-Complete design reversal, but became line-level in BUG-07's
+  station-scoped completion work; see kds_order_line.py's own
+  action_complete()) are allowed actions. No cancel, no reprint, no
+  reopen, no cross-station move - anything requiring Supervisor+
+  judgement stays behind a real Odoo login in the backend, on purpose.
+  'complete' fits this same Operator-tier bar
   (ACTION_MIN_GROUP['complete']) - it's not a Supervisor-only move. A
   leaked kiosk URL should be able to do no more damage than "mark a
   food item as further along than it should be, or mark an already-
@@ -36,6 +38,7 @@ import hmac
 from datetime import timedelta
 
 from odoo import fields, http
+from odoo.exceptions import UserError
 from odoo.http import request
 
 # UX DECISION - see controllers/kds.py's own COMPLETED_GRACE_MINUTES for
@@ -269,7 +272,22 @@ class FlexSysKdsKioskController(http.Controller):
 
         method = {'accept': line.action_accept, 'start': line.action_start,
                   'ready': line.action_ready, 'complete': line.action_complete}[action]
-        method(bypass_check=True)
+        # REAL BUG FIX, found via a proactive sweep for hidden
+        # regressions (not a reported failure): this route had NO
+        # exception handling at all - every workflow action method has
+        # always raised UserError for an invalid transition, and BUG-07's
+        # own action_complete() guard made that significantly more
+        # likely to be hit in practice on this exact endpoint (any
+        # attempt to complete a station whose lines aren't actually all
+        # Ready yet). Uncaught, this would have crashed with a raw,
+        # unhandled server error - on a PUBLIC, unauthenticated kiosk
+        # endpoint - instead of the clean {'ok': False, 'error': ...}
+        # response the kiosk's own frontend JS already expects and
+        # displays gracefully to the operator.
+        try:
+            method(bypass_check=True)
+        except UserError as e:
+            return {'ok': False, 'error': str(e)}
         return {'ok': True, 'state': line.state}
 
     # BUG-07 FIX ("Station COMPLETE does not transition from READY"):

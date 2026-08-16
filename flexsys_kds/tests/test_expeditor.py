@@ -576,3 +576,38 @@ class TestExpeditor(FlexSysKdsTestCommon):
             order.state, 'completed',
             "Once the final required station completes, the overall order must "
             "reach Completed.")
+
+    def test_activate_expeditor_task_fail_safe_completes_via_real_line_workflow(self):
+        """REAL BUG FIX, found via a proactive sweep for hidden
+        regressions (not a reported failure): _activate_expeditor_task()
+        has a fail-safe for the narrow race where expeditor_enabled was
+        true when action_ready() checked it, but the only active
+        Expeditor station got deactivated before this method actually
+        ran - "complete normally rather than leaving the order stuck at
+        Ready forever". That fail-safe used to call the order-level
+        action_complete() directly - correct before BUG-07, but that
+        method's own new guard (is_fully_completed) rejects it, since
+        lines here are freshly 'ready', never yet individually
+        completed. Fixed to route through the real, per-line
+        action_complete() instead (see kds_order.py's own updated
+        comment for the full explanation). Simulated here by calling
+        _activate_expeditor_task() directly on an order with no active
+        Expeditor station at all - the same condition the fail-safe's
+        own branch is designed for, even though the literal "narrow
+        window" race can't be reproduced in a synchronous test."""
+        self.station_expeditor.active = False
+        order = self._order()
+        order.action_accept()
+        order.line_ids.action_start()
+        order.line_ids.action_ready()
+        self.assertEqual(order.line_ids.state, 'ready')
+        self.assertFalse(order.expeditor_enabled)
+
+        order._activate_expeditor_task(bypass_check=True)  # should not raise
+
+        order.invalidate_recordset()
+        self.assertEqual(
+            order.state, 'completed',
+            "The fail-safe must still complete the order normally, through the real "
+            "line-level workflow, not get stuck behind the BUG-07 guard.")
+        self.assertEqual(order.line_ids.state, 'completed')
