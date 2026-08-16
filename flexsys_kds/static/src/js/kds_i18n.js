@@ -54,7 +54,6 @@ export const KDS_LABELS = {
     actionStart: "START",
     actionReady: "READY",
     actionComplete: "COMPLETE",
-    actionDone: "DONE",
 
     ordersLabel: "Orders",
     avgPrepLabel: "Avg. Prep",

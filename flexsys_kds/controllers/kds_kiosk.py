@@ -100,13 +100,24 @@ class FlexSysKdsKioskController(http.Controller):
         # cascade sets cancelled_at on every affected line individually)
         # both correctly fall under this same check, without needing a
         # separate order-level clause here.
+        #
+        # BUG-07 FIX ("Station COMPLETE does not transition from READY")
+        # - see controllers/kds.py's own matching, more detailed comment
+        # for the full explanation: a completed line's own OR-branch now
+        # also accepts order_id.completion_time being unset, not just
+        # within the grace window - necessary since completion is now
+        # per-station, and a station can complete its own line well
+        # before the order's own completion_time is ever set (only
+        # stamped once every station is done).
         completed_cutoff = fields.Datetime.now() - timedelta(minutes=COMPLETED_GRACE_MINUTES)
         cancelled_cutoff = fields.Datetime.now() - timedelta(minutes=CANCELLED_GRACE_MINUTES)
         lines = env['kds.order.line'].sudo().search([
             ('station_id', '=', station.id),
             '|', '|',
                 ('state', 'not in', ('completed', 'cancelled')),
-                '&', ('state', '=', 'completed'), ('order_id.completion_time', '>=', completed_cutoff),
+                '&', ('state', '=', 'completed'),
+                    '|', ('order_id.completion_time', '=', False),
+                         ('order_id.completion_time', '>=', completed_cutoff),
                 '&', ('state', '=', 'cancelled'), ('cancelled_at', '>=', cancelled_cutoff),
         ])
         orders = lines.mapped('order_id').sorted(
@@ -128,9 +139,15 @@ class FlexSysKdsKioskController(http.Controller):
             # Same fix here: `display_lines` (payload - cancelled-within-
             # grace included) split from `active_line_sla` (still
             # correctly excludes cancelled - not a meaningful SLA input).
+            # BUG-07 FIX + pre-existing gap - see controllers/kds.py's
+            # own matching, more detailed comment for the full
+            # explanation. Mirrors the search domain's own completed/
+            # cancelled grace-period conditions exactly.
             display_lines = order.line_ids.filtered(
-                lambda l, sid=station.id, cc=cancelled_cutoff: l.station_id.id == sid and (
-                    l.state != 'cancelled' or (l.cancelled_at and l.cancelled_at >= cc)
+                lambda l, sid=station.id, cc=cancelled_cutoff, cpc=completed_cutoff: l.station_id.id == sid and (
+                    (l.state not in ('completed', 'cancelled'))
+                    or (l.state == 'completed' and (not l.order_id.completion_time or l.order_id.completion_time >= cpc))
+                    or (l.state == 'cancelled' and l.cancelled_at and l.cancelled_at >= cc)
                 ))
             if not display_lines:
                 continue
@@ -209,7 +226,14 @@ class FlexSysKdsKioskController(http.Controller):
         station = _station_from_token(env, station_code, token)
         if not station:
             return {'ok': False, 'error': 'Invalid or expired kiosk link'}
-        if action not in ('accept', 'start', 'ready'):
+        # BUG-07 FIX ("Station COMPLETE does not transition from READY"):
+        # 'complete' added here as a line-level action, replacing the
+        # old order-level kiosk_order_complete() route below (removed -
+        # superseded by this, see that route's own removal note) - see
+        # kds_order_line.py's own new action_complete() for the full
+        # explanation of what completing a single line now does,
+        # independently of every other station on the same order.
+        if action not in ('accept', 'start', 'ready', 'complete'):
             return {'ok': False, 'error': 'Action not available on the public kiosk'}
 
         line = env['kds.order.line'].sudo().browse(line_id).exists()
@@ -219,31 +243,20 @@ class FlexSysKdsKioskController(http.Controller):
             return {'ok': False, 'error': 'Line not found for this station'}
 
         method = {'accept': line.action_accept, 'start': line.action_start,
-                  'ready': line.action_ready}[action]
+                  'ready': line.action_ready, 'complete': line.action_complete}[action]
         method(bypass_check=True)
         return {'ok': True, 'state': line.state}
 
-    @http.route('/flexsyskds/public/api/order_complete', type='jsonrpc', auth='public', csrf=False)
-    def kiosk_order_complete(self, station_code, token, order_id):
-        """Manual Complete step (design reversal, v5.4 - see
-        kds_order.py::action_ready()'s own docstring): reaching Ready no
-        longer auto-completes, so staff need a real way to mark an order
-        done from the kiosk itself, not just the backend. Order-level
-        (not a line_id like kiosk_action above), so scoped by checking
-        the order actually involves this token's own station, rather
-        than by station_id equality on a single line."""
-        env = request.env
-        station = _station_from_token(env, station_code, token)
-        if not station:
-            return {'ok': False, 'error': 'Invalid or expired kiosk link'}
-        order = env['kds.order'].sudo().browse(order_id).exists()
-        if not order or station not in order.station_ids:
-            # Same deliberately-generic-error pattern as kiosk_action
-            # above - don't reveal whether the order exists at all if it
-            # doesn't belong to this token's station.
-            return {'ok': False, 'error': 'Order not found for this station'}
-        order.action_complete(bypass_check=True)
-        return {'ok': True, 'state': order.state}
+    # BUG-07 FIX ("Station COMPLETE does not transition from READY"):
+    # kiosk_order_complete() (the order-level Complete endpoint added in
+    # v5.4) removed - completing the whole order regardless of station
+    # was exactly the bug: Kitchen completing would either fail (order
+    # not yet 'ready' if another station hadn't caught up) or complete
+    # every station's lines simultaneously (once it was), never "just
+    # Kitchen's own portion". Superseded entirely by kiosk_action()
+    # above now supporting a line-level 'complete' action - the frontend
+    # calls that instead, once per line on this station's own card, same
+    # as it already does for 'start'/'ready'.
 
     @http.route('/flexsyskds/public/api/print', type='jsonrpc', auth='public', csrf=False)
     def kiosk_print(self, station_code, token, order_id):
@@ -837,11 +850,27 @@ function counts() {
     // "my own lines are all done", not order.state === 'ready' (which
     // requires every station on a multi-station order to be done).
     ready: ORDERS.filter(o => {
-      if (o.state === 'completed' || o.state === 'cancelled') return false;
+      if (o.state === 'cancelled') return false;
       const lines = activeLines(o);
-      return lines.length > 0 && lines.every(l => l.state === 'ready' || l.state === 'completed');
+      // BUG-07 FIX: see render()'s own matching comment - excludes
+      // "every line completed" explicitly, so a station that already
+      // completed its own portion doesn't double-count under both
+      // Ready and Completed at once.
+      const allCompleted = lines.length > 0 && lines.every(l => l.state === 'completed');
+      return !allCompleted && lines.length > 0
+        && lines.every(l => l.state === 'ready' || l.state === 'completed');
     }).length,
-    completed: ORDERS.filter(o => o.state === 'completed').length,
+    // BUG-07 FIX ("Station COMPLETE does not transition from READY"):
+    // matches the READY tab's own already-established per-station
+    // principle (BUG-03) - a station whose own lines are all completed
+    // shows under COMPLETED here, independent of whether every other
+    // station on the same order is done too (order.state === 'completed'
+    // is a subset of this, not a separate condition - see mainAction()'s
+    // own comment for the full reasoning).
+    completed: ORDERS.filter(o => {
+      const lines = activeLines(o);
+      return lines.length > 0 && lines.every(l => l.state === 'completed');
+    }).length,
   };
 }
 
@@ -926,19 +955,29 @@ function mainAction(order) {
   const lines = activeLines(order);
   const anyNew = lines.some(l => l.state === 'new' || l.state === 'accepted');
   if (anyNew) return {action: 'start', label: 'START'};
-  // DESIGN REVERSAL (v5.4 - see kds_order.py::action_ready()'s own
-  // docstring): reaching Ready no longer auto-completes. An order
-  // sitting at 'ready' (every line Ready, order.state still 'ready' not
-  // yet 'completed') now needs a deliberate Complete tap - order.state
-  // is what distinguishes "needs completing" from "already completed,
-  // sitting in its grace period" (both have every line at 'ready'/
-  // 'completed' from a *line* perspective, so line state alone can't
-  // tell them apart).
-  const allLinesDone = lines.length > 0 && lines.every(l => l.state === 'ready' || l.state === 'completed');
-  if (allLinesDone) {
-    if (order.state === 'completed') return {action: null, label: 'DONE'};
-    return {action: 'complete_order', label: 'COMPLETE'};
-  }
+  // BUG-07 FIX ("Station COMPLETE does not transition from READY"):
+  // order.state can no longer be used here to distinguish "this
+  // station's own portion still needs a Complete tap" from "this
+  // station already completed its own portion" - order.state now only
+  // becomes 'completed' once EVERY station has completed its own lines
+  // (see kds_order.py's is_fully_completed), so on a genuine multi-
+  // station order, Kitchen's own card would incorrectly keep showing
+  // an actionable "COMPLETE" button forever if it kept checking
+  // order.state === 'completed' the old way, even after Kitchen itself
+  // was done - it would just be waiting on Coffee/Bar. allCompleted
+  // below checks THIS station's own lines specifically, independent of
+  // every other station on the same order - and naturally still covers
+  // the case where the whole order really is done too (if every
+  // station is done, THIS station's own lines are necessarily
+  // 'completed' as well, so allCompleted is still true then), matching
+  // the bug report's own wording ("Kitchen: READY -> COMPLETED") - no
+  // separate "DONE" vs "COMPLETED" distinction needed; each station
+  // simply sees its own work marked COMPLETED once it's actually done,
+  // independent of whatever the other stations are still doing.
+  const allReady = lines.length > 0 && lines.every(l => l.state === 'ready' || l.state === 'completed');
+  const allCompleted = lines.length > 0 && lines.every(l => l.state === 'completed');
+  if (allCompleted) return {action: null, label: 'COMPLETED'};
+  if (allReady) return {action: 'complete_station', label: 'COMPLETE'};
   return {action: 'ready', label: 'READY'};
 }
 
@@ -966,12 +1005,24 @@ function render() {
   // under the Completed tab specifically, not Ready).
   if (FILTER === 'ready') {
     orders = orders.filter(o => {
-      if (o.state === 'completed' || o.state === 'cancelled') return false;
+      if (o.state === 'cancelled') return false;
       const lines = activeLines(o);
-      return lines.length > 0 && lines.every(l => l.state === 'ready' || l.state === 'completed');
+      // BUG-07 FIX: explicitly excludes "every line completed" now -
+      // that satisfies allReady's own ready-OR-completed check too, so
+      // without this, a station that already completed its own portion
+      // would incorrectly show under BOTH Ready and Completed at once.
+      // Ready means "ready to be completed here", not "already was".
+      const allCompleted = lines.length > 0 && lines.every(l => l.state === 'completed');
+      return !allCompleted && lines.length > 0
+        && lines.every(l => l.state === 'ready' || l.state === 'completed');
     });
   }
-  else if (FILTER === 'completed') orders = orders.filter(o => o.state === 'completed');
+  else if (FILTER === 'completed') {
+    orders = orders.filter(o => {
+      const lines = activeLines(o);
+      return lines.length > 0 && lines.every(l => l.state === 'completed');
+    });
+  }
   else if (FILTER === 'new') orders = orders.filter(o => o.lines.some(l => l.state === 'new' || l.state === 'accepted'));
   else if (FILTER !== 'all') orders = orders.filter(o => o.lines.some(l => l.state === FILTER));
 
@@ -1004,18 +1055,21 @@ function render() {
     // targets that specific new line either way; only the status *text*
     // was misleading.
     const anyStarted = lines.some(l => l.state === 'preparing' || l.state === 'ready' || l.state === 'completed');
-    // Real COMPLETED tab (dev request): the card's own status text now
-    // distinguishes Completed from merely-Ready explicitly, keyed off
-    // order.state (the authoritative workflow state) - previously both
-    // showed "READY" indistinguishably. CANCELLED (new) takes priority
-    // over everything else - a fully-cancelled order has nothing left
-    // to prepare, ready, or complete.
+    // BUG-07 FIX ("Station COMPLETE does not transition from READY"):
+    // allCompleted (THIS station's own lines) is now the single source
+    // of truth for showing "COMPLETED" - it naturally covers the whole-
+    // order-done case too (if every station is done, this station's own
+    // lines are necessarily 'completed' as well), matching the bug
+    // report's own wording ("Kitchen: READY -> COMPLETED") - no separate
+    // order.state === 'completed' check needed, since it's a subset of
+    // this same condition, not a genuinely different one.
+    const allCompleted = lines.length > 0 && lines.every(l => l.state === 'completed');
     const statusText = order.state === 'cancelled' ? 'CANCELLED'
-      : order.state === 'completed' ? 'COMPLETED'
+      : allCompleted ? 'COMPLETED'
       : allReady ? 'READY' : anyStarted ? 'PREPARING' : anyNew ? 'NEW' : 'PREPARING';
     const cardClass = order.state === 'cancelled' ? 'cancelled'
       : order.sla_status === 'late' ? 'late'
-      : allReady ? 'ready'
+      : (allReady || allCompleted) ? 'ready'
       : order.sla_status === 'warning' ? 'warning'
       : order.priority !== 'normal' ? 'priority' : 'normal';
     const celebrateClass = CELEBRATE_IDS.has(order.id) ? 'celebrate' : '';
@@ -1104,9 +1158,20 @@ async function advance(orderId) {
   const order = ORDERS.find(o => o.id === orderId);
   if (!order) return;
   const act = mainAction(order);
-  if (act.action === 'complete_order') {
-    // Order-level action (not per-line) - the manual Complete step.
-    await api('/flexsyskds/public/api/order_complete', {station_code: STATION_CODE, token: TOKEN, order_id: orderId});
+  if (act.action === 'complete_station') {
+    // BUG-07 FIX ("Station COMPLETE does not transition from READY"):
+    // was an order-level call (order_complete) - completing this
+    // station's own ready lines individually instead, the same way
+    // 'start'/'ready' already advance each line on this card one at a
+    // time below. Only lines actually sitting at 'ready' get the call
+    // (a line already 'completed' - possible mid-batch if this ever
+    // races with something else touching the same card - is simply
+    // skipped, not re-completed).
+    for (const line of activeLines(order)) {
+      if (line.state === 'ready') {
+        await api('/flexsyskds/public/api/action', {station_code: STATION_CODE, token: TOKEN, line_id: line.id, action: 'complete'});
+      }
+    }
     loadOrders();
     return;
   }

@@ -386,6 +386,54 @@ class KdsOrderLine(models.Model):
                 orders_to_advance |= line.order_id
         orders_to_advance.action_ready(bypass_check=bypass_check)
 
+    def action_complete(self, bypass_check=False):
+        """BUG-07 FIX ("Station COMPLETE does not transition from READY",
+        confirmed live at runtime): "COMPLETE" on the KDS operational
+        screens was always wired to kds.order.action_complete() - the
+        order-level action, which requires the *order's own* aggregate
+        state to already be 'ready' (only true once every station is
+        done) and then completes every station's lines simultaneously
+        in one shot. For a genuine multi-station order, Kitchen
+        finishing its own portion doesn't mean Coffee/Bar are done too -
+        completion needs to work independently per station, exactly the
+        same principle BUG-03 already established for Ready
+        (kds_kiosk.py/kds_app.js's own per-station Ready tab/count fix) -
+        this is that same principle, one state further along, now
+        actually reaching the model layer instead of stopping at the
+        display layer.
+
+        This is the new authoritative unit for "this station's own
+        production is done" - transitions just THIS line (or these
+        lines, if called in a batch scoped to one station's card) to
+        'completed', through the same validated, audited, notified
+        _line_transition() every other action uses. Only once *every*
+        non-cancelled line on the order - across every station, not
+        just this one - has independently reached 'completed' (checked
+        via is_fully_completed, the same aggregation pattern
+        is_expeditor_ready already established for Ready) does this
+        cascade up to kds.order.action_complete() exactly once, for the
+        whole order, completing the final aggregate transition through
+        the same authoritative order-level method every other path
+        already uses (never a raw write) - Kitchen completing its own
+        line does not touch Coffee's or Bar's lines, and does not
+        prematurely complete the order while their production is still
+        outstanding.
+
+        Deliberately does NOT run for an Expeditor-enabled order's
+        station screens - completion there is the Packing task's own
+        responsibility (kds_expeditor_task.py), a fundamentally
+        different flow this method has no part in; the frontend's own
+        button logic only ever offers "Complete" on a plain station
+        card when Expeditor isn't governing that order at all (see
+        kds_order_card.js/controllers/kds_kiosk.py's own mainAction()).
+        """
+        self._line_transition('completed', 'complete', bypass_check=bypass_check)
+        orders_to_advance = self.env['kds.order']
+        for line in self:
+            if line.order_id.is_fully_completed and line.order_id.state != 'completed':
+                orders_to_advance |= line.order_id
+        orders_to_advance.action_complete(bypass_check=bypass_check)
+
     def _system_reset_for_delta_sync(self, new_state='new'):
         """Internal-only workflow method (NOT a raw write) for POS Delta
         Sync to safely move a line that's already progressed (e.g.

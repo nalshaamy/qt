@@ -8,6 +8,12 @@ export class KdsOrderCard extends Component {
     static props = {
         order: Object,
         onLineAction: Function,
+        // BUG-07 FIX: no longer called by this component anywhere (its
+        // one call site, completing an order, is now line-level - see
+        // onMainActionClick's own "complete_station" branch) - kept
+        // declared/wired through (kds_app.js, kds_store.js's own
+        // orderAction still exist) rather than removed, in case a
+        // genuinely order-level action is ever added back to this card.
         onOrderAction: Function,
         onPrintClick: Function,
         printingEnabled: Boolean,
@@ -51,26 +57,40 @@ export class KdsOrderCard extends Component {
         return "fs-card-normal";
     }
 
+    // BUG-07 FIX ("Station COMPLETE does not transition from READY"):
+    // THIS station's own lines specifically - distinct from
+    // order.state === "completed", which now only becomes true once
+    // EVERY station has completed its own portion (see kds_order.py's
+    // is_fully_completed). order.state can no longer be relied on alone
+    // to mean "this station's own work here is finished" - on a genuine
+    // multi-station order, Kitchen's own card needs to reflect that
+    // Kitchen is done independently of whether Coffee/Bar are.
+    get allCompleted() {
+        const lines = this.activeLines;
+        return lines.length > 0 && lines.every((l) => l.state === "completed");
+    }
+
     get statusText() {
         // CANCELLATION VISIBILITY (dev request, point 2: "the operator
         // must immediately understand that the entire order has been
         // cancelled") takes priority - checked before Completed, since a
         // cancelled order was never going to complete.
         if (this.props.order.state === "cancelled") return this.labels.filterCancelled || "CANCELLED";
-        // Real COMPLETED tab (dev request): explicitly distinguishes
-        // Completed from merely-Ready now, keyed off the authoritative
-        // order.state - previously both showed "READY" indistinguishably.
-        // Everything else here is still deliberately computed from this
-        // station's own lines (matching borderClass's own logic) rather
-        // than the order-level `state` field for the New/Preparing cases,
-        // which reflects the *whole* multi-station order and can lag
-        // behind what this specific station's screen should show (e.g.
-        // still "Preparing" overall while this station's own items are
-        // already all Ready, waiting on another station) - Completed is
-        // the one case where the order-level state is exactly right to
-        // check directly, since only the order itself (not a per-station
-        // view of it) is ever actually marked Completed.
-        if (this.props.order.state === "completed") return this.labels.filterCompleted;
+        // BUG-07 FIX ("Station COMPLETE does not transition from READY"):
+        // allCompleted (THIS station's own lines) is the single source
+        // of truth for showing "COMPLETED" - it naturally covers the
+        // whole-order-done case too (if every station is done, this
+        // station's own lines are necessarily 'completed' as well),
+        // matching the bug report's own wording ("Kitchen: READY ->
+        // COMPLETED") - no separate order.state === "completed" check
+        // needed, since it's a subset of this same condition, not a
+        // genuinely different one. Everything else here is still
+        // deliberately computed from this station's own lines (matching
+        // borderClass's own logic) rather than the order-level `state`
+        // field for the New/Preparing cases, which reflects the *whole*
+        // multi-station order and can lag behind what this specific
+        // station's screen should show.
+        if (this.allCompleted) return this.labels.filterCompleted;
         const lines = this.activeLines;
         const allReady = lines.length > 0 && lines.every((l) => l.state === "ready" || l.state === "completed");
         const anyNew = lines.some((l) => l.state === "new" || l.state === "accepted");
@@ -127,20 +147,25 @@ export class KdsOrderCard extends Component {
         const anyPreparing = lines.some((l) => l.state === "preparing");
         if (anyNew || anyAccepted) return { action: "start", label: this.labels.actionStart };
         if (anyPreparing) return { action: "ready", label: this.labels.actionReady };
-        // DESIGN REVERSAL (v5.4 - see kds_order.py::action_ready()'s own
-        // docstring): reaching Ready no longer auto-completes. Every
-        // line Ready/Completed no longer means "nothing left to do" on
-        // its own - order.state is what distinguishes "sitting at Ready,
-        // needs a deliberate Complete tap" from "already Completed,
-        // sitting in its (now 10-minute) on-screen grace period" - both
-        // have identical line states, so line state alone can't tell
-        // them apart anymore.
+        // BUG-07 FIX ("Station COMPLETE does not transition from READY"):
+        // order.state can no longer be used here to distinguish "this
+        // station's own portion still needs a Complete tap" from "this
+        // station already completed its own portion" - order.state now
+        // only becomes "completed" once EVERY station has completed its
+        // own lines (see kds_order.py's is_fully_completed), so on a
+        // genuine multi-station order, Kitchen's own card would
+        // incorrectly keep showing an actionable "COMPLETE" button
+        // forever if it kept checking order.state === "completed" the
+        // old way, even after Kitchen itself was done - it would just be
+        // waiting on Coffee/Bar. this.allCompleted (getter above) checks
+        // THIS station's own lines specifically, independent of every
+        // other station on the same order.
         const allLinesDone = lines.length > 0 && lines.every((l) => l.state === "ready" || l.state === "completed");
         if (allLinesDone) {
-            if (this.props.order.state === "completed") {
-                return { action: null, label: this.labels.actionDone || "DONE" };
+            if (this.allCompleted) {
+                return { action: null, label: this.labels.filterCompleted };
             }
-            return { action: "complete_order", label: this.labels.actionComplete };
+            return { action: "complete_station", label: this.labels.actionComplete };
         }
         return { action: "ready", label: this.labels.actionReady };
     }
@@ -168,11 +193,22 @@ export class KdsOrderCard extends Component {
 
     onMainActionClick() {
         const action = this.mainAction.action;
-        if (action === "complete_order") {
-            // Order-level action (not per-line) - the new manual
-            // Complete step, via the same onOrderAction prop already
-            // used elsewhere (reopen/cancel from the backend form).
-            this.props.onOrderAction(this.props.order.id, "complete");
+        if (action === "complete_station") {
+            // BUG-07 FIX: was an order-level action (onOrderAction,
+            // "complete") - completing this station's own ready lines
+            // individually instead, through the same onLineAction prop
+            // already used for start/ready below, so completion is
+            // scoped to exactly this card's own lines and never touches
+            // another station's lines on the same order. Only lines
+            // actually sitting at "ready" get the call (a line already
+            // "completed" - possible mid-batch if this ever races with
+            // something else touching the same card - is simply
+            // skipped, not re-completed).
+            for (const line of this.activeLines) {
+                if (line.state === "ready") {
+                    this.props.onLineAction(line.id, "complete");
+                }
+            }
             return;
         }
         for (const line of this.activeLines) {

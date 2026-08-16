@@ -8,6 +8,69 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.2.0 — BUG-07 fully closed: station-scoped completion, real remaining gap fixed
+
+Follow-up to a partial BUG-07 implementation already in place (the
+line-level `kds.order.line.action_complete()`, the `is_fully_completed`
+aggregation field, both KDS screens' frontend already correctly wired
+to call it, and the `test_bug07_three_station_order_completes_
+independently_per_station` regression test already present and
+passing) - review correctly identified the one piece that was still
+missing.
+
+### The real remaining gap
+The order-level `kds.order.action_complete()` **method itself** still
+unconditionally cascaded `'completed'` to every non-cancelled line
+across every station, with no guard at all. The KDS screens' own
+"Complete" button no longer called this directly (it correctly goes
+through the line-level aggregation cascade, which only calls in once
+`is_fully_completed` is already true) - but this method remained fully
+reachable and genuinely destructive from two other places nothing had
+updated: the order form's own "Complete" button
+(`views/kds_order_views.xml`) and `controllers/kds.py`'s own
+`order_action` route (`'complete'` in its `allowed_actions`). Either
+one could still force-complete Coffee's and Bar's still-active
+production the instant Kitchen's own portion finished.
+
+### Fix, at the workflow layer
+`action_complete()` now refuses to run at all unless
+`is_fully_completed` is already true for that order - every non-
+cancelled line, across every station, must have *already*,
+independently reached `'completed'` first, with a clear `UserError`
+naming which station still has active production otherwise. This makes
+every remaining caller correct by construction: the line-level
+aggregation cascade always satisfies the guard (it only calls in after
+confirming `is_fully_completed` itself), and the order form's button /
+the controller's `'complete'` action now correctly refuse - honestly,
+not silently - to force-complete an order that still has real
+outstanding work elsewhere, rather than doing it anyway.
+
+### Test fixture-wide follow-on
+The new guard means `order.action_complete()` can no longer be called
+directly right after `action_ready()` as a convenient test shortcut
+(lines are still `'ready'`, not yet individually `'completed'`, at that
+point - calling the order-level method now correctly refuses). Audited
+and updated **25 call sites** across `test_expeditor.py`,
+`test_pos_sync.py`, `test_sla.py`, `test_station_kpi.py`, and
+`test_workflow.py` to call the new line-level `action_complete()`
+instead (`order.line_ids.action_complete()` or `line.action_complete()`
+as appropriate) - verified individually that every single one already
+had every relevant line at `'ready'` immediately beforehand, so none of
+these needed any other change, and none can now hit an invalid-
+transition error.
+
+No test count change from this file's own new work (205, unchanged) -
+the required Kitchen+Coffee+Bar regression test was already present and
+already passing before this round; this round's own work was closing
+the one remaining gap and keeping the existing suite consistent with
+the now-fully-enforced guard.
+
+`RELEASE_STATUS.md` updated to this version.
+
+No database migration required.
+
+---
+
 ## v7.1.4 — Final two Odoo.sh failures: 2 failures / 201 tests
 
 **Confirmed live on Odoo.sh**: down to only 2 failures, both traced to

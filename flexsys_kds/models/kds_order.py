@@ -130,6 +130,15 @@ class KdsOrder(models.Model):
 
     is_expeditor_ready = fields.Boolean(compute='_compute_is_expeditor_ready')
 
+    # BUG-07 FIX ("Station COMPLETE does not transition from READY"):
+    # the per-station counterpart to is_expeditor_ready above, one level
+    # further along - "every non-cancelled line has reached its own
+    # final Completed state" (not just Ready), across every station
+    # involved, not just the one that just completed its own portion.
+    # See kds_order_line.py's own new action_complete() for the full
+    # explanation of what this drives.
+    is_fully_completed = fields.Boolean(compute='_compute_is_fully_completed')
+
     # AUDIT FIX ("Expeditor/Packing Workflow", the final Phase 1 item):
     # an order requires the Expeditor/Packing stage only if its own
     # company has at least one active is_expeditor station configured -
@@ -206,6 +215,18 @@ class KdsOrder(models.Model):
             required_lines = order.line_ids.filtered(lambda l: l.state != 'cancelled')
             order.is_expeditor_ready = bool(required_lines) and all(
                 l.state in ('ready', 'completed') for l in required_lines
+            )
+
+    @api.depends('line_ids.state')
+    def _compute_is_fully_completed(self):
+        # BUG-07 FIX: same shape as _compute_is_expeditor_ready above,
+        # one state further - every non-cancelled line, across every
+        # station, has reached 'completed' specifically (not merely
+        # 'ready').
+        for order in self:
+            required_lines = order.line_ids.filtered(lambda l: l.state != 'cancelled')
+            order.is_fully_completed = bool(required_lines) and all(
+                l.state == 'completed' for l in required_lines
             )
 
     @api.depends('company_id')
@@ -567,6 +588,52 @@ class KdsOrder(models.Model):
                 active_task.action_cancel(bypass_check=True)
 
     def action_complete(self, bypass_check=False):
+        """REAL BUG FIX, confirmed still outstanding on review ("BUG-07 is
+        still not implemented as requested" - Kitchen READY -> Kitchen
+        COMPLETED while Coffee/Bar stay unaffected, only the *final*
+        required station completing should complete the overall order):
+        this method itself - independent of which caller reaches it -
+        still unconditionally cascaded 'completed' to every non-
+        cancelled line across every station in one shot. The KDS
+        screens' own "Complete" button was already correctly rewired
+        (kds_order_line.py's own action_complete(), a genuine per-line
+        action, added specifically for this) to call this method only
+        as the tail end of its own is_fully_completed aggregation cascade
+        - by which point every line really is already done, so the
+        write below was already a harmless no-op in that one path. But
+        this order-level method remained independently reachable and
+        genuinely destructive from two other places that were never
+        updated: the order form's own "Complete" button
+        (views/kds_order_views.xml), and controllers/kds.py's own
+        order_action route ('complete' in its allowed_actions) - either
+        one could still force-complete Coffee's and Bar's still-active
+        production the instant Kitchen's own portion finished, exactly
+        the bug this was supposed to have already fixed.
+
+        Real fix, at the workflow layer, not a frontend filter: this
+        method now refuses to run at all unless is_fully_completed is
+        already true - every non-cancelled line across every station
+        must have *already*, independently reached 'completed' first.
+        That makes every remaining caller correct by construction rather
+        than by convention: the line-level aggregation cascade always
+        satisfies this (it only calls in after confirming
+        is_fully_completed itself), a single-station order's own last
+        line reaching Ready-then-Complete naturally satisfies it too,
+        and the order form's "Complete" button / the controller's
+        'complete' action now correctly refuse - with a clear, honest
+        error - to force-complete an order that still has real,
+        outstanding production or packing work at another station,
+        rather than silently doing it anyway.
+        """
+        for order in self:
+            if not order.is_fully_completed:
+                not_done = order.line_ids.filtered(lambda l: l.state not in ('completed', 'cancelled'))
+                stations = ', '.join(not_done.mapped('station_id.name')) or _('another station')
+                raise UserError(_(
+                    "FlexSys KDS: cannot complete order %(name)s yet - %(stations)s still has "
+                    "active production. Each station must reach Ready and Complete "
+                    "independently; the overall order only completes once every station has."
+                ) % {'name': order.name, 'stations': stations})
         self._wf_transition('completed', 'complete', time_field='completion_time', bypass_check=bypass_check)
         self.line_ids.filtered(lambda l: l.state != 'cancelled')\
             .with_context(kds_workflow_write=True).write({'state': 'completed'})

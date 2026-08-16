@@ -162,13 +162,32 @@ class FlexSysKdsController(http.Controller):
         # see kds_order.py::action_cancel(), kds_order_line.py::
         # action_cancel()) both correctly fall under this same check,
         # without needing a separate order-level clause here.
+        #
+        # BUG-07 FIX ("Station COMPLETE does not transition from READY"):
+        # a completed line's own OR-branch now also accepts
+        # order_id.completion_time being unset (False) - not just within
+        # the grace window. Necessary consequence of completion now
+        # being per-station (kds_order_line.py's own action_complete()):
+        # a station can mark ITS OWN line 'completed' well before the
+        # order's own completion_time is ever set (that field is only
+        # stamped once EVERY station has completed, via
+        # kds.order.action_complete()'s own _wf_transition). Without this,
+        # Kitchen's own "DONE" card would vanish from the screen instantly
+        # the moment Kitchen completed its own line, rather than staying
+        # visible (as a "DONE" card - see the frontend's own allCompleted
+        # check) for as long as the order is still waiting on other
+        # stations - the grace-period countdown itself only starts once
+        # completion_time is actually set, i.e. once the whole order is
+        # genuinely done.
         completed_cutoff = fields.Datetime.now() - timedelta(minutes=COMPLETED_GRACE_MINUTES)
         cancelled_cutoff = fields.Datetime.now() - timedelta(minutes=CANCELLED_GRACE_MINUTES)
         lines = request.env['kds.order.line'].search([
             ('station_id', '=', station.id),
             '|', '|',
                 ('state', 'not in', ('completed', 'cancelled')),
-                '&', ('state', '=', 'completed'), ('order_id.completion_time', '>=', completed_cutoff),
+                '&', ('state', '=', 'completed'),
+                    '|', ('order_id.completion_time', '=', False),
+                         ('order_id.completion_time', '>=', completed_cutoff),
                 '&', ('state', '=', 'cancelled'), ('cancelled_at', '>=', cancelled_cutoff),
         ])
         orders = lines.mapped('order_id').sorted(
@@ -194,9 +213,26 @@ class FlexSysKdsController(http.Controller):
             # (still correctly excludes cancelled entirely - a cancelled
             # line's SLA status is not a meaningful input to the order's
             # own late/warning/normal badge).
+            # BUG-07 FIX ("Station COMPLETE does not transition from
+            # READY") + a separate, pre-existing gap found while fixing
+            # it: this downstream filter must mirror the search domain's
+            # own completed/cancelled grace-period conditions exactly -
+            # "the cancellation grace-period logic and the payload
+            # filtering logic must not contradict each other," per this
+            # exact bug's own explicit instruction. It previously only
+            # re-checked the cancelled grace window (l.state != 'cancelled'
+            # already let every completed line through unconditionally,
+            # with no completion-time check of its own at all) - an
+            # already-expired completed line (past its own grace window)
+            # could have stayed visible here indefinitely, contradicting
+            # the search domain above that would have already excluded
+            # it. Now checks both explicitly, matching completed_cutoff's
+            # own "unset OR within window" condition from the search.
             display_lines = order.line_ids.filtered(
-                lambda l, sid=station.id, cc=cancelled_cutoff: l.station_id.id == sid and (
-                    l.state != 'cancelled' or (l.cancelled_at and l.cancelled_at >= cc)
+                lambda l, sid=station.id, cc=cancelled_cutoff, cpc=completed_cutoff: l.station_id.id == sid and (
+                    (l.state not in ('completed', 'cancelled'))
+                    or (l.state == 'completed' and (not l.order_id.completion_time or l.order_id.completion_time >= cpc))
+                    or (l.state == 'cancelled' and l.cancelled_at and l.cancelled_at >= cc)
                 ))
             if not display_lines:
                 continue
@@ -269,10 +305,17 @@ class FlexSysKdsController(http.Controller):
             line = request.env['kds.order.line'].browse(line_id).exists()
             if not line:
                 return _kds_error(AccessError(_("Order line not found.")))
+            # BUG-07 FIX ("Station COMPLETE does not transition from
+            # READY"): 'complete' added to this dispatch map - see
+            # kds_order_line.py's own new action_complete() for the full
+            # explanation of what completing a single line (this
+            # station's own portion) now does, independently of every
+            # other station on the same order.
             method = {
                 'accept': line.action_accept,
                 'start': line.action_start,
                 'ready': line.action_ready,
+                'complete': line.action_complete,
             }.get(action)
             if action == 'cancel':
                 line.action_cancel(reason=reason)

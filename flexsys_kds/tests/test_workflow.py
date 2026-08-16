@@ -34,7 +34,7 @@ class TestWorkflow(FlexSysKdsTestCommon):
         # DESIGN REVERSAL (v5.4): Ready no longer auto-completes -
         # Complete is a separate, deliberate manual step again.
         self.assertEqual(order.state, 'ready')
-        order.action_complete()
+        order.line_ids.action_complete()
         self.assertEqual(order.state, 'completed')
 
     def test_cannot_skip_states_forward(self):
@@ -66,7 +66,7 @@ class TestWorkflow(FlexSysKdsTestCommon):
         order.action_accept()
         order.action_start_preparing()
         order.action_ready()
-        order.action_complete()
+        order.line_ids.action_complete()
         self.assertEqual(order.state, 'completed')
         order.action_reopen()
         self.assertEqual(order.state, 'preparing')
@@ -88,7 +88,7 @@ class TestWorkflow(FlexSysKdsTestCommon):
         order.action_accept()
         order.action_start_preparing()
         order.action_ready()
-        order.action_complete()
+        order.line_ids.action_complete()
         # DESIGN REVERSAL (v5.4): Complete is a separate manual step
         # again, called explicitly above.
         self.assertEqual(order.state, 'completed')
@@ -156,7 +156,7 @@ class TestWorkflow(FlexSysKdsTestCommon):
         self.assertEqual(order.state, 'ready',
                           "Order should auto-advance to Ready once every "
                           "non-cancelled line is Ready.")
-        order.action_complete()
+        order.line_ids.action_complete()
         self.assertEqual(order.state, 'completed')
 
     def test_cannot_cancel_completed_line(self):
@@ -169,7 +169,7 @@ class TestWorkflow(FlexSysKdsTestCommon):
         # its own - explicitly completing it here is what force-writes
         # this line to 'completed' (action_complete()'s own line
         # cascade), matching what this test is actually about.
-        line.order_id.action_complete()
+        line.action_complete()
         self.assertEqual(line.state, 'completed')
         with self.assertRaises(UserError):
             line.action_cancel(reason='test')
@@ -210,7 +210,7 @@ class TestWorkflow(FlexSysKdsTestCommon):
         order.action_accept()
         order.line_ids.action_start()
         order.line_ids.action_ready()
-        order.action_complete()  # DESIGN REVERSAL (v5.4): explicit step now
+        order.line_ids.action_complete()  # DESIGN REVERSAL (v5.4): explicit step now
         self.assertEqual(order.state, 'completed')
         self.assertEqual(order.line_ids.state, 'completed')
 
@@ -405,7 +405,7 @@ class TestWorkflow(FlexSysKdsTestCommon):
         order.action_accept()
         order.line_ids.action_start()
         order.line_ids.action_ready()
-        order.action_complete()  # DESIGN REVERSAL (v5.4): explicit step now
+        order.line_ids.action_complete()  # DESIGN REVERSAL (v5.4): explicit step now
         self.assertEqual(order.state, 'completed')
         self.assertTrue(order.completion_time)
 
@@ -429,7 +429,7 @@ class TestWorkflow(FlexSysKdsTestCommon):
         order.action_accept()
         order.line_ids.action_start()
         order.line_ids.action_ready()
-        order.action_complete()  # DESIGN REVERSAL (v5.4): explicit step now
+        order.line_ids.action_complete()  # DESIGN REVERSAL (v5.4): explicit step now
         self.assertEqual(order.state, 'completed')
         # Backdate completion_time well outside the grace window - same
         # with_context bypass pattern used elsewhere in this module for
@@ -487,7 +487,7 @@ class TestWorkflow(FlexSysKdsTestCommon):
         order.action_accept()
         order.line_ids.action_start()
         order.line_ids.action_ready()
-        order.action_complete()
+        order.line_ids.action_complete()
         self.assertEqual(order.state, 'completed')
         events_before = self.env['kds.event'].search_count([('order_id', '=', order.id)])
         self.assertTrue(events_before, "A completed order must already have audit events logged.")
@@ -536,7 +536,7 @@ class TestWorkflow(FlexSysKdsTestCommon):
         self.assertEqual(order.state, 'ready')
         self.assertNotEqual(order.state, 'completed')
 
-        order.action_complete()
+        order.line_ids.action_complete()
         self.assertEqual(order.state, 'completed')
         self.assertNotEqual(order.state, 'ready')
 
@@ -736,7 +736,7 @@ class TestWorkflow(FlexSysKdsTestCommon):
         order.action_accept()
         order.line_ids.action_start()
         order.line_ids.action_ready()
-        order.action_complete()
+        order.line_ids.action_complete()
         self.assertEqual(order.state, 'completed')
         self.assertEqual(original_line.state, 'completed')
         original_completion_time = original_line.ready_time
@@ -765,7 +765,7 @@ class TestWorkflow(FlexSysKdsTestCommon):
         order.action_accept()
         order.line_ids.action_start()
         order.line_ids.action_ready()
-        order.action_complete()
+        order.line_ids.action_complete()
         events_before = self.env['kds.event'].search_count([('order_id', '=', order.id)])
 
         new_line = self.env['kds.order.line'].create({
@@ -910,3 +910,135 @@ class TestWorkflow(FlexSysKdsTestCommon):
         order_b.invalidate_recordset()
         self.assertEqual(order_a.state, 'ready')
         self.assertEqual(order_b.state, 'ready')
+
+    # -----------------------------------------------------------------
+    # BUG-07 ("Station COMPLETE does not transition from READY"):
+    # completion must work independently per station - completing
+    # Kitchen must not require Coffee/Bar to be completed first, and
+    # must not automatically complete them. Only once every station has
+    # independently completed its own portion should the overall order
+    # reach its final Completed state.
+    # -----------------------------------------------------------------
+    def test_bug07_three_station_order_completes_independently_per_station(self):
+        """Exact regression scenario from the dev report: Kitchen + Coffee
+        + Bar, all reach Ready, then each completes independently in
+        sequence, with the other two stations' own state untouched at
+        each step."""
+        station_bar = self.env['kds.station'].create({
+            'name': 'Test Bar', 'code': 'TESTBAR', 'target_prep_time': 3,
+        })
+        product_pie = self.env['product.product'].create({
+            'name': 'Apple Pie (test)', 'type': 'consu', 'sale_ok': True, 'available_in_pos': True,
+        })
+        order = self._make_order([
+            (self.product_burger, 1),      # -> Kitchen ("Pizza Margherita" stand-in)
+            (self.product_cappuccino, 1),  # -> Coffee ("Wholemeal loaf" stand-in)
+            (product_pie, 1),              # -> Bar ("Apple Pie")
+        ]).with_user(self.admin)
+        kitchen_line = order.line_ids.filtered(lambda l: l.product_id == self.product_burger)
+        coffee_line = order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        bar_line = order.line_ids.filtered(lambda l: l.product_id == product_pie)
+        self._route_line_to_station(kitchen_line, self.station_kitchen)
+        self._route_line_to_station(coffee_line, self.station_coffee)
+        self._route_line_to_station(bar_line, station_bar)
+
+        order.line_ids.action_accept()
+        order.line_ids.action_start()
+        order.line_ids.action_ready()
+        self.assertEqual(kitchen_line.state, 'ready')
+        self.assertEqual(coffee_line.state, 'ready')
+        self.assertEqual(bar_line.state, 'ready')
+        self.assertEqual(order.state, 'ready',
+                          "Sanity check: the order's own aggregate state should be Ready "
+                          "once every station's lines are Ready (unaffected by BUG-07).")
+
+        # --- Step 1: Kitchen completes ---
+        events_before = self.env['kds.event'].search_count([('order_id', '=', order.id)])
+        kitchen_line.action_complete()
+
+        kitchen_line.invalidate_recordset()
+        coffee_line.invalidate_recordset()
+        bar_line.invalidate_recordset()
+        order.invalidate_recordset()
+        self.assertEqual(kitchen_line.state, 'completed', "Kitchen: READY -> COMPLETED")
+        self.assertEqual(coffee_line.state, 'ready', "Coffee: must remain unchanged (READY)")
+        self.assertEqual(bar_line.state, 'ready', "Bar: must remain unchanged (READY)")
+        self.assertNotEqual(
+            order.state, 'completed',
+            "Completing one station must not automatically complete the whole order while "
+            "other stations still have active production.")
+        events_after = self.env['kds.event'].search_count([('order_id', '=', order.id)])
+        self.assertEqual(
+            events_after, events_before + 1,
+            "Exactly one audit event for Kitchen's own completion - not zero, not duplicated.")
+
+        # --- Step 2: Coffee completes ---
+        coffee_line.action_complete()
+
+        kitchen_line.invalidate_recordset()
+        coffee_line.invalidate_recordset()
+        bar_line.invalidate_recordset()
+        order.invalidate_recordset()
+        self.assertEqual(kitchen_line.state, 'completed', "Kitchen: still COMPLETED")
+        self.assertEqual(coffee_line.state, 'completed', "Coffee: READY -> COMPLETED")
+        self.assertEqual(bar_line.state, 'ready', "Bar: must still remain unchanged (READY)")
+        self.assertNotEqual(order.state, 'completed', "Still waiting on Bar - order not yet complete.")
+
+        # --- Step 3: Bar completes - the final station ---
+        bar_line.action_complete()
+
+        kitchen_line.invalidate_recordset()
+        coffee_line.invalidate_recordset()
+        bar_line.invalidate_recordset()
+        order.invalidate_recordset()
+        self.assertEqual(kitchen_line.state, 'completed')
+        self.assertEqual(coffee_line.state, 'completed')
+        self.assertEqual(bar_line.state, 'completed', "Bar: READY -> COMPLETED")
+        self.assertEqual(
+            order.state, 'completed',
+            "Once every station has independently completed its own portion, the overall "
+            "order must reach its correct final Completed state.")
+        self.assertTrue(order.completion_time)
+
+    def test_bug07_station_can_only_complete_its_own_routed_lines(self):
+        """Point 1 of the required end-to-end verification: 'A station
+        can complete only its own routed lines.' A Kitchen-only Operator
+        must not be able to complete a Bar line."""
+        station_bar = self.env['kds.station'].create({
+            'name': 'Test Bar 2', 'code': 'TESTBAR2', 'target_prep_time': 3,
+        })
+        product_pie = self.env['product.product'].create({
+            'name': 'Apple Pie (test 2)', 'type': 'consu', 'sale_ok': True, 'available_in_pos': True,
+        })
+        order = self._make_order([(self.product_burger, 1), (product_pie, 1)])
+        kitchen_line = order.line_ids.filtered(lambda l: l.product_id == self.product_burger)
+        bar_line = order.line_ids.filtered(lambda l: l.product_id == product_pie)
+        self._route_line_to_station(kitchen_line, self.station_kitchen)
+        self._route_line_to_station(bar_line, station_bar)
+        order.line_ids.with_user(self.admin).action_accept()
+        order.line_ids.with_user(self.admin).action_start()
+        order.line_ids.with_user(self.admin).action_ready()
+
+        kitchen_only_operator = self._make_kds_user(
+            'bug07_kitchen_op', self.group_operator, self.station_kitchen)
+        with self.assertRaises(AccessError):
+            bar_line.with_user(kitchen_only_operator).action_complete()
+        # The same Operator CAN complete their own Kitchen line, though:
+        kitchen_line.with_user(kitchen_only_operator).action_complete()
+        kitchen_line.invalidate_recordset()
+        self.assertEqual(kitchen_line.state, 'completed')
+
+    def test_bug07_realtime_notification_sent_on_station_complete(self):
+        """Point 5: 'Realtime update is broadcast to all affected KDS
+        screens.' Confirms the notification call path is reached without
+        raising - same coverage level as the rest of this module's
+        realtime code gets (a plain TransactionCase can't practically
+        assert real bus.bus delivery without a live longpolling
+        client)."""
+        order = self._order()
+        order.line_ids.action_accept()
+        order.line_ids.action_start()
+        order.line_ids.action_ready()
+        order.line_ids.action_complete()  # should not raise while notifying
+        order.invalidate_recordset()
+        self.assertEqual(order.state, 'completed')

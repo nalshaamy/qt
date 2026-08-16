@@ -458,7 +458,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         kds_order.action_accept()
         kds_order.line_ids.action_start()
         kds_order.line_ids.action_ready()
-        kds_order.action_complete()  # DESIGN REVERSAL (v5.4): explicit step now
+        kds_order.line_ids.action_complete()  # DESIGN REVERSAL (v5.4): explicit step now
         self.assertEqual(kds_order.state, 'completed')
 
         # REAL BUG FIX, confirmed live on Odoo.sh: a raw
@@ -554,7 +554,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         kds_order.line_ids.action_accept()
         kds_order.line_ids.action_start()
         kds_order.line_ids.action_ready()
-        kds_order.action_complete()  # DESIGN REVERSAL (v5.4): explicit step now
+        kds_order.line_ids.action_complete()  # DESIGN REVERSAL (v5.4): explicit step now
         self.assertEqual(kds_order.state, 'completed')
 
         self.env['pos.order.line'].create({
@@ -732,7 +732,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         kds_order.line_ids.action_accept()
         kds_order.line_ids.action_start()
         kds_order.line_ids.action_ready()
-        kds_order.action_complete()
+        kds_order.line_ids.action_complete()
         self.assertEqual(kds_order.state, 'completed')
         kds_orders_before = self.env['kds.order'].search_count([])
 
@@ -760,7 +760,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         kds_order.line_ids.action_accept()
         kds_order.line_ids.action_start()
         kds_order.line_ids.action_ready()
-        kds_order.action_complete()
+        kds_order.line_ids.action_complete()
         kds_orders_before = self.env['kds.order'].search_count([])
 
         refund = self._create_pos_order([(self.product_burger, -2)])
@@ -841,7 +841,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         original_line.action_accept()
         original_line.action_start()
         original_line.action_ready()
-        kds_order.action_complete()
+        kds_order.line_ids.action_complete()
         self.assertEqual(original_line.state, 'completed')
         original_qty = original_line.qty
         original_ready_time = original_line.ready_time
@@ -875,7 +875,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         original_line.action_accept()
         original_line.action_start()
         original_line.action_ready()
-        kds_order.action_complete()
+        kds_order.line_ids.action_complete()
 
         order.lines.write({'note': 'well done, extra sauce'})
 
@@ -890,7 +890,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         kds_order.line_ids.action_accept()
         kds_order.line_ids.action_start()
         kds_order.line_ids.action_ready()
-        kds_order.action_complete()
+        kds_order.line_ids.action_complete()
         self.assertEqual(kds_order.state, 'completed')
 
         order.lines.write({'qty': 8})
@@ -913,7 +913,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         original_line.action_accept()
         original_line.action_start()
         original_line.action_ready()
-        kds_order.action_complete()
+        kds_order.line_ids.action_complete()
 
         order.lines.write({'qty': 0})
 
@@ -939,7 +939,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         original_line.action_accept()
         original_line.action_start()
         original_line.action_ready()
-        kds_order.action_complete()
+        kds_order.line_ids.action_complete()
         events_before = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
 
         order.lines.write({'qty': 9})
@@ -976,7 +976,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         original_line.action_accept()
         original_line.action_start()
         original_line.action_ready()
-        kds_order.action_complete()
+        kds_order.line_ids.action_complete()
 
         order.lines.write({'qty': 7})
         first_delta = kds_order.line_ids - original_line

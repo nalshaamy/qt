@@ -1,9 +1,12 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.6.0.0**
-**Status as of this document: code-complete against Sections A-B of the
-"Final Master Gap Analysis & Release Closure" request. Not yet
-signed off — see "What still needs a human" at the end.**
+**Version: 19.0.7.2.0**
+**Status as of this document: code-complete, including the "Runtime
+Regression Fix Package" (BUG-01 through BUG-06), two rounds of Odoo.sh
+runtime test failures fixed, and BUG-07 (station-scoped completion)
+fully closed. 205 automated tests, all `py_compile`/XML/JS checks
+passing. Not yet signed off on a live instance — see "What still needs
+a human" at the end.**
 
 This document maps directly to that request's own section structure
 (A/B/C/D) and states, for each item, what's actually been verified and
@@ -190,6 +193,70 @@ release.
 
 ---
 
+---
+
+# Post-V1-RC fixes (this version)
+
+Three rounds of real runtime testing happened after the V1 Release
+Candidate package above, each fixing genuine bugs found live (not just
+code review) - summarized here since they materially changed several
+of that package's own gate items. Full detail in `CHANGELOG.md`'s own
+v7.1.0 through v7.2.0 entries.
+
+## Runtime Regression Fix Package (BUG-01 through BUG-06)
+Auto Accept not actually reaching Preparing, a frontend display-
+precedence bug that made a Preparing/Completed order look like it had
+reset to New, per-station Ready visibility on a multi-station order,
+quantity-to-zero not being treated as a real cancellation, and -
+**the highest-risk fix in this whole project's history** - a
+financial refund silently creating a new kitchen preparation ticket.
+All fixed at the workflow/model layer, never a frontend filter.
+
+## Two rounds of Odoo.sh test-suite failures
+First round: test fixtures using raw, protected-field writes that a
+real production protection correctly blocked (the protection was never
+the bug); a real production bug in the print-agent's atomic SQL claim
+(missing flush-before/invalidate-after, a **Release Blocker**, now
+fixed); a `TypeError` on a missing POS config; and a genuine design
+clarification for how a company-global routing rule's own destination
+station is checked. Second round: `bypass_check=True`'s own contract
+clarified precisely (it now operates through a trusted/sudo'd
+environment, not just skipping the KDS-tier permission check) across
+all three models that accept it; a duplicate audit event fixed at its
+actual source (a mechanical order-state side-effect that was
+redundantly calling the full, logging `action_accept()` instead of the
+silent `_force_state()` helper built for exactly this); and the
+reconciliation cron completed its own recovery properly (through to
+`'completed'`, not stopping at `'ready'`) while every existing guard
+(Expeditor, multi-station, security) was explicitly re-verified intact
+with a new test.
+
+## BUG-07: station-scoped completion
+`Kitchen READY -> Kitchen COMPLETED` while `Coffee READY`/`Bar READY`
+remain genuinely unchanged, each completing independently, with the
+overall order only reaching `COMPLETED` once every required station
+has. Implemented through a real, validated, audited line-level
+`action_complete()` (not frontend-only filtering) with order-level
+aggregation via a new `is_fully_completed` field - and, this round
+specifically, a guard added to the order-level `action_complete()`
+itself so it can no longer be force-called (from the order form or the
+backend controller) to bypass this while another station still has
+active production. Regression test
+(`test_bug07_three_station_order_completes_independently_per_station`)
+routes one order to Kitchen + Coffee + Bar and completes each station
+one at a time, asserting the other two remain untouched at every step
+and the order only reaches `'completed'` after the third.
+
+**What still needs a human**: same category as everything else in this
+document - a live two-screen check that completing one station's
+"Complete" button on the actual KDS screen (not just the model-level
+test) correctly leaves the other stations' own screens fully
+interactive and unaffected, and that the order form's "Complete" button
+now shows a clear, honest error (not a confusing generic one) when
+production is still active elsewhere.
+
+---
+
 ## What still needs a human
 
 Everything above that says "still needs a human" or "cannot be
@@ -220,7 +287,18 @@ verified without a live Odoo 19 instance," collected in one place:
    POS refund screen can confirm which signal this build actually
    triggers, and that no new/undetected refund representation exists
    that neither signal catches.
-7. Once 1-6 pass: tag the release in Git (outside the scope of what a
+7. **New (v7.2.0, BUG-07)**: a live, two-screen check that tapping
+   "Complete" on one station's own KDS card (Kitchen, say) genuinely
+   leaves Coffee's and Bar's own screens showing their own tickets
+   completely unaffected - the model-level regression test proves the
+   backend logic is correct, but only an actual browser session on each
+   station's own screen can confirm the realtime update each one
+   receives is scoped correctly too. Also confirm the order form's own
+   "Complete" button now shows the new, clear `UserError` (naming which
+   station still has active production) rather than a confusing generic
+   failure, when clicked on a multi-station order that isn't fully
+   completed yet.
+8. Once 1-7 pass: tag the release in Git (outside the scope of what a
    file delivery like this one can do on your behalf).
 
 ---
@@ -407,14 +485,14 @@ analytics) was touched.
 
 | Gate | Status |
 |---|---|
-| Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-06 (v6.2) |
-| Automated Tests PASS | ✅ 186 tests, all `py_compile`/XML/JS checks pass |
+| Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
+| Automated Tests PASS | ✅ 205 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only |
-| Runtime Regression PASS | 23/30 automated ✅, 7/30 live only ⬜ |
-| Physical Printing PASS | ⬜ Live only |
-| Security Validation PASS | ✅ Automated, no changes this round |
-| UI Finalization PASS | ✅ Fullscreen added, density/states reviewed |
+| Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |
+| Physical Printing PASS | ⬜ Live only (the atomic-claim Release Blocker itself is now fixed - see "Post-V1-RC fixes" above - but end-to-end physical delivery still needs a real agent/printer) |
+| Security Validation PASS | ✅ Automated - `bypass_check`'s contract clarified and tested this round, no security control weakened |
+| UI Finalization PASS | ✅ Fullscreen, density/states reviewed (v7.0.0), unaffected since |
 
 **Classification**: code-complete and internally consistent for
 **FlexSys KDS V1 — Release Candidate**, pending the live-only items

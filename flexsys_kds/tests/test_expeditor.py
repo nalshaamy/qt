@@ -94,7 +94,7 @@ class TestExpeditor(FlexSysKdsTestCommon):
                           "With no active expeditor station, the order should still just "
                           "reach Ready - no Packing task activates.")
         self.assertFalse(order.expeditor_task_ids)
-        order.action_complete()
+        order.line_ids.action_complete()
         self.assertEqual(order.state, 'completed')
 
     # 3. Single production station -------------------------------------------------

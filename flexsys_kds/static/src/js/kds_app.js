@@ -190,17 +190,36 @@ export class FlexSysKdsScreen extends Component {
             // genuinely finished. Reverted to a per-line, per-station
             // check - the same "are my own active lines all ready/
             // completed" question the card's own statusText/mainAction
-            // already correctly ask (see KdsOrderCard.activeLines) -
-            // order.state !== "completed"/"cancelled" still correctly
-            // excludes an order that's moved past Ready (Completed
-            // belongs under its own tab, not Ready).
+            // already correctly ask (see KdsOrderCard.activeLines).
+            //
+            // BUG-07 FIX ("Station COMPLETE does not transition from
+            // READY"): explicitly excludes "every line completed" now,
+            // not just order.state === "completed" - completion is per-
+            // station now (see kds_order.py's is_fully_completed), so a
+            // station that already completed its own portion (while
+            // order.state itself might still be "preparing", waiting on
+            // other stations) would otherwise satisfy the ready-OR-
+            // completed check below too, showing under both Ready and
+            // Completed at once. Ready means "ready to be completed
+            // here", not "already was".
             orders = orders.filter((o) => {
-                if (o.state === "completed" || o.state === "cancelled") return false;
+                if (o.state === "cancelled") return false;
                 const lines = o.lines.filter((l) => l.state !== "cancelled");
-                return lines.length > 0 && lines.every((l) => l.state === "ready" || l.state === "completed");
+                const allCompleted = lines.length > 0 && lines.every((l) => l.state === "completed");
+                return !allCompleted && lines.length > 0
+                    && lines.every((l) => l.state === "ready" || l.state === "completed");
             });
         } else if (filter === "completed") {
-            orders = orders.filter((o) => o.state === "completed");
+            // BUG-07 FIX: matches the Ready tab's own already-established
+            // per-station principle (BUG-03) - a station whose own lines
+            // are all completed shows here, independent of whether every
+            // other station on the same order is done too (order.state
+            // === "completed" is a subset of this, not a separate
+            // condition).
+            orders = orders.filter((o) => {
+                const lines = o.lines.filter((l) => l.state !== "cancelled");
+                return lines.length > 0 && lines.every((l) => l.state === "completed");
+            });
         } else if (filter !== "all") {
             orders = orders.filter((o) => o.lines.some((l) => l.state === filter));
         }
@@ -285,12 +304,21 @@ export class FlexSysKdsScreen extends Component {
             // station-scoped "my own lines are all done", not
             // order.state === "ready" (which requires every station on
             // a multi-station order to be done).
+            // BUG-07 FIX: explicitly excludes "every line completed" too
+            // now - see filteredOrders' own matching comment.
             ready: orders.filter((o) => {
-                if (o.state === "completed" || o.state === "cancelled") return false;
+                if (o.state === "cancelled") return false;
                 const lines = o.lines.filter((l) => l.state !== "cancelled");
-                return lines.length > 0 && lines.every((l) => l.state === "ready" || l.state === "completed");
+                const allCompleted = lines.length > 0 && lines.every((l) => l.state === "completed");
+                return !allCompleted && lines.length > 0
+                    && lines.every((l) => l.state === "ready" || l.state === "completed");
             }).length,
-            completed: orders.filter((o) => o.state === "completed").length,
+            // BUG-07 FIX: station-scoped "my own lines are all completed",
+            // matching the Ready count's own per-station principle.
+            completed: orders.filter((o) => {
+                const lines = o.lines.filter((l) => l.state !== "cancelled");
+                return lines.length > 0 && lines.every((l) => l.state === "completed");
+            }).length,
             late: orders.filter((o) => o.sla_status === "late").length,
             priority: orders.filter((o) => o.priority !== "normal").length,
         };

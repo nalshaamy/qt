@@ -36,7 +36,7 @@ class TestStationKpi(FlexSysKdsTestCommon):
         order.action_accept()
         order.line_ids.action_start()
         order.line_ids.action_ready()
-        order.action_complete()  # DESIGN REVERSAL (v5.4): explicit step now
+        order.line_ids.action_complete()  # DESIGN REVERSAL (v5.4): explicit step now
         self.assertEqual(
             self.station_kitchen.active_order_count, 0,
             "Once the only order completes, active_order_count must drop to 0.")
