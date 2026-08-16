@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_kds_station_list" model="ir.ui.view">
+        <field name="type">list</field>
+        <field name="name">kds.station.list</field>
+        <field name="model">kds.station</field>
+        <field name="arch" type="xml">
+            <list string="Stations">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="code"/>
+                <field name="company_id"/>
+                <field name="operating_mode"/>
+                <field name="active_order_count"/>
+                <field name="late_order_count"/>
+                <field name="avg_prep_time" widget="float_time"/>
+                <field name="status" decoration-success="status == 'online'" decoration-danger="status == 'offline'" widget="badge"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_kds_station_form" model="ir.ui.view">
+        <field name="type">form</field>
+        <field name="name">kds.station.form</field>
+        <field name="model">kds.station</field>
+        <field name="arch" type="xml">
+            <form string="Station">
+                <sheet>
+                    <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger" invisible="active"/>
+                    <div class="oe_button_box" name="button_box">
+                        <button class="oe_stat_button" type="object" name="action_view_printers" icon="fa-print">
+                            <field name="printer_count" widget="statinfo" string="Printers"/>
+                        </button>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="code"/>
+                            <field name="company_id"/>
+                            <field name="active"/>
+                            <field name="is_expeditor"/>
+                        </group>
+                        <group>
+                            <field name="operating_mode"/>
+                            <field name="pos_config_ids" widget="many2many_tags"/>
+                            <field name="auto_accept_orders"/>
+                            <field name="auto_print"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="SLA">
+                            <group>
+                                <field name="target_prep_time"/>
+                                <field name="warning_threshold_pct"/>
+                                <field name="late_threshold_pct"/>
+                            </group>
+                        </page>
+                        <page string="Users">
+                            <field name="user_ids" widget="many2many_tags"/>
+                        </page>
+                        <page string="Printers">
+                            <field name="printer_ids">
+                                <list editable="bottom">
+                                    <field name="name"/>
+                                    <field name="printer_type"/>
+                                    <field name="ip_address"/>
+                                    <field name="is_default"/>
+                                    <field name="is_backup"/>
+                                    <field name="status"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Description">
+                            <field name="description"/>
+                        </page>
+                        <page string="Public Kiosk" groups="flexsys_kds.group_kds_administrator">
+                            <div class="alert alert-warning" role="alert">
+                                Anyone with this URL can view and operate this station's
+                                screen with no Odoo login at all. Treat it like a password:
+                                don't share it outside the physical device it's set up on.
+                                Regenerating instantly invalidates the old URL.
+                            </div>
+                            <group>
+                                <field name="kiosk_url" readonly="1"/>
+                            </group>
+                            <button name="action_regenerate_kiosk_token" type="object"
+                                    string="Regenerate Kiosk Token" class="btn-secondary"
+                                    confirm="This invalidates the current public kiosk URL for this station - any device already using it will stop working until you update it with the new URL. Continue?"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_kds_station" model="ir.actions.act_window">
+        <field name="name">Stations</field>
+        <field name="res_model">kds.station</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>

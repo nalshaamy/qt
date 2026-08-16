@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_kds_order_status_list" model="ir.ui.view">
+        <field name="type">list</field>
+        <field name="name">kds.order.status.list</field>
+        <field name="model">kds.order.status</field>
+        <field name="arch" type="xml">
+            <list string="Order Statuses">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="code"/>
+                <field name="is_initial" widget="boolean_toggle"/>
+                <field name="is_terminal" widget="boolean_toggle"/>
+                <field name="counts_as_ready" widget="boolean_toggle"/>
+                <field name="is_active_state" widget="boolean_toggle"/>
+                <field name="active" widget="boolean_toggle"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_kds_order_status_form" model="ir.ui.view">
+        <field name="type">form</field>
+        <field name="name">kds.order.status.form</field>
+        <field name="model">kds.order.status</field>
+        <field name="arch" type="xml">
+            <form string="Order Status">
+                <sheet>
+                    <div class="alert alert-info" role="alert">
+                        Foundation only, not yet used by the actual FlexSys KDS
+                        workflow engine or the KDS screens - see the model's own
+                        docstring (kds_order_status.py) for the phased plan this
+                        is Phase 1 of. Editing this right now has no effect on
+                        live behavior.
+                    </div>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="code"/>
+                            <field name="sequence"/>
+                            <field name="active"/>
+                        </group>
+                        <group>
+                            <field name="is_initial"/>
+                            <field name="is_terminal"/>
+                            <field name="counts_as_ready"/>
+                            <field name="is_active_state"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Outgoing Transitions">
+                            <field name="transition_ids">
+                                <list editable="bottom">
+                                    <field name="to_status_id"/>
+                                    <field name="action_code"/>
+                                    <field name="requires_override"/>
+                                    <field name="applies_to"/>
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="active" widget="boolean_toggle"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_kds_order_status" model="ir.actions.act_window">
+        <field name="name">Order Statuses</field>
+        <field name="res_model">kds.order.status</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>
