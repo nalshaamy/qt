@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Phase 1 foundation data - see kds_order_status.py's docstring for
+        the full phased plan. Every status/transition here matches the
+        current hardcoded LINE_TRANSITIONS / LINE_OVERRIDE_TRANSITIONS in
+        kds_order_line.py exactly (ORDER_TRANSITIONS in kds_order.py is
+        identical in structure, hence applies_to='both' throughout).
+        Nothing here is read by the actual engine yet - this is purely
+        the "standard" baseline a client could later branch from.
+    -->
+
+    <record id="status_new" model="kds.order.status">
+        <field name="name">New</field>
+        <field name="code">new</field>
+        <field name="sequence">10</field>
+        <field name="is_initial">True</field>
+    </record>
+    <record id="status_accepted" model="kds.order.status">
+        <field name="name">Accepted</field>
+        <field name="code">accepted</field>
+        <field name="sequence">20</field>
+    </record>
+    <record id="status_preparing" model="kds.order.status">
+        <field name="name">Preparing</field>
+        <field name="code">preparing</field>
+        <field name="sequence">30</field>
+    </record>
+    <record id="status_ready" model="kds.order.status">
+        <field name="name">Ready</field>
+        <field name="code">ready</field>
+        <field name="sequence">40</field>
+        <field name="counts_as_ready">True</field>
+    </record>
+    <record id="status_completed" model="kds.order.status">
+        <field name="name">Completed</field>
+        <field name="code">completed</field>
+        <field name="sequence">50</field>
+        <field name="is_terminal">True</field>
+        <field name="counts_as_ready">True</field>
+        <field name="is_active_state">False</field>
+    </record>
+    <record id="status_cancelled" model="kds.order.status">
+        <field name="name">Cancelled</field>
+        <field name="code">cancelled</field>
+        <field name="sequence">60</field>
+        <field name="is_terminal">True</field>
+        <field name="is_active_state">False</field>
+    </record>
+    <record id="status_on_hold" model="kds.order.status">
+        <field name="name">On Hold</field>
+        <field name="code">on_hold</field>
+        <field name="sequence">70</field>
+    </record>
+
+    <!-- From New -->
+    <record id="transition_new_accepted" model="kds.order.status.transition">
+        <field name="from_status_id" ref="status_new"/>
+        <field name="to_status_id" ref="status_accepted"/>
+        <field name="action_code">accept</field>
+        <field name="sequence">10</field>
+    </record>
+    <record id="transition_new_preparing" model="kds.order.status.transition">
+        <field name="from_status_id" ref="status_new"/>
+        <field name="to_status_id" ref="status_preparing"/>
+        <field name="action_code">start</field>
+        <field name="sequence">20</field>
+    </record>
+    <record id="transition_new_cancelled" model="kds.order.status.transition">
+        <field name="from_status_id" ref="status_new"/>
+        <field name="to_status_id" ref="status_cancelled"/>
+        <field name="action_code">cancel</field>
+        <field name="sequence">30</field>
+    </record>
+    <record id="transition_new_on_hold" model="kds.order.status.transition">
+        <field name="from_status_id" ref="status_new"/>
+        <field name="to_status_id" ref="status_on_hold"/>
+        <field name="action_code">hold</field>
+        <field name="sequence">40</field>
+    </record>
+
+    <!-- From Accepted -->
+    <record id="transition_accepted_preparing" model="kds.order.status.transition">
+        <field name="from_status_id" ref="status_accepted"/>
+        <field name="to_status_id" ref="status_preparing"/>
+        <field name="action_code">start</field>
+        <field name="sequence">10</field>
+    </record>
+    <record id="transition_accepted_cancelled" model="kds.order.status.transition">
+        <field name="from_status_id" ref="status_accepted"/>
+        <field name="to_status_id" ref="status_cancelled"/>
+        <field name="action_code">cancel</field>
+        <field name="sequence">20</field>
+    </record>
+    <record id="transition_accepted_on_hold" model="kds.order.status.transition">
+        <field name="from_status_id" ref="status_accepted"/>
+        <field name="to_status_id" ref="status_on_hold"/>
+        <field name="action_code">hold</field>
+        <field name="sequence">30</field>
+    </record>
+
+    <!-- From Preparing -->
+    <record id="transition_preparing_ready" model="kds.order.status.transition">
+        <field name="from_status_id" ref="status_preparing"/>
+        <field name="to_status_id" ref="status_ready"/>
+        <field name="action_code">ready</field>
+        <field name="sequence">10</field>
+    </record>
+    <record id="transition_preparing_cancelled" model="kds.order.status.transition">
+        <field name="from_status_id" ref="status_preparing"/>
+        <field name="to_status_id" ref="status_cancelled"/>
+        <field name="action_code">cancel</field>
+        <field name="sequence">20</field>
+    </record>
+    <record id="transition_preparing_on_hold" model="kds.order.status.transition">
+        <field name="from_status_id" ref="status_preparing"/>
+        <field name="to_status_id" ref="status_on_hold"/>
+        <field name="action_code">hold</field>
+        <field name="sequence">30</field>
+    </record>
+
+    <!-- From Ready -->
+    <record id="transition_ready_completed" model="kds.order.status.transition">
+        <field name="from_status_id" ref="status_ready"/>
+        <field name="to_status_id" ref="status_completed"/>
+        <field name="action_code">complete</field>
+        <field name="sequence">10</field>
+    </record>
+    <record id="transition_ready_cancelled" model="kds.order.status.transition">
+        <field name="from_status_id" ref="status_ready"/>
+        <field name="to_status_id" ref="status_cancelled"/>
+        <field name="action_code">cancel</field>
+        <field name="sequence">20</field>
+    </record>
+
+    <!-- From On Hold -->
+    <record id="transition_on_hold_new" model="kds.order.status.transition">
+        <field name="from_status_id" ref="status_on_hold"/>
+        <field name="to_status_id" ref="status_new"/>
+        <!-- No current action method targets 'new' as a destination from
+             anywhere - left blank rather than guessed. See action_code
+             help text on the transition model. -->
+        <field name="sequence">10</field>
+    </record>
+    <record id="transition_on_hold_accepted" model="kds.order.status.transition">
+        <field name="from_status_id" ref="status_on_hold"/>
+        <field name="to_status_id" ref="status_accepted"/>
+        <field name="action_code">accept</field>
+        <field name="sequence">20</field>
+    </record>
+    <record id="transition_on_hold_preparing" model="kds.order.status.transition">
+        <field name="from_status_id" ref="status_on_hold"/>
+        <field name="to_status_id" ref="status_preparing"/>
+        <field name="action_code">start</field>
+        <field name="sequence">30</field>
+    </record>
+    <record id="transition_on_hold_cancelled" model="kds.order.status.transition">
+        <field name="from_status_id" ref="status_on_hold"/>
+        <field name="to_status_id" ref="status_cancelled"/>
+        <field name="action_code">cancel</field>
+        <field name="sequence">40</field>
+    </record>
+
+    <!-- Override transitions (edge cases, Administrator-tier only) -->
+    <record id="transition_override_ready_preparing" model="kds.order.status.transition">
+        <field name="from_status_id" ref="status_ready"/>
+        <field name="to_status_id" ref="status_preparing"/>
+        <field name="action_code">start</field>
+        <field name="requires_override">True</field>
+        <field name="sequence">90</field>
+    </record>
+    <record id="transition_override_completed_preparing" model="kds.order.status.transition">
+        <field name="from_status_id" ref="status_completed"/>
+        <field name="to_status_id" ref="status_preparing"/>
+        <field name="action_code">start</field>
+        <field name="requires_override">True</field>
+        <field name="sequence">90</field>
+    </record>
+</odoo>
