@@ -8,6 +8,66 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.7.4 — BUG-11 [fourth report]: still reproducing at runtime - explicit last_kds_sent_qty field
+
+**Confirmed still reproducing live** on v7.7.3, with the exact same
+math the original report described: `3 - 2 = +1` instead of the
+required `3 - 1 = +2`. The report explicitly asked to "verify which
+field/value is actually being used as the authoritative 'last sent
+quantity'" rather than trust the v7.7.3 fix's own reasoning.
+
+### Investigation
+v7.7.3's own fix used `kline.qty` itself as the implicit baseline
+(`qty_increment = new_qty - kline.qty`, computed before the write that
+updates `kline.qty` to the new value) - mathematically equivalent, in
+theory, to the required contract, since `kline.qty` is always
+overwritten to the last-synced value on every update. Searched the
+entire codebase exhaustively for every place `qty` or `qty_delta` gets
+written on a `kds.order.line` (8 and 3 sites respectively) looking for
+any place that could have written `qty` without going through the
+delta-computing logic, desynchronizing that implicit assumption -
+found none. `kds.order.line.write()`'s own override has no special
+handling of `qty` either.
+
+### Fix: explicit, dedicated baseline field
+Rather than continue relying on an implicit equivalence that couldn't
+be further verified through static review alone, added
+`last_kds_sent_qty` (`kds_order_line.py`) exactly as the dev report's
+own required contract specifies: *"the quantity successfully
+synchronized on the previous send."* Stamped to the line's own initial
+quantity at `create()` time. Every one of the three places `qty_delta`
+gets computed in `pos_order.py` (the general active-line/Preparing
+update branch - the exact branch handling the report's own reproduction
+scenario - the Ready-line decrease branch, and the refund-
+reconciliation decrease branch) now reads this field explicitly as the
+baseline, computes the delta, and updates the field to the new value -
+all three in the exact same `write()` call, eliminating any possibility
+of a stale read between computing and recording.
+
+### Migration for existing installs
+A brand-new field defaults to `0.0` for every row already in the
+database - `post_init_hook` only runs on a fresh install, not a module
+*upgrade*, so without an explicit migration, every already-active
+ticket on a live instance would have `last_kds_sent_qty = 0.0` the
+moment this upgrade completes, and the very next POS edit on any of
+those lines would compute a badly wrong delta (the full new quantity
+minus zero). New `migrations/19.0.7.7.4/post-migrate.py` backfills
+every existing line's own `last_kds_sent_qty` to match its own current
+`qty` - idempotent, safe to run more than once.
+
+### Tests
+Updated the existing worked-example test to also assert
+`last_kds_sent_qty`'s own value at each step, not just the `qty_delta`
+it produces. Added a creation-time stamping test and a matching
+sequential-delta test for the Ready-line branch specifically, for full
+parity with the Preparing-line fix.
+
+**Total: 256 tests** (up from 254). Database migration required this
+time - see `migrations/19.0.7.7.4/post-migrate.py` (runs automatically
+on module upgrade).
+
+---
+
 ## v7.7.3 — BUG-11 [third report]: Sequential Quantity Delta Uses Wrong Baseline
 
 **Confirmed live**: a precise worked example - `2 -> 1` correctly

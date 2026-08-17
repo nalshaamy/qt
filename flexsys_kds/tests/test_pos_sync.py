@@ -1187,18 +1187,32 @@ class TestPosSync(FlexSysKdsTestCommon):
         (UPDATED -1), then - without completing/acknowledging - 1 -> 3
         (must show UPDATED +2, not +1 from blending with the prior -1),
         then 3 -> 2 (must show UPDATED -1). The ticket must stay
-        PREPARING throughout, never reset to NEW."""
+        PREPARING throughout, never reset to NEW.
+
+        REAL BUG FIX ("BUG-11 [fourth report] - Sequential qty_delta
+        baseline is still wrong at runtime"), confirmed STILL
+        reproducing live even after the fix that originally closed this
+        test's own scenario - the dev report explicitly asked to
+        "verify which field/value is actually being used as the
+        authoritative 'last sent quantity'", so this test now checks
+        that value directly (last_kds_sent_qty), not just the qty_delta
+        it produces.
+        """
         order = self._create_pos_order([(self.product_burger, 2)])
         kds_order = order.kds_order_id
         line = kds_order.line_ids
         line.action_accept()
         line.action_start()
         self.assertEqual(line.state, 'preparing')
+        self.assertEqual(line.last_kds_sent_qty, 2, "Stamped to the initial qty at creation.")
 
         order.lines.write({'qty': 1})
         line.invalidate_recordset()
         self.assertEqual(line.qty, 1)
         self.assertEqual(line.qty_delta, -1, "2 -> 1 must show UPDATED (-1).")
+        self.assertEqual(line.last_kds_sent_qty, 1,
+                          "The baseline itself must now be 1 - the exact quantity that was "
+                          "just successfully sent.")
         self.assertEqual(line.state, 'preparing')
 
         order.lines.write({'qty': 3})
@@ -1209,13 +1223,23 @@ class TestPosSync(FlexSysKdsTestCommon):
             "1 -> 3 must show UPDATED (+2) - relative to the last-sent 1, not the "
             "original 2 (which would give +1) and not a blend with the prior -1 "
             "(which would also give +1 the old, wrong way).")
+        self.assertEqual(line.last_kds_sent_qty, 3, "The baseline advances to 3.")
         self.assertEqual(line.state, 'preparing', "Must remain PREPARING throughout.")
 
         order.lines.write({'qty': 2})
         line.invalidate_recordset()
         self.assertEqual(line.qty, 2)
         self.assertEqual(line.qty_delta, -1, "3 -> 2 must show UPDATED (-1).")
+        self.assertEqual(line.last_kds_sent_qty, 2)
         self.assertEqual(line.state, 'preparing')
+
+    def test_last_kds_sent_qty_stamped_at_creation(self):
+        order = self._create_pos_order([(self.product_burger, 4)])
+        line = order.kds_order_id.line_ids
+        self.assertEqual(
+            line.last_kds_sent_qty, 4,
+            "A brand-new line's own baseline must start at its own initial quantity, "
+            "not zero - a fresh install's own create()-time stamping.")
 
     def test_operator_acknowledgement_clears_qty_delta(self):
         """'must not disappear automatically merely because the next
@@ -1778,7 +1802,30 @@ class TestPosSync(FlexSysKdsTestCommon):
             "The line must stay Ready - no reset, no delta line, no unnecessary reopen.")
         self.assertEqual(line.qty_delta, -1, "Must show UPDATED (-1).")
         self.assertEqual(line.line_change, 'updated')
+        self.assertEqual(line.last_kds_sent_qty, 1, "The baseline itself must advance to 1.")
         self.assertEqual(kds_order.state, 'ready', "The order itself must also stay Ready.")
+
+    def test_sequential_qty_changes_on_ready_line_use_last_sent_baseline(self):
+        """Same fix as the Preparing-state scenario (BUG-11 [fourth
+        report]), confirmed here for the Ready-state branch too."""
+        order = self._create_pos_order([(self.product_burger, 2)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+
+        order.lines.write({'qty': 1})
+        line.invalidate_recordset()
+        self.assertEqual(line.qty_delta, -1)
+
+        order.lines.write({'qty': 3})
+        line.invalidate_recordset()
+        self.assertEqual(
+            line.qty_delta, 2,
+            "1 -> 3 on a Ready line must show +2 (relative to last-sent 1), not +1 "
+            "(relative to the original 2).")
+        self.assertEqual(line.state, 'ready')
 
     def test_qty_decrease_of_three_on_ready_line(self):
         """Examples from the dev report: 5 -> 2 = UPDATED (-3)."""

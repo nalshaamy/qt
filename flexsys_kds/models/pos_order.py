@@ -295,22 +295,18 @@ class PosOrder(models.Model):
                                "no production change")
                         % {'product': kline.product_name, 'old_qty': kline.qty, 'new_qty': effective_qty})
                 else:
-                    qty_decrease = effective_qty - kline.qty
+                    # REAL BUG FIX ("BUG-11 [fourth report] - Sequential
+                    # qty_delta baseline is still wrong at runtime"):
+                    # baseline is explicitly last_kds_sent_qty, not
+                    # kline.qty - see that field's own docstring
+                    # (kds_order_line.py) for the full explanation.
+                    qty_decrease = effective_qty - kline.last_kds_sent_qty
                     old_qty = kline.qty
                     kline.write({
                         'qty': effective_qty,
                         'line_change': 'updated',
-                        # REAL BUG FIX ("BUG-11 [third report] - Sequential
-                        # Quantity Delta Uses Wrong Baseline"), confirmed
-                        # live: qty_delta must always be calculated
-                        # against the LAST successfully sent/written KDS
-                        # quantity (kline.qty, its value right before
-                        # this write), never accumulated on top of a
-                        # prior, already-superseded delta - see the
-                        # generic update branch further below for the
-                        # full explanation of why the earlier
-                        # "accumulate across syncs" formula was wrong.
                         'qty_delta': qty_decrease,
+                        'last_kds_sent_qty': effective_qty,
                     })
                     self.env['kds.event'].log(
                         kds_order, event_type='order_updated', station=kline.station_id,
@@ -617,7 +613,13 @@ class PosOrder(models.Model):
                 # pointing at, just for Completed instead of Ready. Fixed
                 # for both at once, consistently, below.
                 if changed and kline.state in ('ready', 'completed'):
-                    qty_increment = line.qty - kline.qty
+                    # REAL BUG FIX ("BUG-11 [fourth report] - Sequential
+                    # qty_delta baseline is still wrong at runtime"):
+                    # baseline is explicitly last_kds_sent_qty here too,
+                    # for full consistency with the generic update branch
+                    # further below - see that field's own docstring
+                    # (kds_order_line.py) for the complete explanation.
+                    qty_increment = line.qty - kline.last_kds_sent_qty
                     if qty_increment <= 0 and kline.qty != line.qty:
                         # REAL BUG FIX ("Change Request After BUG-11",
                         # item 2: "Quantity Decrease Delta - Display
@@ -661,15 +663,21 @@ class PosOrder(models.Model):
                                 'note': _pos_note(line),
                                 'variant_info': _pos_line_variant_info(line),
                                 'line_change': 'updated',
-                                # REAL BUG FIX ("BUG-11 [third report] -
-                                # Sequential Quantity Delta Uses Wrong
-                                # Baseline"): see the generic update
-                                # branch further below for the full
+                                # REAL BUG FIX ("BUG-11 [third report,
+                                # then confirmed still reproducing in a
+                                # fourth report] - Sequential Quantity
+                                # Delta Uses Wrong Baseline"): see the
+                                # generic update branch further below,
+                                # and last_kds_sent_qty's own docstring
+                                # (kds_order_line.py), for the complete
                                 # explanation - qty_increment here is
                                 # already this sync's own fresh delta
-                                # against kline's own last-written qty,
-                                # never accumulated on top of a prior one.
+                                # against the explicit baseline field,
+                                # never accumulated on top of a prior
+                                # one, and that same baseline field is
+                                # updated in this exact same write.
                                 'qty_delta': qty_increment,
+                                'last_kds_sent_qty': line.qty,
                             })
                             touched_stations |= kline.station_id
                             self.env['kds.event'].log(
@@ -791,13 +799,38 @@ class PosOrder(models.Model):
                         lambda l, pid=line.id, kid=kline.id: l.pos_order_line_id.id == pid
                         and l.id != kid and l.state in ('ready', 'completed'))
                     effective_qty = line.qty - sum(historical_siblings.mapped('qty'))
-                    qty_increment = effective_qty - kline.qty
+                    # REAL BUG FIX ("BUG-11 [fourth report] - Sequential
+                    # qty_delta baseline is still wrong at runtime"),
+                    # confirmed STILL reproducing live even after the
+                    # v7.7.3 fix that stopped accumulating qty_delta -
+                    # this is the exact branch handling the report's own
+                    # reproduction scenario (a 'preparing' line, the
+                    # single most common case). v7.7.3's own fix used
+                    # kline.qty itself as the implicit baseline
+                    # (mathematically equivalent to what's required, in
+                    # theory) - but the dev report explicitly asked to
+                    # "verify which field/value is actually being used
+                    # as the authoritative 'last sent quantity'" rather
+                    # than trust that equivalence blindly. Switched to
+                    # the explicit, dedicated last_kds_sent_qty field
+                    # (kds_order_line.py - see its own docstring for the
+                    # full contract) instead of kline.qty, and that same
+                    # field is updated to the new value in this exact
+                    # same write() call, immediately after being read -
+                    # eliminating any possibility of a stale read
+                    # between computing this sync's own delta and
+                    # recording what the next sync's own baseline should
+                    # be. Required acceptance sequence from the dev
+                    # report's own worked example, now correct: 2->1 =
+                    # -1, then 1->3 = +2 (not +1), then 3->2 = -1.
+                    qty_increment = effective_qty - kline.last_kds_sent_qty
                     kline.write({
                         'qty': effective_qty,
                         'note': _pos_note(line),
                         'variant_info': _pos_line_variant_info(line),
                         'line_change': 'updated',
                         'qty_delta': qty_increment,
+                        'last_kds_sent_qty': effective_qty,
                     })
                     touched_stations |= kline.station_id
                     self.env['kds.event'].log(

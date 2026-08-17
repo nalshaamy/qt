@@ -1,6 +1,6 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.7.3**
+**Version: 19.0.7.7.4**
 **Status as of this document: code-complete, including the "Runtime
 Regression Fix Package" (BUG-01 through BUG-06), two rounds of Odoo.sh
 runtime test failures fixed, BUG-07 (station-scoped completion) fully
@@ -428,6 +428,37 @@ trigger mode). This is the single most important item to verify live
 before enabling "On Send to KDS" on any POS configuration that does
 **not** have Preparation Display enabled.
 
+## BUG-11 [fourth report]: Sequential Quantity Delta - explicit baseline field, database migration required
+**Confirmed still reproducing live** on v7.7.3, with the exact math the
+original report described (`3 - 2 = +1` instead of `3 - 1 = +2`).
+Added `last_kds_sent_qty` (`kds_order_line.py`) as the explicit,
+dedicated baseline field the dev report's own contract requires -
+replacing the implicit reliance on `kline.qty` itself, which v7.7.3
+had used on the (mathematically sound, but unverifiable through static
+review alone) assumption that it always equaled "the last sent
+quantity." All three places `qty_delta` is computed in `pos_order.py`
+now read and update this field explicitly, in the same `write()` call.
+
+**⚠️ Database migration required for this specific upgrade**: a new
+field defaults to `0.0` for every existing row - without
+`migrations/19.0.7.7.4/post-migrate.py` (which runs automatically as
+part of the module upgrade), every already-active ticket on a live
+instance would compute a badly wrong delta on its very next POS edit
+after upgrading. Confirm the module upgrade log shows this migration
+script actually ran (it logs "FlexSys KDS: backfilled
+last_kds_sent_qty for N existing kds.order.line row(s)...") - if
+upgrading via a method that skips Odoo's own migration mechanism
+(e.g. directly replacing files without running `-u flexsys_kds` or the
+equivalent Apps > Upgrade action), this backfill will not happen
+automatically.
+
+**What still needs a human**: the exact live scenario from the dev
+report's own report (`2 -> START -> 1 -> Send -> 3 -> Send`), confirmed
+on the real Odoo.sh staging instance, checking both the displayed
+delta (`UPDATED (+2)`) and, if convenient, the `last_kds_sent_qty`
+field's own value directly via a technical/debug view, to confirm which
+exact value the runtime is now using.
+
 ---
 
 ## What still needs a human
@@ -691,9 +722,9 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 254 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 256 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
-| Upgrade PASS | ⬜ Live only |
+| Upgrade PASS | ⬜ Live only - **v7.7.4 specifically requires confirming the `migrations/19.0.7.7.4/post-migrate.py` script actually ran** (see its own section above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |
 | Physical Printing PASS | ⬜ Live only (the atomic-claim Release Blocker itself is now fixed - see "Post-V1-RC fixes" above - but end-to-end physical delivery still needs a real agent/printer) |
 | Security Validation PASS | ✅ Automated - `bypass_check`'s contract clarified and tested this round, no security control weakened |

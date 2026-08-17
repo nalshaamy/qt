@@ -102,6 +102,27 @@ class KdsOrderLine(models.Model):
     # freshly-computed increment directly, none of them add to the
     # field's own prior value).
     qty_delta = fields.Float(default=0.0)
+    # REAL BUG FIX ("BUG-11 [fourth report] - Sequential qty_delta
+    # baseline is still wrong at runtime"), confirmed still reproducing
+    # live even after the v7.7.3 fix that made kline.qty itself serve as
+    # the implicit baseline (mathematically equivalent, in theory, to
+    # what's required - but the report explicitly asked to "verify
+    # which field/value is actually being used as the authoritative
+    # 'last sent quantity'" rather than trust that equivalence). This
+    # field makes that authoritative value completely explicit and
+    # self-contained, computed and read from nowhere else: the exact
+    # quantity that was successfully written to this line on its most
+    # recent POS Delta Sync. Every delta computation in
+    # pos_order.py::_flexsys_kds_diff_lines() now reads ONLY this field
+    # as its baseline (never `qty` itself, even though the two are kept
+    # in lockstep) and updates it to the new quantity in the exact same
+    # write() call that sets the new qty/qty_delta - eliminating any
+    # possibility of a stale read between "compute the delta" and
+    # "record what the new baseline should be" within a single sync.
+    # Stamped to the initial quantity at create() time too, so a
+    # brand-new line's own first-ever POS edit is correctly measured
+    # against what the kitchen was actually first shown, not zero.
+    last_kds_sent_qty = fields.Float()
 
     station_received_time = fields.Datetime()
     # REAL BUG FIX, confirmed live (Odoo Server Error: "Invalid field
@@ -180,6 +201,14 @@ class KdsOrderLine(models.Model):
                 if station:
                     line.station_id = station.id
             line.station_received_time = fields.Datetime.now()
+            # REAL BUG FIX ("BUG-11 [fourth report] - Sequential
+            # qty_delta baseline is still wrong at runtime"): stamps the
+            # explicit baseline field at the moment the line is first
+            # created, matching its own initial quantity - see that
+            # field's own docstring for the full explanation of why it
+            # exists as a dedicated field rather than reusing `qty`
+            # itself.
+            line.last_kds_sent_qty = line.qty
             self.env['kds.event'].log(
                 line.order_id, event_type='order_routed', station=line.station_id,
                 note=_("%(qty)s x %(product)s -> %(station)s") % {
