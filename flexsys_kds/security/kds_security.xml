@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="module_category_flexsys_kds" model="ir.module.category">
+        <field name="name">FlexSys KDS</field>
+        <field name="sequence">20</field>
+    </record>
+
+    <record id="group_kds_operator" model="res.groups">
+        <field name="name">KDS Operator</field>
+        <field name="comment">View station, accept orders, start preparation, complete items.</field>
+    </record>
+
+    <record id="group_kds_supervisor" model="res.groups">
+        <field name="name">Station Supervisor</field>
+        <field name="implied_ids" eval="[(4, ref('group_kds_operator'))]"/>
+        <field name="comment">Reopen orders, print/reprint, change priority, view performance.</field>
+    </record>
+
+    <record id="group_kds_branch_manager" model="res.groups">
+        <field name="name">Branch Manager</field>
+        <field name="implied_ids" eval="[(4, ref('group_kds_supervisor'))]"/>
+        <field name="comment">View all branch stations, manage states, view reports.</field>
+    </record>
+
+    <record id="group_kds_administrator" model="res.groups">
+        <field name="name">Administrator</field>
+        <field name="implied_ids" eval="[(4, ref('group_kds_branch_manager'))]"/>
+        <field name="comment">Manage stations, devices, printers, users, rules and settings.</field>
+    </record>
+
+    <!-- Auto-assign Odoo's default admin user so a fresh install/pilot
+         isn't immediately locked out of Create/Edit on every screen -
+         moved to a post_init_hook (see __init__.py::post_init_hook)
+         instead of a plain declarative <record> here. Confirmed live,
+         twice now, that this relation's field name is not stable across
+         installs of this same Odoo 19 build: first "res.groups.users"
+         didn't exist ("Invalid field 'users' in 'res.groups'"), then
+         after switching to the res.users side, "res.users.groups_id"
+         didn't exist either ("Invalid field 'groups_id' in
+         'res.users'"). A third hardcoded guess carries the same risk of
+         breaking a third time - the hook instead detects whichever
+         field name actually exists on this model at runtime and writes
+         through that one, so it can't go stale again the same way. -->
+
+    <!-- Belt-and-suspenders: the standard "Settings > Technical"
+         super-admin toggle (base.group_system) also gets full FlexSys KDS
+         Administrator rights, in case the person testing/piloting the
+         module is a technical-admin user that was never explicitly
+         walked through Settings > Users > (this module's own groups).
+         Using base.group_system's own external id as this record's id
+         updates that existing record (adds to its implied_ids) rather
+         than creating a new one. implied_ids itself is untouched by the
+         'users' field removal above - it's a different field and this
+         same pattern already loads without error elsewhere in this file
+         (group_kds_supervisor, group_kds_branch_manager, etc.). -->
+    <record id="base.group_system" model="res.groups">
+        <field name="implied_ids" eval="[(4, ref('group_kds_administrator'))]"/>
+    </record>
+
+    <!-- SECURITY FIX (audit finding 3/Record Rules & Station Scope, HIGH):
+         the old single rule was
+         ['|', ('station_id.user_ids','=',False), ('station_id.user_ids','in',[user.id])]
+         - the `station_id.user_ids = False` branch meant a station with
+         NO users explicitly assigned became visible to EVERY Operator/
+         Supervisor company-wide, exactly backwards from "an empty
+         station.user_ids must not automatically provide global access."
+         Also: kds.order itself had only a company-level rule below, no
+         station-level scoping at all - an Operator opening the backend
+         Active Orders/Order History list directly (not through the
+         custom KDS screen's own JSON API, which does its own manual
+         filtering) saw every order company-wide regardless of station
+         assignment. Fixed with three tiers per model, matching the
+         audit's own scope definition: Operator/Supervisor by explicit
+         station assignment (group_kds_operator, which Supervisor implies
+         so this single rule correctly covers both), Branch Manager by
+         allowed company, Administrator unrestricted (within the global
+         multi-company rule's own limits, unchanged below). Multiple
+         group-scoped ir.rule rows on the same model are OR-combined by
+         Odoo, and the implied_ids chain (Administrator implies Branch
+         Manager implies Supervisor implies Operator) means a higher tier
+         automatically also gets the lower tiers' rules OR'd in - so an
+         Administrator ends up with the union of all three, i.e.
+         effectively unrestricted station-wise. -->
+    <record id="rule_kds_order_line_station_operator" model="ir.rule">
+        <field name="name">KDS Order Line: operator/supervisor restricted to assigned stations</field>
+        <field name="model_id" ref="model_kds_order_line"/>
+        <field name="domain_force">[('station_id.user_ids', 'in', [user.id])]</field>
+        <field name="groups" eval="[(4, ref('group_kds_operator'))]"/>
+    </record>
+    <record id="rule_kds_order_line_branch_manager" model="ir.rule">
+        <field name="name">KDS Order Line: branch manager sees own company</field>
+        <field name="model_id" ref="model_kds_order_line"/>
+        <field name="domain_force">[('order_id.company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[(4, ref('group_kds_branch_manager'))]"/>
+    </record>
+    <record id="rule_kds_order_line_administrator" model="ir.rule">
+        <field name="name">KDS Order Line: administrator unrestricted</field>
+        <field name="model_id" ref="model_kds_order_line"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_kds_administrator'))]"/>
+    </record>
+
+    <record id="rule_kds_order_company" model="ir.rule">
+        <field name="name">KDS Order: multi-company</field>
+        <field name="model_id" ref="model_kds_order"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <!-- Same station-scope gap existed on kds.order itself - previously
+         only company-scoped (rule above), no station scope at all. This
+         rule ANDs together with the global company rule above (global,
+         no-groups rules AND-combine with whatever group-specific rules
+         also apply), so an Operator needs to satisfy both "company
+         matches" and "touches an assigned station" - defense in depth,
+         not an either/or. -->
+    <record id="rule_kds_order_station_operator" model="ir.rule">
+        <field name="name">KDS Order: operator/supervisor restricted to orders touching an assigned station</field>
+        <field name="model_id" ref="model_kds_order"/>
+        <field name="domain_force">[('line_ids.station_id.user_ids', 'in', [user.id])]</field>
+        <field name="groups" eval="[(4, ref('group_kds_operator'))]"/>
+    </record>
+    <record id="rule_kds_order_station_branch_manager" model="ir.rule">
+        <field name="name">KDS Order: branch manager sees own company (station-scope tier)</field>
+        <field name="model_id" ref="model_kds_order"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[(4, ref('group_kds_branch_manager'))]"/>
+    </record>
+    <record id="rule_kds_order_station_administrator" model="ir.rule">
+        <field name="name">KDS Order: administrator unrestricted (station-scope tier)</field>
+        <field name="model_id" ref="model_kds_order"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_kds_administrator'))]"/>
+    </record>
+
+    <record id="rule_kds_station_company" model="ir.rule">
+        <field name="name">KDS Station: multi-company</field>
+        <field name="model_id" ref="model_kds_station"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <!-- Same 3-tier station-scope pattern as kds.order/kds.order.line
+         (audit finding "Record Rules / Station Scope") - applies equally
+         to the Expeditor/Packing task, which is itself assigned to a
+         station and should follow the same access rules a production
+         line would. -->
+    <record id="rule_kds_expeditor_task_operator" model="ir.rule">
+        <field name="name">KDS Expeditor Task: operator/supervisor restricted to assigned stations</field>
+        <field name="model_id" ref="model_kds_expeditor_task"/>
+        <field name="domain_force">[('station_id.user_ids', 'in', [user.id])]</field>
+        <field name="groups" eval="[(4, ref('group_kds_operator'))]"/>
+    </record>
+    <record id="rule_kds_expeditor_task_branch_manager" model="ir.rule">
+        <field name="name">KDS Expeditor Task: branch manager sees own company</field>
+        <field name="model_id" ref="model_kds_expeditor_task"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[(4, ref('group_kds_branch_manager'))]"/>
+    </record>
+    <record id="rule_kds_expeditor_task_administrator" model="ir.rule">
+        <field name="name">KDS Expeditor Task: administrator unrestricted</field>
+        <field name="model_id" ref="model_kds_expeditor_task"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_kds_administrator'))]"/>
+    </record>
+</odoo>
