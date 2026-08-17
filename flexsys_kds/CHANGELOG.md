@@ -8,6 +8,67 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.7.3 — BUG-11 [third report]: Sequential Quantity Delta Uses Wrong Baseline
+
+**Confirmed live**: a precise worked example - `2 -> 1` correctly
+showed `UPDATED (-1)`, but then `1 -> 3` (without completing the order)
+showed `UPDATED (+1)` instead of the required `UPDATED (+2)`.
+
+### Root cause: BUG-09's own original design was wrong
+`qty_delta` was written as `kline.qty_delta + this_sync's_own_increment`
+- **accumulating** on top of whatever the field already held, based on
+the original (now confirmed incorrect) reasoning that the kitchen
+needed to see the total change "since the previously acknowledged
+quantity," assumed to mean summing every unacknowledged sync's own
+delta together. This dev report gives the precise counter-example that
+disproves it: `2 -> 1` set `qty_delta = -1`; then `1 -> 3` computed
+`qty_delta = -1 + (3-1) = +1` - mathematically equal to "current (3)
+minus the *original* creation-time quantity (2)," not "current minus
+the *last-sent* quantity (1)," which is what the required contract
+actually is: **"Delta must always be calculated against the last
+successfully sent KDS quantity."**
+
+### Fix
+`kline.qty` **already is** the last successfully sent/written KDS
+quantity at the moment each new sync runs, by construction (it's
+literally overwritten to the new value on every sync). So
+`qty_increment = new_qty - kline.qty` (computed before that write) was
+**already**, on its own, exactly the correct delta - the bug was purely
+in then adding it to a stale prior value instead of using it directly.
+Fixed at all three places `qty_delta` gets written in
+`pos_order.py` (the general active-line update branch - the one
+handling the exact reported Preparing scenario - the Ready-line
+decrease branch, and the refund-reconciliation decrease branch):
+`'qty_delta': qty_increment` instead of `'qty_delta': kline.qty_delta +
+qty_increment`. Each sync's own delta is now fully independent -
+`2->1` shows `-1`, then `1->3` shows `+2`, then `3->2` would show `-1`
+- matching the dev report's own complete worked example exactly, with
+no blending across syncs.
+
+`kds_order_line.py`'s own `qty_delta` field docstring updated with an
+explicit contract statement to prevent this exact class of
+misunderstanding recurring in the future.
+
+### Tests
+Updated the one existing test that explicitly asserted the old,
+incorrect accumulating behavior
+(`test_repeated_qty_changes_accumulate_delta` ->
+`test_repeated_qty_changes_each_use_the_last_written_qty_as_baseline`,
+same scenario, corrected expected value). Added
+`test_bug11_sequential_delta_uses_last_sent_baseline_not_original`
+covering the dev report's own full worked example end to end (2->1,
+then 1->3, then 3->2), confirming both the correct delta at each step
+and that the ticket remains PREPARING throughout. Audited every other
+test with multiple quantity writes on the same line and confirmed none
+of the remaining ones depended on the old accumulating behavior.
+
+**Total: 254 tests** (up from 253). No database migration required. No
+frontend changes needed - both screens' delta display logic already
+correctly renders whatever `qty_delta` value the backend provides; the
+bug was entirely in that backend value's own computation.
+
+---
+
 ## v7.7.2 — Investigated: "Quantity Decrease During PREPARING Resets Ticket to NEW"
 
 **Received a new dev report** (reusing the "BUG-11" label - a different

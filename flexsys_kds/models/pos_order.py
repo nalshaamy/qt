@@ -300,7 +300,17 @@ class PosOrder(models.Model):
                     kline.write({
                         'qty': effective_qty,
                         'line_change': 'updated',
-                        'qty_delta': kline.qty_delta + qty_decrease,
+                        # REAL BUG FIX ("BUG-11 [third report] - Sequential
+                        # Quantity Delta Uses Wrong Baseline"), confirmed
+                        # live: qty_delta must always be calculated
+                        # against the LAST successfully sent/written KDS
+                        # quantity (kline.qty, its value right before
+                        # this write), never accumulated on top of a
+                        # prior, already-superseded delta - see the
+                        # generic update branch further below for the
+                        # full explanation of why the earlier
+                        # "accumulate across syncs" formula was wrong.
+                        'qty_delta': qty_decrease,
                     })
                     self.env['kds.event'].log(
                         kds_order, event_type='order_updated', station=kline.station_id,
@@ -651,7 +661,15 @@ class PosOrder(models.Model):
                                 'note': _pos_note(line),
                                 'variant_info': _pos_line_variant_info(line),
                                 'line_change': 'updated',
-                                'qty_delta': kline.qty_delta + qty_increment,
+                                # REAL BUG FIX ("BUG-11 [third report] -
+                                # Sequential Quantity Delta Uses Wrong
+                                # Baseline"): see the generic update
+                                # branch further below for the full
+                                # explanation - qty_increment here is
+                                # already this sync's own fresh delta
+                                # against kline's own last-written qty,
+                                # never accumulated on top of a prior one.
+                                'qty_delta': qty_increment,
                             })
                             touched_stations |= kline.station_id
                             self.env['kds.event'].log(
@@ -711,20 +729,38 @@ class PosOrder(models.Model):
                     # now goes through _system_reset_for_delta_sync()
                     # instead of being bundled into this same raw write.
                     #
-                    # BUG-09 FIX ("POS Quantity Delta Is Not Explicitly
-                    # Communicated to Kitchen"): qty_delta accumulates
-                    # (kline.qty_delta + this sync's own increment), not
-                    # just this one sync's own change - "the delta tells
-                    # kitchen staff what changed since the previously
-                    # ACKNOWLEDGED production quantity", and
-                    # _line_transition() only clears it on a real
-                    # interactive operator action, not on every POS sync
-                    # - so if 1->3 then 3->5 both happen before anyone on
-                    # the line taps anything, the kitchen correctly sees
-                    # +4 overall (2 more, then 2 more again), not just
-                    # the last sync's own +2, which would understate how
-                    # much this line has actually grown since it was last
-                    # genuinely seen.
+                    # REAL BUG FIX ("BUG-11 [third report, reusing the
+                    # same client-side label as two earlier, different
+                    # issues] - Sequential Quantity Delta Uses Wrong
+                    # Baseline"), confirmed live: this used to accumulate
+                    # qty_delta on top of whatever it already was
+                    # (kline.qty_delta + this sync's own increment) -
+                    # BUG-09's own original reasoning was that the
+                    # kitchen should see the total change "since the
+                    # previously ACKNOWLEDGED quantity", assuming that
+                    # meant summing every unacknowledged sync's own delta
+                    # together. That reasoning was wrong, and this report
+                    # gives the precise counter-example: 2 -> 1
+                    # (correctly UPDATED (-1)), then - with no
+                    # acknowledgement in between - 1 -> 3 accumulated to
+                    # UPDATED (+1) (-1 + 2), when the kitchen needed to
+                    # see UPDATED (+2) - the change relative to the 1
+                    # they were already shown, not some blend with a
+                    # decrease that sync had already fully superseded.
+                    # "Delta must always be calculated against the last
+                    # successfully sent KDS quantity" - which is exactly
+                    # what kline.qty already *is*, right before this
+                    # write updates it again - qty_increment below (=
+                    # effective_qty - kline.qty, i.e. new value minus the
+                    # line's own current value) is already precisely
+                    # that delta on its own, with no addition needed.
+                    # Repeated changes before any acknowledgement now
+                    # each independently show only their own most recent
+                    # move (2->1 shows -1; then 1->3 shows +2; then 3->2
+                    # would show -1) rather than an ever-growing blended
+                    # total - matching this report's own worked example
+                    # exactly, including its final "3 -> 2 = UPDATED
+                    # (-1)" step.
                     #
                     # REAL BUG FIX (found while fixing "BUG-10 - READY
                     # order incorrectly resets to NEW after POS quantity
@@ -761,7 +797,7 @@ class PosOrder(models.Model):
                         'note': _pos_note(line),
                         'variant_info': _pos_line_variant_info(line),
                         'line_change': 'updated',
-                        'qty_delta': kline.qty_delta + qty_increment,
+                        'qty_delta': qty_increment,
                     })
                     touched_stations |= kline.station_id
                     self.env['kds.event'].log(

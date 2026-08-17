@@ -1155,23 +1155,67 @@ class TestPosSync(FlexSysKdsTestCommon):
         self.assertEqual(line.qty, 1)
         self.assertEqual(line.qty_delta, -2, "3 -> 1 must record a delta of -2.")
 
-    def test_repeated_qty_changes_accumulate_delta(self):
-        """'the delta tells kitchen staff what changed since the
-        previously ACKNOWLEDGED production quantity' - two POS syncs
-        before any operator acknowledgement must accumulate, not just
-        reflect the last sync's own change."""
+    def test_repeated_qty_changes_each_use_the_last_written_qty_as_baseline(self):
+        """REAL BUG FIX ("BUG-11 [third report] - Sequential Quantity
+        Delta Uses Wrong Baseline"), confirmed live: this test used to
+        assert that two consecutive syncs before any acknowledgement
+        ACCUMULATE (1->3->5 showing +4 overall) - that reasoning was
+        wrong. "Delta must always be calculated against the last
+        successfully sent KDS quantity" - each sync's own delta is
+        independent, calculated against kline's own current value right
+        before that specific write, never blended with an earlier
+        sync's own already-superseded delta."""
         order = self._create_pos_order([(self.product_burger, 1)])
         kds_order = order.kds_order_id
         line = kds_order.line_ids
         line.action_accept()
         line.action_start()
 
-        order.lines.write({'qty': 3})  # +2
-        order.lines.write({'qty': 5})  # +2 more, before any acknowledgement
+        order.lines.write({'qty': 3})  # +2 (against baseline 1)
+        order.lines.write({'qty': 5})  # +2 (against baseline 3, NOT accumulated with the prior +2)
 
         line.invalidate_recordset()
         self.assertEqual(line.qty, 5)
-        self.assertEqual(line.qty_delta, 4, "Two consecutive +2 changes must accumulate to +4 overall.")
+        self.assertEqual(
+            line.qty_delta, 2,
+            "Each sync's own delta is calculated against the line's own last-written "
+            "quantity (3 -> 5 = +2), never accumulated on top of an earlier sync's own "
+            "already-superseded delta.")
+
+    def test_bug11_sequential_delta_uses_last_sent_baseline_not_original(self):
+        """The dev report's own exact worked example, in full: 2 -> 1
+        (UPDATED -1), then - without completing/acknowledging - 1 -> 3
+        (must show UPDATED +2, not +1 from blending with the prior -1),
+        then 3 -> 2 (must show UPDATED -1). The ticket must stay
+        PREPARING throughout, never reset to NEW."""
+        order = self._create_pos_order([(self.product_burger, 2)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        self.assertEqual(line.state, 'preparing')
+
+        order.lines.write({'qty': 1})
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 1)
+        self.assertEqual(line.qty_delta, -1, "2 -> 1 must show UPDATED (-1).")
+        self.assertEqual(line.state, 'preparing')
+
+        order.lines.write({'qty': 3})
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 3)
+        self.assertEqual(
+            line.qty_delta, 2,
+            "1 -> 3 must show UPDATED (+2) - relative to the last-sent 1, not the "
+            "original 2 (which would give +1) and not a blend with the prior -1 "
+            "(which would also give +1 the old, wrong way).")
+        self.assertEqual(line.state, 'preparing', "Must remain PREPARING throughout.")
+
+        order.lines.write({'qty': 2})
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 2)
+        self.assertEqual(line.qty_delta, -1, "3 -> 2 must show UPDATED (-1).")
+        self.assertEqual(line.state, 'preparing')
 
     def test_operator_acknowledgement_clears_qty_delta(self):
         """'must not disappear automatically merely because the next

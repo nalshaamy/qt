@@ -89,6 +89,18 @@ class KdsOrderLine(models.Model):
     # next polling/realtime synchronization occurs... until the kitchen
     # recognizes/processes it, using the existing acknowledgement
     # mechanism."
+    #
+    # CONTRACT, made explicit after a real bug ("BUG-11 [third report] -
+    # Sequential Quantity Delta Uses Wrong Baseline"): "the previous
+    # quantity" always means this line's own qty value immediately
+    # before the write that changes it - i.e. the last quantity
+    # successfully sent to/stored on this KDS line - never the
+    # original creation-time quantity, and never accumulated across
+    # multiple unacknowledged POS syncs. Each sync independently
+    # overwrites this field with only its own fresh delta (see every
+    # write site in pos_order.py - all of them set 'qty_delta' to a
+    # freshly-computed increment directly, none of them add to the
+    # field's own prior value).
     qty_delta = fields.Float(default=0.0)
 
     station_received_time = fields.Datetime()
