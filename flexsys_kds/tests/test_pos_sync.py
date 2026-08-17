@@ -1914,3 +1914,149 @@ class TestPosSync(FlexSysKdsTestCommon):
         self.assertEqual(
             cappuccino_line.state, 'cancelled',
             "A product removed, then a subsequent genuine Send/New, must show CANCELLED.")
+
+    # -----------------------------------------------------------------
+    # Dev report "BUG-11 [second report, same number reused by the
+    # client - a different issue from the refund one] - Quantity
+    # Decrease During PREPARING Resets Ticket to NEW": the exact
+    # reported scenario, traced through the real
+    # _flexsys_kds_diff_lines() code path end to end.
+    # -----------------------------------------------------------------
+    @staticmethod
+    def _effective_stage(lines):
+        """Python port of _effective_stage() (controllers/kds.py /
+        controllers/kds_kiosk.py) - kept deliberately in lockstep with
+        those two copies. Same helper already defined in
+        test_workflow.py's own TestWorkflow class - duplicated here
+        since this class doesn't inherit from it."""
+        active = [l for l in lines if l.state != 'cancelled']
+        if not active:
+            if not lines:
+                return 'new'
+            ever_ready = any(l.ready_time for l in lines)
+            ever_preparing = any(l.preparation_start_time for l in lines)
+            return 'ready' if ever_ready else 'preparing' if ever_preparing else 'new'
+        if all(l.state == 'completed' for l in active):
+            return 'completed'
+        if all(l.state in ('ready', 'completed') for l in active):
+            return 'ready'
+        if any(l.state in ('preparing', 'ready', 'completed') for l in active):
+            return 'preparing'
+        return 'new'
+
+    def test_qty_decrease_during_preparing_does_not_reset_to_new(self):
+        """The dev report's own exact scenario: 2 x TARO, PREPARING,
+        POS changes to 1 x TARO. The line's own state must stay
+        'preparing' (never reset to 'new'), and effective_stage - the
+        single authoritative value both KDS screens' tab/action-button
+        logic actually consume - must also read 'preparing', not 'new'."""
+        order = self._create_pos_order([(self.product_burger, 2)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        self.assertEqual(line.state, 'preparing')
+
+        order.lines.write({'qty': 1})
+
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 1)
+        self.assertEqual(line.qty_delta, -1, "The line display must show UPDATED (-1).")
+        self.assertEqual(line.line_change, 'updated')
+        self.assertEqual(
+            line.state, 'preparing',
+            "The line's own state must remain 'preparing' - a quantity decrease must "
+            "never reset it to 'new'.")
+        self.assertEqual(
+            self._effective_stage(kds_order.line_ids), 'preparing',
+            "The authoritative aggregate stage (what both KDS screens' tab/action-button "
+            "logic actually read) must be 'preparing', not 'new' - the action button must "
+            "be READY, not START.")
+
+    def test_qty_increase_during_preparing_does_not_reset_to_new(self):
+        """Repeat with an increase, per the dev report's own required
+        coverage: 1 -> 3 = UPDATED (+2), ticket remains PREPARING."""
+        order = self._create_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+
+        order.lines.write({'qty': 3})
+
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 3)
+        self.assertEqual(line.qty_delta, 2, "The line display must show UPDATED (+2).")
+        self.assertEqual(line.state, 'preparing')
+        self.assertEqual(self._effective_stage(kds_order.line_ids), 'preparing')
+
+    def test_add_new_item_during_preparing_stays_preparing(self):
+        order = self._create_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+
+        self.env['pos.order.line'].create({
+            'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 1,
+            'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
+        })
+        order._flexsys_kds_diff_lines()
+
+        kds_order.invalidate_recordset()
+        new_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        self.assertEqual(new_line.state, 'new')
+        self.assertEqual(new_line.line_change, 'added')
+        self.assertEqual(
+            self._effective_stage(kds_order.line_ids), 'preparing',
+            "Adding a new item while the station is already PREPARING must keep the "
+            "aggregate stage at PREPARING, not reset to NEW - the existing line is "
+            "still genuinely 'preparing'.")
+
+    def test_remove_one_item_during_preparing_stays_preparing(self):
+        order = self._create_pos_order([(self.product_burger, 1), (self.product_cappuccino, 1)])
+        kds_order = order.kds_order_id
+        kds_order.line_ids.action_accept()
+        kds_order.line_ids.action_start()
+        cappuccino_pos_line = order.lines.filtered(lambda l: l.product_id == self.product_cappuccino)
+
+        cappuccino_pos_line.unlink()
+
+        cappuccino_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        self.assertEqual(cappuccino_line.state, 'cancelled')
+        burger_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_burger)
+        self.assertEqual(burger_line.state, 'preparing', "The untouched line must remain 'preparing'.")
+        self.assertEqual(
+            self._effective_stage(kds_order.line_ids), 'preparing',
+            "Removing one item while another remains actively preparing must keep the "
+            "aggregate stage at PREPARING - a cancelled line must never affect this.")
+
+    def test_mixed_added_and_updated_lines_during_preparing_stays_preparing(self):
+        """'mixed ADDED + UPDATED lines' - explicit combined scenario
+        from the dev report's own required verification list."""
+        order = self._create_pos_order([(self.product_burger, 2)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+
+        order.lines.write({'qty': 1})  # UPDATED (-1)
+        self.env['pos.order.line'].create({
+            'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 1,
+            'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
+        })  # ADDED
+        order._flexsys_kds_diff_lines()
+
+        kds_order.invalidate_recordset()
+        line.invalidate_recordset()
+        new_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        self.assertEqual(line.state, 'preparing')
+        self.assertEqual(line.line_change, 'updated')
+        self.assertEqual(line.qty_delta, -1)
+        self.assertEqual(new_line.state, 'new')
+        self.assertEqual(new_line.line_change, 'added')
+        self.assertEqual(
+            self._effective_stage(kds_order.line_ids), 'preparing',
+            "A mix of one UPDATED (still preparing) line and one ADDED (new) line must "
+            "still classify the whole ticket as PREPARING, never NEW - matching the same "
+            "precedence BUG-02/BUG-10 already established.")

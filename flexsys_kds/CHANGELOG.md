@@ -8,6 +8,65 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.7.2 — Investigated: "Quantity Decrease During PREPARING Resets Ticket to NEW"
+
+**Received a new dev report** (reusing the "BUG-11" label - a different
+issue from the earlier refund-reconciliation BUG-11) describing a
+Preparing ticket resetting to New after a POS quantity decrease.
+
+### Investigation, not a blind fix
+Traced the exact reported scenario line-by-line through the real
+`_flexsys_kds_diff_lines()` code path, both KDS screens' `mainAction()`/
+`stationLifecycle()`, and the shared `_effective_stage()` computation:
+
+- The branch handling a `'preparing'`-state line's own qty/note change
+  (the `elif changed and kline.state != 'cancelled':` branch in
+  `pos_order.py`) writes only `qty`/`note`/`variant_info`/
+  `line_change`/`qty_delta` - it does **not** include `'state'` in that
+  write at all, confirmed by direct inspection of the exact `kline.write()`
+  call.
+- `_effective_stage()` correctly returns `'preparing'` for a single
+  `'preparing'`-state line regardless of its own quantity, confirmed by
+  manual trace against the actual current implementation.
+- Searched the entire codebase for any write of `'state': 'new'` on
+  either `kds.order` or `kds.order.line` - zero results.
+- Both screens' `mainAction()` consistently read `order.effective_stage`
+  from the backend payload, with no leftover reference to
+  `order.state === 'new'` anywhere in either frontend.
+
+**No additional code-level bug was found** matching this exact
+scenario in the current implementation - the analysis indicates it
+should already be correct as of v7.7.1. Rather than guess at a fix for
+a bug that couldn't be located (risking a real regression while
+chasing a phantom one), added comprehensive, precise regression tests
+matching the dev report's own scenario and required verification list
+exactly, so any actual discrepancy - if one exists at runtime beyond
+what static review can catch - would be caught explicitly rather than
+silently.
+
+### 6 new tests added
+Quantity decrease during Preparing (the exact reported scenario: 2->1,
+`UPDATED (-1)`, state and `effective_stage` both stay `'preparing'`),
+quantity increase during Preparing (1->3, `UPDATED (+2)`), add a new
+item during Preparing, remove one item during Preparing (with another
+item remaining active), and a mixed ADDED+UPDATED scenario - each
+verifying both the line's own `state` and the authoritative
+`effective_stage` value both KDS screens' tab/action-button logic
+actually consume.
+
+**Honest note**: if this report reflects a live Odoo.sh test failure
+rather than a report written from expected requirements, it may
+indicate an environment/deployment discrepancy (a staging build that
+predates a recent fix, or an asset-bundling/cache issue) rather than a
+gap in this codebase's own current logic - worth confirming which
+build was actually under test if the newly-added tests above also pass
+cleanly once run for real.
+
+**Total: 253 tests** (up from 248). No production code changed this
+round - investigation and test coverage only.
+
+---
+
 ## v7.7.1 — Two real gaps found in review: write() gate, unlink() redesign
 
 **Confirmed by code review** (not an Odoo.sh test failure this time -

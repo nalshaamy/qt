@@ -1,6 +1,6 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.7.1**
+**Version: 19.0.7.7.2**
 **Status as of this document: code-complete, including the "Runtime
 Regression Fix Package" (BUG-01 through BUG-06), two rounds of Odoo.sh
 runtime test failures fixed, BUG-07 (station-scoped completion) fully
@@ -10,13 +10,16 @@ BUG-09 (POS quantity delta communication), BUG-10 (single authoritative
 station-card stage), BUG-11 (paid order refund reconciliation), the
 "Change Request After BUG-11" package (deleted-completed-line
 cancellation, negative quantity delta, Send-to-KDS trigger
-simplification), and a follow-up review round that closed the two
+simplification), a follow-up review round that closed the two
 remaining gaps in that trigger simplification (the `write()` gate
 condition, and a full redesign of the removal-sync mechanism that
 removes the need for the earlier live-verification caveat on that
-specific piece). 248 automated tests, all `py_compile`/XML/JS checks
-passing. Not yet signed off on a live instance — see "What still needs
-a human" at the end.**
+specific piece), and an investigation into a second, differently-scoped
+"BUG-11" report (quantity decrease during Preparing) that found no
+matching code-level bug after a thorough trace, with precise new
+regression tests added covering that exact scenario regardless. 253
+automated tests, all `py_compile`/XML/JS checks passing. Not yet signed
+off on a live instance — see "What still needs a human" at the end.**
 
 This document maps directly to that request's own section structure
 (A/B/C/D) and states, for each item, what's actually been verified and
@@ -485,7 +488,22 @@ verified without a live Odoo 19 instance," collected in one place:
    configuration will silently never reach the kitchen - the
    implementation fails closed on purpose, but that still needs a
    human to catch before it's a live problem in a restaurant.
-9. Once 1-8 pass: tag the release in Git (outside the scope of what a
+9. **New (v7.7.2) - a live-verification item raised by inconclusive
+   investigation, not a confirmed fix**: a dev report describing a
+   Preparing ticket resetting to New after a POS quantity decrease was
+   investigated line-by-line against the current codebase and no
+   matching bug was found - the exact code path involved does not write
+   `state` at all for this scenario, and `_effective_stage()` traces
+   correctly to `'preparing'`. New regression tests
+   (`test_qty_decrease_during_preparing_does_not_reset_to_new` and 5
+   related tests in `test_pos_sync.py`) exercise this exact scenario
+   precisely. If those tests pass when actually run, but the original
+   live report still reproduces on a real instance, that would point to
+   an environment/deployment discrepancy (a stale asset bundle, a
+   staging build behind this delivery's own version) rather than a
+   logic gap in this codebase - worth confirming which exact build was
+   under test.
+10. Once 1-9 pass: tag the release in Git (outside the scope of what a
    file delivery like this one can do on your behalf).
 
 ---
@@ -673,7 +691,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 248 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 253 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |
