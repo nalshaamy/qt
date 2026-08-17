@@ -8,6 +8,113 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.8.0 — BUG-12 + BUG-13 + BUG-14: COMPLETED/READY reconciliation, POS-active retention
+
+Major architectural round addressing the client's own explicit
+distinction: "avoid treating KDS line state, KDS station aggregate
+state, POS order lifecycle, and display retention state as the same
+concept... they are separate concerns." Confirmed: the sequential
+PREPARING quantity-delta fix (v7.7.4) remains passing and unaffected.
+
+### BUG-12 - Partial Quantity Reduction After READY Is Not Reconciled Correctly
+**Investigated thoroughly, traced line-by-line against the current
+code**: the Ready-line decrease path (fixed in the "Change Request
+After BUG-11" round, hardened by v7.7.3/v7.7.4's baseline fix) already
+correctly reduces `kline.qty` in place for this exact scenario -
+confirmed via a precise new test matching the dev report's own Test 2
+exactly. No additional code-level bug was found specific to this item;
+the same underlying gap the report may have been observing is the one
+BUG-13 addresses directly (see below) - a Ready ticket that later
+reaches Completed while the POS order stays open.
+
+### BUG-13 - Quantity Changes After COMPLETED Are Ignored While POS Order Is Still Active
+**Root cause**: a Completed `kds.order.line` was always treated as
+frozen/historical, regardless of the linked POS order's own state -
+correct for a genuinely closed sale, but wrong for the common
+restaurant case this report confirms: the kitchen finishes the food
+long before the bill is settled. "COMPLETED in KDS must NOT mean the
+POS order can no longer modify production data."
+
+**Fix**: `pos_order.py::_flexsys_kds_diff_lines()`'s Ready/Completed
+branch now computes `pos_still_active = self.state == 'draft'` and
+`treat_as_frozen = kline.state == 'completed' and not pos_still_active`
+- a Completed line is only frozen once its own POS order has **also**
+closed (paid/done/invoiced). While the order remains open, a Completed
+line reconciles exactly like a Ready line: a decrease reduces the
+quantity in place (`UPDATED (-N)`, original completion timestamp
+untouched); an increase creates a new delta line for only the
+additional amount, the original 5 (or however many) staying
+historically completed. The early qty-reduced-to-zero cancellation
+path was extended the same way, routing through
+`_system_cancel_after_completion()` for a Completed line whose POS
+order is still active.
+
+### BUG-14 - COMPLETED Retention Must Depend on POS Closure
+**New explicit business rule, implemented as a genuine backend
+authority, not frontend timer suppression**: new
+`kds.order.pos_closed_at` field (`kds_order.py`), stamped the moment
+the linked `pos.order`'s own state is observed transitioning to a
+closed state (`pos_order.py`'s `write()` override) - or immediately at
+creation for the `'payment'` trigger, where closure and KDS-arrival
+happen at the same moment. Both KDS screens' own retention query
+(`controllers/kds.py`, `controllers/kds_kiosk.py`) now anchors a
+Completed line's grace-period cutoff to `pos_closed_at`, not
+`completed_at`: `pos_closed_at` unset means the ticket stays visible
+**unconditionally**, with no grace-period check applied at all,
+regardless of how long ago kitchen-side completion happened. Only once
+the POS order genuinely closes does the standard 5-minute window begin,
+now correctly anchored to that closure moment.
+
+Cancellation retention (`cancelled_at`-based) is explicitly untouched -
+"please keep cancellation lifecycle separate from the new COMPLETED/
+POS-active retention rule."
+
+### Database migration
+- `migrations/19.0.7.7.4/post-migrate.py` (carried over from the prior
+  round): backfills `last_kds_sent_qty`.
+- New `migrations/19.0.7.8.0/post-migrate.py`: backfills
+  `pos_closed_at` for every existing `kds.order` that is both
+  `'completed'` and whose linked `pos.order` is already closed -
+  without this, every already-completed-and-closed ticket on a live
+  instance would suddenly never expire after this upgrade (NULL
+  otherwise means "not yet closed, stay visible forever").
+
+### A real gap found and fixed during this round's own review
+Six new tests used `fields.Datetime`/`timedelta` without either being
+imported in `test_pos_sync.py` - `py_compile` cannot catch this class
+of error (a `NameError` only surfaces at actual runtime, not at parse
+time). Caught by manual review before delivery, not by an automated
+check; fixed by adding the missing imports. A custom AST-based
+undefined-name sweep was then run across every file changed this round
+specifically to catch further instances of this same class of gap -
+none found.
+
+### Tests
+12 new tests added, covering: BUG-12's own Test 2 explicitly, the
+Required Regression Matrix Tests 3, 4, 5, 6, 7, 8, and 1 (re-confirmed
+in this section), `pos_closed_at` stamping under both trigger modes
+(including the `'payment'`-trigger creation-time edge case, and that a
+later transition doesn't push the timestamp forward), and confirming a
+Completed line stays frozen once the POS order has genuinely closed
+(the other half of BUG-13's own distinction). Every existing test
+touching a Completed line's own modification behavior was individually
+checked (not assumed) - all of them use the `'payment'` trigger's
+default `'paid'` state, so `treat_as_frozen` remains `True` for every
+one of them, exactly matching their own existing expectations; none
+required changes.
+
+**Total: 268 tests** (up from 256).
+
+**Confirmations**:
+- `COMPLETED + POS ACTIVE` never expires from either KDS screen -
+  confirmed by the retention query change itself and by
+  `test_bug14_completed_ticket_never_expires_while_pos_active`.
+- The retention timer begins only after POS closure/finalization -
+  confirmed by `pos_closed_at`'s own stamping logic and
+  `test_bug14_retention_starts_at_pos_closure_not_kds_completion`.
+
+---
+
 ## v7.7.4 — BUG-11 [fourth report]: still reproducing at runtime - explicit last_kds_sent_qty field
 
 **Confirmed still reproducing live** on v7.7.3, with the exact same

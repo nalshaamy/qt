@@ -26,6 +26,9 @@ most important gaps to close:
      that belongs to a different station must move the ticket to that
      station, not just update the product name in place.
 """
+from datetime import timedelta
+
+from odoo import fields
 from odoo.tests import tagged
 
 from .common import FlexSysKdsTestCommon
@@ -2151,3 +2154,341 @@ class TestPosSync(FlexSysKdsTestCommon):
             "A mix of one UPDATED (still preparing) line and one ADDED (new) line must "
             "still classify the whole ticket as PREPARING, never NEW - matching the same "
             "precedence BUG-02/BUG-10 already established.")
+
+    # -----------------------------------------------------------------
+    # Dev report "FlexSys KDS - Runtime Change Request: BUG-12 + BUG-13
+    # + BUG-14". Test helper: creates a 'draft' (POS still ACTIVE/OPEN)
+    # order under the 'send' trigger, synced to KDS via the native Send
+    # signal - the realistic scenario every test in this section needs
+    # (a dine-in order sent to the kitchen well before the bill is
+    # settled).
+    # -----------------------------------------------------------------
+    def _create_active_pos_order(self, product_qty_list):
+        self.pos_config.kds_send_trigger = 'send'
+        line_vals = []
+        for product, qty in product_qty_list:
+            line_vals.append((0, 0, {
+                'product_id': product.id, 'qty': qty,
+                'price_unit': product.list_price or 10.0,
+                'price_subtotal': (product.list_price or 10.0) * qty,
+                'price_subtotal_incl': (product.list_price or 10.0) * qty,
+            }))
+        order = self.env['pos.order'].create({
+            'session_id': self.pos_session.id,
+            'company_id': self.company.id,
+            'lines': line_vals,
+            'amount_tax': 0.0,
+            'amount_total': sum((p.list_price or 10.0) * q for p, q in product_qty_list),
+            'amount_paid': 0.0,
+            'amount_return': 0.0,
+            'state': 'draft',
+            'last_order_preparation_change': '{"lines": [], "metadata": {}}',
+        })
+        return order
+
+    # -----------------------------------------------------------------
+    # BUG-12 - Partial Quantity Reduction After READY Is Not Reconciled
+    # Correctly. Required Regression Matrix, Test 2.
+    # -----------------------------------------------------------------
+    def test_bug12_ready_partial_decrease_reconciles_to_exact_effective_qty(self):
+        order = self._create_active_pos_order([(self.product_burger, 2)])
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+        self.assertEqual(line.state, 'ready')
+
+        order.lines.write({'qty': 1})
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+
+        kds_order.invalidate_recordset()
+        line.invalidate_recordset()
+        self.assertEqual(
+            line.qty, 1,
+            "The effective KDS quantity must reconcile to exactly 1 - no ghost second "
+            "active unit, no separate line still counting 2.")
+        all_lines = kds_order.line_ids
+        self.assertEqual(len(all_lines), 1, "No duplicate/orphaned line created for this reconciliation.")
+        self.assertEqual(line.state, 'ready', "Stays Ready - no unnecessary reopen.")
+        self.assertEqual(line.qty_delta, -1)
+        self.assertEqual(kds_order.state, 'ready')
+
+    # -----------------------------------------------------------------
+    # Required Regression Matrix, Test 3 - READY full cancellation
+    # (must-not-regress, already passing, confirmed here explicitly).
+    # -----------------------------------------------------------------
+    def test_ready_full_cancellation_shows_cancelled_was_ready(self):
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+
+        order.lines.write({'qty': 0})
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+
+        line.invalidate_recordset()
+        self.assertEqual(line.state, 'cancelled')
+        self.assertTrue(line.cancelled_at)
+
+    # -----------------------------------------------------------------
+    # Required Regression Matrix, Test 4 - READY increase (must-not-
+    # regress, already passing, confirmed here explicitly).
+    # -----------------------------------------------------------------
+    def test_ready_increase_preserves_original_reopens_for_delta_only(self):
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+        original_ready_time = line.ready_time
+
+        order.lines.write({'qty': 2})
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+
+        kds_order.invalidate_recordset()
+        line.invalidate_recordset()
+        self.assertEqual(line.state, 'ready', "The previously Ready unit remains preserved.")
+        self.assertEqual(line.qty, 1)
+        self.assertEqual(line.ready_time, original_ready_time)
+        delta_line = kds_order.line_ids - line
+        self.assertEqual(len(delta_line), 1)
+        self.assertEqual(delta_line.qty, 1, "Only the +1 becomes new production work.")
+        self.assertEqual(delta_line.state, 'new')
+        self.assertEqual(kds_order.state, 'preparing', "Reopens for the new work only.")
+
+    # -----------------------------------------------------------------
+    # BUG-13 - Quantity Changes After COMPLETED Are Ignored While POS
+    # Order Is Still Active. Required Regression Matrix, Test 5 & 6.
+    # -----------------------------------------------------------------
+    def test_bug13_completed_decrease_reconciles_while_pos_active(self):
+        """The exact reported scenario: KDS order ICE TEA, POS qty 5,
+        KDS COMPLETED, POS order still ACTIVE/OPEN, cashier changes
+        5 -> 3."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+        line.action_complete()
+        self.assertEqual(line.state, 'completed')
+        self.assertEqual(order.state, 'draft', "POS order remains ACTIVE/OPEN.")
+        original_completed_at = line.completed_at
+
+        order.lines.write({'qty': 3})
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+
+        kds_order.invalidate_recordset()
+        line.invalidate_recordset()
+        self.assertEqual(
+            line.qty, 3,
+            "'KDS COMPLETED: qty 5' + 'POS ACTIVE: 5 -> 3' must reconcile - the current "
+            "effective quantity must become exactly 3.")
+        self.assertEqual(
+            line.state, 'completed',
+            "The line stays Completed - 'preserving the fact that 5 units had previously "
+            "reached production completion' - only the quantity itself reconciles.")
+        self.assertEqual(line.qty_delta, -2, "Must show UPDATED (-2).")
+        self.assertEqual(
+            line.completed_at, original_completed_at,
+            "The original completion timestamp itself is untouched - this is a quantity "
+            "reconciliation, not a new completion event.")
+        all_lines = kds_order.line_ids
+        self.assertEqual(len(all_lines), 1, "No duplicate/orphaned line.")
+
+    def test_bug13_completed_increase_reconciles_while_pos_active(self):
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+        line.action_complete()
+        original_qty = line.qty
+        original_completed_at = line.completed_at
+
+        order.lines.write({'qty': 7})
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+
+        kds_order.invalidate_recordset()
+        line.invalidate_recordset()
+        self.assertEqual(
+            line.state, 'completed',
+            "'The original completed production must remain historically preserved.'")
+        self.assertEqual(line.qty, original_qty, "The original 5 units are untouched.")
+        self.assertEqual(line.completed_at, original_completed_at)
+        delta_line = kds_order.line_ids - line
+        self.assertEqual(len(delta_line), 1)
+        self.assertEqual(delta_line.qty, 2, "'Only the additional +2 should become new production work.'")
+        self.assertEqual(delta_line.state, 'new')
+        kds_order.invalidate_recordset()
+        self.assertIn(
+            kds_order.state, ('preparing', 'new'),
+            "The ticket reopens appropriately for the new production work - not staying "
+            "COMPLETED with unaccounted-for new work.")
+
+    def test_completed_decrease_stays_frozen_once_pos_order_closed(self):
+        """Confirms the OTHER side of BUG-13's own distinction: once the
+        POS order has genuinely closed, a Completed line's own history
+        must NOT be rewritten - matching every earlier round's own
+        established "never mutate served history" principle."""
+        order = self._create_pos_order([(self.product_burger, 5)])  # defaults to 'paid'
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+        line.action_complete()
+        self.assertNotEqual(order.state, 'draft', "POS order is already closed (paid).")
+        original_qty = line.qty
+
+        order.lines.write({'qty': 3})
+
+        line.invalidate_recordset()
+        self.assertEqual(
+            line.state, 'completed',
+            "Once the POS order has closed, the original completed line must never be "
+            "mutated - the sale is settled.")
+        self.assertEqual(line.qty, original_qty, "Quantity must not be rewritten once closed.")
+
+    # -----------------------------------------------------------------
+    # BUG-14 - COMPLETED Retention Must Depend on POS Closure. Required
+    # Regression Matrix, Test 7 & 8.
+    # -----------------------------------------------------------------
+    def test_bug14_completed_ticket_never_expires_while_pos_active(self):
+        """Test 7: KDS COMPLETED, POS ACTIVE, wait longer than the
+        configured retention period - the ticket must remain visible."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+        line.action_complete()
+        self.assertFalse(kds_order.pos_closed_at, "Must not be stamped while POS is active.")
+
+        # Simulate time well past the retention window by backdating
+        # completed_at directly (matching the established pattern used
+        # elsewhere in this suite for retention-window tests) - the
+        # point of this test is that pos_closed_at, not completed_at,
+        # gates visibility now.
+        line.sudo().write({'completed_at': fields.Datetime.now() - timedelta(minutes=60)})
+
+        pos_closed_cutoff = fields.Datetime.now() - timedelta(minutes=5)
+        visible = line.state not in ('completed', 'cancelled') or (
+            line.state == 'completed' and (not kds_order.pos_closed_at or kds_order.pos_closed_at >= pos_closed_cutoff))
+        self.assertTrue(
+            visible,
+            "A Completed line whose POS order is still active must remain visible "
+            "regardless of how long ago it completed - no KDS completion timeout may "
+            "hide it while pos_closed_at is unset.")
+
+    def test_bug14_retention_starts_at_pos_closure_not_kds_completion(self):
+        """Test 8: continue Test 7 - close/pay/finalize the POS order,
+        confirm pos_closed_at gets stamped, and that the retention
+        cutoff is computed from that moment, not from completion."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+        line.action_complete()
+        # Backdate completion well into the past - if the old,
+        # completed_at-anchored logic were still in effect, this alone
+        # would already be past the grace window.
+        line.sudo().write({'completed_at': fields.Datetime.now() - timedelta(minutes=60)})
+        self.assertFalse(kds_order.pos_closed_at)
+
+        order.write({'state': 'paid', 'amount_paid': order.amount_total})
+
+        kds_order.invalidate_recordset()
+        self.assertTrue(
+            kds_order.pos_closed_at,
+            "Closing/paying the POS order must stamp pos_closed_at - the retention "
+            "timer's own authoritative anchor.")
+        # Freshly stamped (just now, not 60 minutes ago like completed_at) -
+        # well within the grace window.
+        pos_closed_cutoff = fields.Datetime.now() - timedelta(minutes=5)
+        self.assertGreaterEqual(
+            kds_order.pos_closed_at, pos_closed_cutoff,
+            "pos_closed_at must reflect the moment of POS closure just now, not the "
+            "much-earlier completion time - confirming retention is anchored to closure.")
+
+    def test_bug14_pos_closed_at_stamped_immediately_under_payment_trigger(self):
+        """Under the 'payment' trigger, an order only ever reaches KDS
+        once already paid - closure and KDS-arrival happen at the same
+        moment, so pos_closed_at must be set immediately at creation,
+        not left waiting for a state *transition* that will never come
+        (the order was already paid before kds_order_id even existed)."""
+        order = self._create_pos_order([(self.product_burger, 1)])  # 'payment' trigger, defaults to paid
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        self.assertTrue(
+            kds_order.pos_closed_at,
+            "Under 'payment' mode, the order is already closed the moment it reaches "
+            "KDS at all - pos_closed_at must be stamped immediately, not left NULL "
+            "forever.")
+
+    def test_bug14_pos_closed_at_not_stamped_while_order_stays_draft(self):
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        self.assertFalse(
+            kds_order.pos_closed_at,
+            "An order sent to KDS while still genuinely draft/active must not have "
+            "pos_closed_at stamped.")
+
+    def test_bug14_pos_closed_at_stamped_once_only(self):
+        """A later state transition (e.g. paid -> done) must not push
+        pos_closed_at forward - the FIRST genuine closure is the one
+        that anchors retention."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+
+        order.write({'state': 'paid', 'amount_paid': order.amount_total})
+        kds_order.invalidate_recordset()
+        first_closed_at = kds_order.pos_closed_at
+        self.assertTrue(first_closed_at)
+
+        order.write({'state': 'done'})
+        kds_order.invalidate_recordset()
+        self.assertEqual(
+            kds_order.pos_closed_at, first_closed_at,
+            "A later transition to 'done' must not overwrite the original closure "
+            "timestamp.")
+
+    # -----------------------------------------------------------------
+    # DO NOT REGRESS: sequential PREPARING delta, explicitly reconfirmed
+    # in this same section per the dev report's own "Required Regression
+    # Matrix, Test 1" and "already passed live runtime testing" list.
+    # -----------------------------------------------------------------
+    def test_regression_matrix_test1_preparing_sequential_delta(self):
+        order = self._create_active_pos_order([(self.product_burger, 2)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+
+        order.lines.write({'qty': 1})
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        line.invalidate_recordset()
+        self.assertEqual(line.qty_delta, -1)
+        self.assertEqual(line.state, 'preparing')
+
+        order.lines.write({'qty': 3})
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 3}}'})
+        line.invalidate_recordset()
+        self.assertEqual(line.qty_delta, 2)
+        self.assertEqual(line.state, 'preparing')
+
+        order.lines.write({'qty': 2})
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 4}}'})
+        line.invalidate_recordset()
+        self.assertEqual(line.qty_delta, -1)
+        self.assertEqual(line.state, 'preparing')

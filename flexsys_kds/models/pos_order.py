@@ -87,6 +87,22 @@ class PosOrder(models.Model):
             is_send_write = 'last_order_preparation_change' in vals
             for order in self:
                 order = order.sudo()
+                # REAL BUG FIX ("BUG-14 - COMPLETED Retention Must
+                # Depend on POS Closure"): stamps kds.order.pos_closed_at
+                # the moment this order's own state is observed
+                # transitioning into a closed state - see that field's
+                # own docstring (kds_order.py) for the complete
+                # rationale. Checked first, before the cancel/sync
+                # dispatch below, and independent of it - closure needs
+                # recording regardless of which branch handles the rest
+                # of this write. `not order.kds_order_id.pos_closed_at`
+                # guards against overwriting an earlier closure moment
+                # with a later one (e.g. paid -> done -> invoiced as
+                # separate writes) - the FIRST genuine closure is the
+                # one that should anchor the retention timer.
+                if (vals.get('state') in ('paid', 'done', 'invoiced')
+                        and order.kds_order_id and not order.kds_order_id.pos_closed_at):
+                    order.kds_order_id.pos_closed_at = fields.Datetime.now()
                 if vals.get('state') == 'cancel':
                     order._flexsys_kds_cancel()
                 else:
@@ -399,6 +415,22 @@ class PosOrder(models.Model):
             'order_type': order_type,
             'customer_name': self.partner_id.name or self.pos_reference or '',
             'note': _pos_note(self),
+            # REAL BUG FIX ("BUG-14 - COMPLETED Retention Must Depend on
+            # POS Closure"): under the 'payment' trigger, an order only
+            # ever reaches KDS in the first place once it's ALREADY paid
+            # - "reached KDS" and "POS closed" happen at the exact same
+            # moment for that trigger mode, so pos.order.write()'s own
+            # stamping logic (which only fires on a state *transition*,
+            # requiring kds_order_id to already exist) would never catch
+            # it - this order's kds_order_id doesn't exist until the
+            # line right after this very create() call returns. Stamped
+            # directly here instead, from self.state at the moment of
+            # creation, for that specific trigger's own case; the 'send'
+            # trigger's own orders (created while still genuinely
+            # 'draft') correctly get None here, relying entirely on the
+            # write()-time transition stamping for their own later
+            # closure instead.
+            'pos_closed_at': fields.Datetime.now() if self.state in ('paid', 'done', 'invoiced') else False,
         })
         self.kds_order_id = kds_order.id
         self._flexsys_kds_create_lines(self.lines)
@@ -546,6 +578,30 @@ class PosOrder(models.Model):
                         reason=_('Quantity reduced to zero in POS'), bypass_check=True)
                     touched_stations |= kline.station_id
                     continue
+                # REAL BUG FIX ("BUG-13 - Quantity Changes After
+                # COMPLETED Are Ignored While POS Order Is Still
+                # Active"): a Completed line reduced to zero while its
+                # POS order is still 'draft' (active/open) must also be
+                # cancellable - "KDS must continue receiving and
+                # processing... quantity decreases... removed products"
+                # applies here too, not just to a partial reduction.
+                # action_cancel() itself still correctly refuses a
+                # Completed line unconditionally (that restriction stays
+                # fully intact for every real user-facing path), so this
+                # routes through _system_cancel_after_completion()
+                # instead - the same dedicated path already established
+                # for a Completed line whose POS line was deleted
+                # outright (Change Request After BUG-11, item 1) - full
+                # audit trail, same CANCELLED display treatment. Once the
+                # POS order has itself closed, this branch is
+                # unreachable (kline.state == 'completed' and self.state
+                # != 'draft') and the line correctly stays frozen/
+                # historical, matching every terminal-order case.
+                if line.qty <= 0 and kline.state == 'completed' and self.state == 'draft':
+                    kline._system_cancel_after_completion(
+                        reason=_('Quantity reduced to zero in POS while order still active'))
+                    touched_stations |= kline.station_id
+                    continue
                 changed = (kline.qty != line.qty) or (kline.note != _pos_note(line)) \
                     or (kline.variant_info != _pos_line_variant_info(line))
                 # REAL BUG FIX, confirmed at runtime (dev request
@@ -613,6 +669,49 @@ class PosOrder(models.Model):
                 # pointing at, just for Completed instead of Ready. Fixed
                 # for both at once, consistently, below.
                 if changed and kline.state in ('ready', 'completed'):
+                    # REAL BUG FIX ("BUG-13 - Quantity Changes After
+                    # COMPLETED Are Ignored While POS Order Is Still
+                    # Active"), confirmed live (KDS order 2629-3-000008,
+                    # ICE TEA: POS qty 5 -> 3 while the KDS ticket was
+                    # already COMPLETED and the POS order was still
+                    # ACTIVE/OPEN - "POS correctly showed 3... KDS
+                    # remained 5... no effective quantity reconciliation
+                    # occurred"): "COMPLETED in KDS must NOT mean the POS
+                    # order can no longer modify production data. As
+                    # long as the corresponding POS order is still
+                    # ACTIVE/OPEN, KDS must continue receiving and
+                    # processing quantity increases, decreases, added
+                    # products, removed products, product modifications"
+                    # - a genuine, explicit business-rule change from
+                    # every earlier round's own "Completed is always
+                    # frozen/historical, never touched again" principle
+                    # (BUG-02B/BUG-10/the "Change Request After BUG-11"
+                    # item 2/the BUG-11 third+fourth reports), which was
+                    # correct ONLY for the case this report distinguishes
+                    # for the first time: a Completed ticket whose POS
+                    # order has ALSO closed (paid/done/invoiced) - at
+                    # that point the sale itself is settled and rewriting
+                    # served history genuinely would be wrong. While the
+                    # POS order remains 'draft' (still being actively
+                    # managed - a dine-in table not yet billed), a
+                    # Completed line is now reconciled exactly the same
+                    # way a Ready line already correctly is: decrease
+                    # reduces in place, increase creates a new delta
+                    # line for only the additional amount, the original
+                    # completed portion's own timestamps/history
+                    # untouched either way.
+                    #
+                    # pos_still_active is computed once, from self.state
+                    # (self IS the pos.order here) - 'draft' is Odoo's
+                    # own core state for an order still being built/
+                    # managed at the register (confirmed from Odoo 19's
+                    # own addons/point_of_sale/models/pos_order.py:
+                    # state Selection is draft/cancel/paid/done); a
+                    # cancelled order's own lines are handled by
+                    # _flexsys_kds_cancel() entirely separately and never
+                    # reach this diff logic at all.
+                    pos_still_active = self.state == 'draft'
+                    treat_as_frozen = kline.state == 'completed' and not pos_still_active
                     # REAL BUG FIX ("BUG-11 [fourth report] - Sequential
                     # qty_delta baseline is still wrong at runtime"):
                     # baseline is explicitly last_kds_sent_qty here too,
@@ -626,38 +725,38 @@ class PosOrder(models.Model):
                         # Negative Difference"), confirmed live: this
                         # used to ALWAYS just log-and-skip a decrease on
                         # a Ready/Completed line, for BOTH states alike -
-                        # correct for Completed ("the original completed
-                        # work remains historically completed", never
-                        # rewritten), but wrong for Ready: a genuine POS
-                        # quantity decrease on a Ready line never
-                        # actually reduced the line's own displayed
-                        # quantity at all, and no delta/UPDATED(-N)
-                        # showed - "quantity decreases currently display
-                        # only: UPDATED" (no negative delta), because the
-                        # line was left completely untouched rather than
-                        # having its own qty reduced the way an active
-                        # line's decrease already correctly does.
+                        # correct for a genuinely frozen Completed line
+                        # ("the original completed work remains
+                        # historically completed", never rewritten), but
+                        # wrong for Ready: a genuine POS quantity
+                        # decrease on a Ready line never actually reduced
+                        # the line's own displayed quantity at all, and
+                        # no delta/UPDATED(-N) showed.
                         #
-                        # Fixed by splitting the two states: Completed
-                        # keeps the original informational-only, never-
-                        # mutate-history behavior; Ready now reduces the
-                        # qty in place - matching "do not reopen
-                        # unnecessary production" (no delta line, no
-                        # state change, no reset to New - just the
-                        # quantity itself moving down) while still
+                        # BUG-13 FIX: treat_as_frozen (computed above)
+                        # now decides this, not kline.state directly - a
+                        # Completed line only gets the frozen,
+                        # informational-only treatment when its own POS
+                        # order has ALSO closed; otherwise (Ready, or
+                        # Completed with the POS order still active) it
+                        # reduces in place exactly the same way, matching
+                        # "do not reopen unnecessary production" (no
+                        # delta line, no state change, no reset to New -
+                        # just the quantity itself moving down) while
                         # correctly showing UPDATED (-N) via the same
-                        # qty_delta mechanism BUG-09 already established
-                        # for every other quantity change.
-                        if kline.state == 'completed':
+                        # qty_delta mechanism BUG-09 already established.
+                        if treat_as_frozen:
                             self.env['kds.event'].log(
                                 kds_order, event_type='order_updated', station=kline.station_id,
                                 note=_("%(product)s reduced after original line was already "
-                                       "completed (qty %(old_qty)s -> %(new_qty)s) - no new "
-                                       "preparation delta created, completed history preserved")
+                                       "completed and the POS order closed (qty %(old_qty)s -> "
+                                       "%(new_qty)s) - no new preparation delta created, "
+                                       "completed history preserved")
                                 % {'product': kline.product_name,
                                    'old_qty': kline.qty, 'new_qty': line.qty})
                         else:
                             old_qty = kline.qty
+                            old_state = kline.state
                             kline.write({
                                 'qty': line.qty,
                                 'note': _pos_note(line),
@@ -683,9 +782,9 @@ class PosOrder(models.Model):
                             self.env['kds.event'].log(
                                 kds_order, event_type='order_updated', station=kline.station_id,
                                 note=_("%(product)s reduced after original line was already "
-                                       "ready (qty %(old_qty)s -> %(new_qty)s) - quantity "
+                                       "%(state)s (qty %(old_qty)s -> %(new_qty)s) - quantity "
                                        "reduced in place, no production reopened")
-                                % {'product': kline.product_name,
+                                % {'product': kline.product_name, 'state': old_state,
                                    'old_qty': old_qty, 'new_qty': line.qty})
                             from .kds_notify import notify_station
                             notify_station(self.env, kline.station_id)
@@ -702,6 +801,15 @@ class PosOrder(models.Model):
                     # new spec, not just some of it, so the delta line
                     # carries the full current quantity in that specific
                     # sub-case only.
+                    #
+                    # BUG-13 FIX: an increase on a Completed line whose
+                    # POS order has closed (treat_as_frozen) still falls
+                    # through to here exactly as before - a delta line
+                    # still gets created either way (an increase always
+                    # means genuinely new work, regardless of whether the
+                    # sale itself has settled), so no branching is needed
+                    # for that specific case; only the log message below
+                    # distinguishes it.
                     delta_qty = qty_increment if qty_increment > 0 else line.qty
                     self.env['kds.event'].log(
                         kds_order, event_type='order_updated', station=kline.station_id,

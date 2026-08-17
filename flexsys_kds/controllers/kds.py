@@ -233,13 +233,32 @@ class FlexSysKdsController(http.Controller):
         # exactly like a single-station order's completed line always
         # has - completion elsewhere on the order no longer keeps a
         # finished station's own card alive indefinitely.
-        completed_cutoff = fields.Datetime.now() - timedelta(minutes=COMPLETED_GRACE_MINUTES)
+        #
+        # REAL BUG FIX ("BUG-14 - COMPLETED Retention Must Depend on POS
+        # Closure"), confirmed live as an explicit new business rule,
+        # superseding the completed_at-based check above: "if KDS starts
+        # the retention timer immediately when the KDS ticket reaches
+        # COMPLETED, the ticket may disappear while the corresponding
+        # POS order is still active. That is operationally unsafe." The
+        # cutoff for a completed line is now computed against
+        # order_id.pos_closed_at (kds_order.py - stamped the moment the
+        # linked POS order's own state is observed transitioning to a
+        # closed state), not completed_at - and a completed line whose
+        # order hasn't closed at all (pos_closed_at still False) is
+        # always shown, with no grace-period check applied whatsoever -
+        # "the ticket must remain visible under COMPLETED regardless of
+        # how long it remains open... no KDS completion timeout may hide
+        # it." Only once the POS order genuinely closes does the exact
+        # same 5-minute grace window begin, now correctly anchored to
+        # that closure moment instead of to kitchen-side completion.
+        pos_closed_cutoff = fields.Datetime.now() - timedelta(minutes=COMPLETED_GRACE_MINUTES)
         cancelled_cutoff = fields.Datetime.now() - timedelta(minutes=CANCELLED_GRACE_MINUTES)
         lines = request.env['kds.order.line'].search([
             ('station_id', '=', station.id),
             '|', '|',
                 ('state', 'not in', ('completed', 'cancelled')),
-                '&', ('state', '=', 'completed'), ('completed_at', '>=', completed_cutoff),
+                '&', ('state', '=', 'completed'),
+                    '|', ('order_id.pos_closed_at', '=', False), ('order_id.pos_closed_at', '>=', pos_closed_cutoff),
                 '&', ('state', '=', 'cancelled'), ('cancelled_at', '>=', cancelled_cutoff),
         ])
         orders = lines.mapped('order_id').sorted(
@@ -275,10 +294,15 @@ class FlexSysKdsController(http.Controller):
             # cancelled one, rather than letting every completed line
             # through unconditionally the way an earlier version of
             # this exact filter did.
+            #
+            # BUG-14 FIX: mirrors the search domain's own change above -
+            # order.pos_closed_at (not completed_at) anchors a completed
+            # line's own grace check, and an order whose POS side hasn't
+            # closed at all is unconditionally kept.
             display_lines = order.line_ids.filtered(
-                lambda l, sid=station.id, cc=cancelled_cutoff, cpc=completed_cutoff: l.station_id.id == sid and (
+                lambda l, sid=station.id, cc=cancelled_cutoff, pcc=pos_closed_cutoff, o=order: l.station_id.id == sid and (
                     (l.state not in ('completed', 'cancelled'))
-                    or (l.state == 'completed' and l.completed_at and l.completed_at >= cpc)
+                    or (l.state == 'completed' and (not o.pos_closed_at or o.pos_closed_at >= pcc))
                     or (l.state == 'cancelled' and l.cancelled_at and l.cancelled_at >= cc)
                 ))
             if not display_lines:

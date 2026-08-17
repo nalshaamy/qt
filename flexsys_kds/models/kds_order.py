@@ -120,6 +120,35 @@ class KdsOrder(models.Model):
     # server-side timestamp to check for a fully-cancelled order, exactly
     # the same pattern already established for Completed orders.
     cancelled_at = fields.Datetime()
+    # REAL BUG FIX ("BUG-14 - COMPLETED Retention Must Depend on POS
+    # Closure"), confirmed live as an explicit new business rule: the
+    # 5-minute Completed retention timer used to start counting from
+    # completion_time above (this station/order's own kitchen-side
+    # completion) unconditionally - "if KDS starts the retention timer
+    # immediately when the KDS ticket reaches COMPLETED, the ticket may
+    # disappear while the corresponding POS order is still active. That
+    # is operationally unsafe" - a cashier could still be mid-edit on a
+    # dine-in order (adding/removing/changing quantities) long after the
+    # kitchen finished cooking, and the ticket would vanish from the
+    # kitchen's own screen before the sale itself was ever settled.
+    #
+    # Stamped (pos_order.py's own write() override) the moment the
+    # linked pos.order's own `state` is observed transitioning into a
+    # closed state ('paid'/'done'/'invoiced') - deliberately its own
+    # explicit timestamp, not a reuse of pos.order.write_date (which
+    # updates on ANY field change to the order, including ones long
+    # after closure - e.g. a later refund - and would therefore be an
+    # unreliable, drifting anchor for "when did this order actually
+    # close"). NULL for as long as the POS order remains 'draft' (still
+    # active/open) - both KDS screens' own retention query (see
+    # COMPLETED_GRACE_MINUTES in both controllers) now checks this
+    # field, not completion_time/completed_at, to decide whether a
+    # Completed ticket's grace window has even started yet: NULL means
+    # "not started - stay visible unconditionally", matching the
+    # required rule exactly ("the ticket must remain visible under
+    # COMPLETED regardless of how long it remains open... no KDS
+    # completion timeout may hide it").
+    pos_closed_at = fields.Datetime()
     total_fulfillment_minutes = fields.Float(compute='_compute_total_fulfillment', store=True)
 
     sla_status = fields.Selection([

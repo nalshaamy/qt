@@ -1,25 +1,20 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.7.4**
-**Status as of this document: code-complete, including the "Runtime
-Regression Fix Package" (BUG-01 through BUG-06), two rounds of Odoo.sh
-runtime test failures fixed, BUG-07 (station-scoped completion) fully
-closed with its Expeditor integration reconciled, BUG-08 (cancelled-line
-station lifecycle / terminal cleanup) implemented and re-confirmed,
-BUG-09 (POS quantity delta communication), BUG-10 (single authoritative
-station-card stage), BUG-11 (paid order refund reconciliation), the
-"Change Request After BUG-11" package (deleted-completed-line
-cancellation, negative quantity delta, Send-to-KDS trigger
-simplification), a follow-up review round that closed the two
-remaining gaps in that trigger simplification (the `write()` gate
-condition, and a full redesign of the removal-sync mechanism that
-removes the need for the earlier live-verification caveat on that
-specific piece), and an investigation into a second, differently-scoped
-"BUG-11" report (quantity decrease during Preparing) that found no
-matching code-level bug after a thorough trace, with precise new
-regression tests added covering that exact scenario regardless. 253
-automated tests, all `py_compile`/XML/JS checks passing. Not yet signed
-off on a live instance — see "What still needs a human" at the end.**
+**Version: 19.0.7.8.0**
+**Status as of this document: code-complete, including everything
+through v7.7.4 (see CHANGELOG.md for the full history), plus this
+round's major architectural fixes: BUG-12 (READY partial-decrease
+reconciliation, investigated and confirmed already correct), BUG-13
+(COMPLETED lines now reconcile quantity changes while the linked POS
+order remains active/open - a genuine, explicit business-rule change
+from every earlier round's "Completed is always frozen" principle),
+and BUG-14 (COMPLETED retention now anchored to POS order closure, not
+kitchen-side completion - new `pos_closed_at` field and database
+migration). 268 automated tests, all `py_compile`/XML/JS checks
+passing, plus a custom AST-based undefined-name sweep across every file
+changed this round. Not yet signed off on a live instance — see "What
+still needs a human" at the end.**
+
 
 This document maps directly to that request's own section structure
 (A/B/C/D) and states, for each item, what's actually been verified and
@@ -459,6 +454,58 @@ delta (`UPDATED (+2)`) and, if convenient, the `last_kds_sent_qty`
 field's own value directly via a technical/debug view, to confirm which
 exact value the runtime is now using.
 
+## BUG-12 + BUG-13 + BUG-14: COMPLETED/READY reconciliation, POS-active retention
+**BUG-12** (READY partial-decrease reconciliation): investigated and
+traced line-by-line against the current code - the fix already in
+place (from the "Change Request After BUG-11" round, hardened by the
+`last_kds_sent_qty` baseline work) correctly handles this exact
+scenario. No additional code change was made specific to this item; a
+precise new test confirms it.
+
+**BUG-13** (quantity changes after COMPLETED while POS stays active):
+a genuine, explicit business-rule change from every earlier round's own
+"Completed is always frozen" principle - a Completed line now only
+freezes once its own POS order has **also** closed. While the order
+stays open, it reconciles exactly like Ready: decrease reduces in
+place, increase creates a new delta line for the additional amount
+only. `pos_still_active`/`treat_as_frozen`, computed from the POS
+order's own `state`, drive this distinction throughout
+`_flexsys_kds_diff_lines()`.
+
+**BUG-14** (retention anchored to POS closure): new
+`kds.order.pos_closed_at` field, stamped the moment the linked POS
+order's own state transitions to closed (or immediately at creation
+under the `'payment'` trigger, where closure and KDS-arrival happen at
+the same moment). Both KDS screens' retention queries now check this
+field instead of `completed_at` - unset means unconditional visibility,
+regardless of how long ago kitchen-side completion happened.
+
+**⚠️ Second database migration this round**:
+`migrations/19.0.7.8.0/post-migrate.py` backfills `pos_closed_at` for
+every existing completed-and-closed order - without it, those tickets
+would suddenly never expire after this upgrade. Confirm the upgrade log
+shows both this migration and the earlier `19.0.7.7.4` one having run.
+
+**A real gap caught during this round's own review, not by any
+automated check**: six new tests used `fields.Datetime`/`timedelta`
+without either being imported - `py_compile` cannot catch an undefined
+name (that's a runtime concern, not a syntax one). Found by manual
+review, fixed immediately; a custom AST-based sweep was then run across
+every file this round touched, specifically looking for more instances
+of this same class of gap - none found. Flagged here explicitly because
+it's a reminder that `py_compile` passing is necessary but not
+sufficient - it does not substitute for a real Odoo test run.
+
+**What still needs a human**: the full Required Regression Matrix
+(Tests 1-8) from the dev report's own list, run against a real Odoo.sh
+staging instance - this delivery's own test suite exercises the same
+scenarios at the model level, but cannot substitute for confirming the
+actual runtime behavior end to end, especially given the size of this
+round's own architectural change. Pay particular attention to Test 7/8
+(retention timing) since that involves real wall-clock behavior a unit
+test can only simulate by backdating timestamps directly, not by
+actually waiting.
+
 ---
 
 ## What still needs a human
@@ -722,9 +769,9 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 256 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 268 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
-| Upgrade PASS | ⬜ Live only - **v7.7.4 specifically requires confirming the `migrations/19.0.7.7.4/post-migrate.py` script actually ran** (see its own section above) |
+| Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |
 | Physical Printing PASS | ⬜ Live only (the atomic-claim Release Blocker itself is now fixed - see "Post-V1-RC fixes" above - but end-to-end physical delivery still needs a real agent/printer) |
 | Security Validation PASS | ✅ Automated - `bypass_check`'s contract clarified and tested this round, no security control weakened |
