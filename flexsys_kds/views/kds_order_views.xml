@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_kds_order_list" model="ir.ui.view">
+        <field name="type">list</field>
+        <field name="name">kds.order.list</field>
+        <field name="model">kds.order</field>
+        <field name="arch" type="xml">
+            <list string="Orders" decoration-danger="sla_status == 'late'" decoration-warning="sla_status == 'warning'">
+                <field name="name"/>
+                <field name="pos_config_id"/>
+                <field name="company_id"/>
+                <field name="order_type"/>
+                <field name="source"/>
+                <field name="priority"/>
+                <field name="state" widget="badge"
+                       decoration-success="state == 'completed'"
+                       decoration-info="state in ('new', 'accepted')"
+                       decoration-warning="state in ('preparing', 'on_hold')"
+                       decoration-danger="state == 'cancelled'"/>
+                <field name="sla_status" widget="badge"
+                       decoration-danger="sla_status == 'late'"
+                       decoration-warning="sla_status == 'warning'"
+                       decoration-success="sla_status == 'normal'"/>
+                <field name="created_time"/>
+                <field name="total_fulfillment_minutes" sum="Total"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_kds_order_form" model="ir.ui.view">
+        <field name="type">form</field>
+        <field name="name">kds.order.form</field>
+        <field name="model">kds.order</field>
+        <field name="arch" type="xml">
+            <form string="FlexSys KDS Order">
+                <header>
+                    <button name="action_accept" type="object" string="Accept" invisible="state != 'new'"/>
+                    <button name="action_start_preparing" type="object" string="Start Preparing" invisible="state not in ('new','accepted')"/>
+                    <!-- DESIGN REVERSAL (v5.4, explicit pilot request):
+                         Ready and Complete are separate manual steps
+                         again - v4.1's auto-complete-on-Ready (and
+                         v5.3's grace period on top of it) still didn't
+                         give staff a reliable way to notice and
+                         physically hand off a finished order in
+                         practice. An order now sits at Ready
+                         indefinitely, with no time limit, until someone
+                         actually taps Complete - see
+                         kds_order.py::action_ready()'s own docstring. -->
+                    <button name="action_ready" type="object" string="Mark Ready" invisible="state != 'preparing'"/>
+                    <button name="action_complete" type="object" string="Complete" invisible="state != 'ready'"/>
+                    <button name="action_reopen" type="object" string="Reopen" invisible="state not in ('ready','completed')"/>
+                    <button name="action_hold" type="object" string="Hold" invisible="state in ('completed','cancelled')"/>
+                    <button name="action_cancel" type="object" string="Cancel" invisible="state in ('completed','cancelled')"/>
+                    <button name="action_print_full_order" type="object" string="Print Full Order"/>
+                    <field name="state" widget="statusbar" statusbar_visible="new,accepted,preparing,ready,completed"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" readonly="1"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="pos_order_id" readonly="1"/>
+                            <field name="pos_config_id" readonly="1"/>
+                            <field name="company_id" readonly="1"/>
+                            <field name="source" readonly="1"/>
+                            <field name="order_type" readonly="1"/>
+                            <field name="priority" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="customer_name" readonly="1"/>
+                            <field name="table_number" readonly="1"/>
+                            <field name="station_ids" widget="many2many_tags" readonly="1"/>
+                            <field name="sla_status" readonly="1"/>
+                            <field name="is_expeditor_ready" readonly="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Lines">
+                            <!-- Point: this is a tracking record, not a form to
+                                 hand-edit - line data is populated entirely by
+                                 the POS sync / routing engine. readonly="1"
+                                 here disables add/edit/delete on the whole
+                                 one2many (no more editable="bottom" list). -->
+                            <field name="line_ids" readonly="1">
+                                <list decoration-danger="sla_status == 'late'" decoration-warning="sla_status == 'warning'">
+                                    <field name="product_id"/>
+                                    <field name="qty"/>
+                                    <field name="note"/>
+                                    <field name="station_id"/>
+                                    <field name="state" widget="badge"
+                                           decoration-success="state in ('ready', 'completed')"
+                                           decoration-info="state in ('new', 'accepted')"
+                                           decoration-warning="state in ('preparing', 'on_hold')"
+                                           decoration-danger="state == 'cancelled'"/>
+                                    <field name="sla_status" widget="badge"
+                                           decoration-danger="sla_status == 'late'"
+                                           decoration-warning="sla_status == 'warning'"
+                                           decoration-success="sla_status == 'normal'"/>
+                                    <field name="line_change"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Timing">
+                            <group>
+                                <field name="created_time" readonly="1"/>
+                                <field name="accepted_time" readonly="1"/>
+                                <field name="preparation_start_time" readonly="1"/>
+                                <field name="ready_time" readonly="1"/>
+                                <field name="packing_time" readonly="1"/>
+                                <field name="completion_time" readonly="1"/>
+                                <field name="total_fulfillment_minutes" readonly="1"/>
+                            </group>
+                        </page>
+                        <page string="Expeditor / Packing" invisible="not expeditor_enabled">
+                            <field name="expeditor_task_ids" readonly="1">
+                                <list decoration-danger="sla_status == 'late'" decoration-warning="sla_status == 'warning'">
+                                    <field name="station_id"/>
+                                    <field name="state" widget="badge"
+                                           decoration-success="state in ('ready', 'completed')"
+                                           decoration-info="state == 'waiting'"
+                                           decoration-warning="state == 'packing'"
+                                           decoration-danger="state == 'cancelled'"/>
+                                    <field name="user_id"/>
+                                    <field name="available_time"/>
+                                    <field name="start_time"/>
+                                    <field name="ready_time"/>
+                                    <field name="completion_time"/>
+                                    <field name="packing_duration" sum="Total"/>
+                                    <field name="sla_status" widget="badge"
+                                           decoration-danger="sla_status == 'late'"
+                                           decoration-warning="sla_status == 'warning'"
+                                           decoration-success="sla_status == 'normal'"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Print Jobs">
+                            <field name="print_job_ids" readonly="1">
+                                <list>
+                                    <field name="station_id"/>
+                                    <field name="printer_id"/>
+                                    <field name="job_type"/>
+                                    <field name="status"/>
+                                    <field name="create_date"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Audit Log">
+                            <field name="event_ids" readonly="1">
+                                <list>
+                                    <field name="create_date"/>
+                                    <field name="event_type"/>
+                                    <field name="station_id"/>
+                                    <field name="user_id"/>
+                                    <field name="old_value"/>
+                                    <field name="new_value"/>
+                                    <field name="note"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Notes">
+                            <field name="note"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_kds_order_search" model="ir.ui.view">
+        <field name="type">search</field>
+        <field name="name">kds.order.search</field>
+        <field name="model">kds.order</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="customer_name"/>
+                <field name="station_ids"/>
+                <filter string="Active" name="active_orders" domain="[('state','not in',('completed','cancelled'))]"/>
+                <filter string="Late" name="late" domain="[('sla_status','=','late')]"/>
+                <filter string="Priority/Urgent/VIP" name="priority" domain="[('priority','!=','normal')]"/>
+                <separator/>
+                <filter string="Status" name="group_state" context="{'group_by': 'state'}"/>
+                <filter string="POS" name="group_pos" context="{'group_by': 'pos_config_id'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_kds_order_active" model="ir.actions.act_window">
+        <field name="name">Active Orders</field>
+        <field name="res_model">kds.order</field>
+        <field name="view_mode">list,form</field>
+        <field name="context">{'search_default_active_orders': 1}</field>
+    </record>
+
+    <record id="action_kds_order_history" model="ir.actions.act_window">
+        <field name="name">Order History</field>
+        <field name="res_model">kds.order</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <record id="action_kds_order_analytics" model="ir.actions.act_window">
+        <field name="name">Analytics</field>
+        <field name="res_model">kds.order</field>
+        <field name="view_mode">pivot,graph</field>
+    </record>
+</odoo>

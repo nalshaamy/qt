@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="seq_kds_order" model="ir.sequence">
+        <field name="name">FlexSys KDS Order</field>
+        <field name="code">kds.order</field>
+        <field name="prefix">KDS/%(y)s/</field>
+        <field name="padding">4</field>
+        <field name="company_id" eval="False"/>
+    </record>
+
+    <record id="station_kitchen" model="kds.station">
+        <field name="name">Kitchen</field>
+        <field name="code">KITCHEN</field>
+        <field name="sequence">10</field>
+        <field name="target_prep_time">10</field>
+    </record>
+
+    <record id="station_coffee" model="kds.station">
+        <field name="name">Coffee</field>
+        <field name="code">COFFEE</field>
+        <field name="sequence">20</field>
+        <field name="target_prep_time">4</field>
+    </record>
+
+    <record id="station_bar" model="kds.station">
+        <field name="name">Bar</field>
+        <field name="code">BAR</field>
+        <field name="sequence">30</field>
+        <field name="target_prep_time">5</field>
+    </record>
+
+    <record id="station_packing" model="kds.station">
+        <field name="name">Packing</field>
+        <field name="code">PACKING</field>
+        <field name="sequence">90</field>
+        <!-- REAL BUG FIX (found via a live pilot report): this demo
+             station has had is_expeditor=True since long before the
+             actual Expeditor/Packing workflow feature (v5.1) existed -
+             it was inert, decorative seed data for most of this
+             project's history. The instant that feature went live, this
+             pre-existing flag silently activated the whole
+             Expeditor/Packing flow for every company using the default
+             seed data, without anyone ever deliberately choosing to
+             enable it - orders got stuck at "Ready" forever, waiting on
+             a Packing stage nobody knew existed or was meant to manage.
+             Demo/seed data must never carry a flag whose real-world
+             effect wasn't even defined yet when the data was written -
+             left False now; a pilot that actually wants to use
+             Expeditor/Packing should check this box deliberately,
+             on a station they're actively staffing for it. -->
+        <field name="is_expeditor">False</field>
+        <field name="target_prep_time">3</field>
+    </record>
+
+    <!-- Order type / source tags backing the multi-select routing rule
+         criteria (order_type_ids / source_ids). `code` must stay in sync
+         with the Selection values on kds.order.order_type / .source. -->
+    <record id="order_type_tag_dine_in" model="kds.order.type.tag">
+        <field name="name">Dine In</field>
+        <field name="code">dine_in</field>
+        <field name="sequence">10</field>
+    </record>
+    <record id="order_type_tag_take_away" model="kds.order.type.tag">
+        <field name="name">Take Away</field>
+        <field name="code">take_away</field>
+        <field name="sequence">20</field>
+    </record>
+    <record id="order_type_tag_delivery" model="kds.order.type.tag">
+        <field name="name">Delivery</field>
+        <field name="code">delivery</field>
+        <field name="sequence">30</field>
+    </record>
+    <record id="order_type_tag_pickup" model="kds.order.type.tag">
+        <field name="name">Pickup</field>
+        <field name="code">pickup</field>
+        <field name="sequence">40</field>
+    </record>
+    <record id="order_type_tag_drive_thru" model="kds.order.type.tag">
+        <field name="name">Drive Thru</field>
+        <field name="code">drive_thru</field>
+        <field name="sequence">50</field>
+    </record>
+
+    <record id="order_source_tag_pos" model="kds.order.source.tag">
+        <field name="name">Odoo POS</field>
+        <field name="code">pos</field>
+        <field name="sequence">10</field>
+    </record>
+    <record id="order_source_tag_qr" model="kds.order.source.tag">
+        <field name="name">QR Order</field>
+        <field name="code">qr</field>
+        <field name="sequence">20</field>
+    </record>
+    <record id="order_source_tag_web" model="kds.order.source.tag">
+        <field name="name">Web Order</field>
+        <field name="code">web</field>
+        <field name="sequence">30</field>
+    </record>
+    <record id="order_source_tag_call_center" model="kds.order.source.tag">
+        <field name="name">Call Center</field>
+        <field name="code">call_center</field>
+        <field name="sequence">40</field>
+    </record>
+    <record id="order_source_tag_delivery_app" model="kds.order.source.tag">
+        <field name="name">Delivery Application</field>
+        <field name="code">delivery_app</field>
+        <field name="sequence">50</field>
+    </record>
+    <record id="order_source_tag_api" model="kds.order.source.tag">
+        <field name="name">API</field>
+        <field name="code">api</field>
+        <field name="sequence">60</field>
+    </record>
+    <record id="order_source_tag_flexsys" model="kds.order.source.tag">
+        <field name="name">FlexSys Orders</field>
+        <field name="code">flexsys</field>
+        <field name="sequence">70</field>
+    </record>
+
+    <!-- SLA FRESHNESS FIX (audit finding, HIGH) - see
+         kds_order.py::_cron_refresh_sla_status()'s own docstring for the
+         full rationale. 1-minute interval: frequent enough that the
+         stored sla_status is never more than ~1 minute behind reality
+         for kitchen-timescale SLA thresholds (typically 5-20+ minutes),
+         without hammering the database on every order regardless of
+         whether anything is actually close to a threshold. Revisit the
+         interval if this turns out too coarse/too heavy in practice on a
+         real pilot's order volume. -->
+    <record id="ir_cron_kds_refresh_sla_status" model="ir.cron">
+        <field name="name">FlexSys KDS: Refresh SLA Status</field>
+        <field name="model_id" ref="model_kds_order"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_refresh_sla_status()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">minutes</field>
+        <field name="active">True</field>
+    </record>
+
+    <!-- Safety net for orders stuck at New/Accepted/Preparing despite
+         every line genuinely being Ready - found via a live pilot
+         report, see kds_order.py::_cron_reconcile_stuck_orders()'s own
+         docstring for the full rationale. Same 1-minute interval as the
+         SLA refresh cron above - frequent enough that a stuck order
+         self-corrects within a couple of minutes, without adding
+         meaningful load (the search itself only touches non-terminal
+         orders, and the actual push-through only fires for the rare
+         case that's actually stuck). -->
+    <record id="ir_cron_kds_reconcile_stuck_orders" model="ir.cron">
+        <field name="name">FlexSys KDS: Reconcile Stuck Orders</field>
+        <field name="model_id" ref="model_kds_order"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_reconcile_stuck_orders()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">minutes</field>
+        <field name="active">True</field>
+    </record>
+</odoo>
