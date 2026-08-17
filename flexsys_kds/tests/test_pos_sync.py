@@ -2492,3 +2492,400 @@ class TestPosSync(FlexSysKdsTestCommon):
         line.invalidate_recordset()
         self.assertEqual(line.qty_delta, -1)
         self.assertEqual(line.state, 'preparing')
+
+    # -----------------------------------------------------------------
+    # Dev report "BUG FIX REQUEST - KDS Full Line Removal / Quantity ->
+    # 0": full line removal (the POS line itself deleted, not just its
+    # own qty written to 0) used to leave orphaned active kds.order.line
+    # records invisible to reconciliation - specifically when MORE than
+    # one active line shared the same pos_order_line_id (an original
+    # completed line plus a delta line from an earlier increase), only
+    # one of the two was ever detected as removed.
+    # -----------------------------------------------------------------
+    def test_full_line_removal_after_delta_line_created_cancels_both_completed_lines(self):
+        """The dev report's own exact Acceptance Test, end to end:
+        5 -> Send -> Complete -> 4 (UPDATED -1, no new prep) -> 6
+        (preserve 4 completed + create 2 new work) -> Complete the +2 ->
+        0 (full line removal). Both the original (now 4, Completed) and
+        the delta (now 2, Completed) kds.order.line records must be
+        detected and cancelled - the exact scenario the old dict-based
+        `existing.items()` removal loop silently missed one of."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+        line.action_complete()
+        self.assertEqual(line.state, 'completed')
+
+        # 5 -> 4: UPDATED (-1), no new preparation.
+        order.lines.write({'qty': 4})
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 4)
+        self.assertEqual(line.qty_delta, -1)
+        self.assertEqual(line.state, 'completed', "Reduced qty stays Completed (POS still active).")
+
+        # 4 -> 6: preserve the completed 4, create 2 as new work.
+        order.lines.write({'qty': 6})
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 3}}'})
+        kds_order.invalidate_recordset()
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 4, "The original completed quantity is preserved untouched.")
+        self.assertEqual(line.state, 'completed')
+        delta_line = kds_order.line_ids - line
+        self.assertEqual(len(delta_line), 1)
+        self.assertEqual(delta_line.qty, 2)
+        self.assertEqual(delta_line.state, 'new')
+
+        # Complete the additional 2.
+        delta_line.action_accept()
+        delta_line.action_start()
+        delta_line.action_ready()
+        delta_line.action_complete()
+        self.assertEqual(delta_line.state, 'completed')
+        # Now TWO separate active kds.order.line records share the SAME
+        # pos_order_line_id - both Completed: the original (qty 4) and
+        # the delta (qty 2) - exactly the scenario the old dict-based
+        # removal loop could only ever see ONE of.
+
+        # 6 -> 0: POS removes the order line entirely (not qty=0 - the
+        # actual line record itself disappears from the order, matching
+        # "the POS removes the order line from the current order data").
+        pos_line = order.lines
+        events_before = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+        pos_line.unlink()
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 4}}'})
+
+        kds_order.invalidate_recordset()
+        line.invalidate_recordset()
+        delta_line.invalidate_recordset()
+        self.assertEqual(
+            line.state, 'cancelled',
+            "The original line (qty 4) must be detected and cancelled - not left "
+            "invisibly active just because the delta line also shares its pos_order_line_id.")
+        self.assertEqual(
+            delta_line.state, 'cancelled',
+            "The delta line (qty 2) must ALSO be detected and cancelled - this is "
+            "exactly the second line the old dict-based loop silently missed.")
+        self.assertEqual(line.qty, 4, "Historical quantity preserved, not rewritten to 0 or negative.")
+        self.assertEqual(delta_line.qty, 2, "Historical quantity preserved.")
+        self.assertGreaterEqual(line.qty + delta_line.qty, 6, "No negative work item - the full "
+                                 "previously-completed 6 remains visible as cancelled history.")
+
+        self.assertEqual(
+            kds_order.state, 'completed',
+            "Do NOT reopen the order to PREPARING merely because of the cancellation - "
+            "it stays exactly where it was, now with everything cancelled.")
+
+        events_after = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+        self.assertGreater(events_after, events_before,
+                            "An audit event representing the full removal must be recorded.")
+        consolidated_event = self.env['kds.event'].search([
+            ('order_id', '=', kds_order.id), ('event_type', '=', 'line_removed'),
+            ('note', 'like', '%cancelled_qty: 6%'),
+        ])
+        self.assertTrue(
+            consolidated_event,
+            "A consolidated audit event summarizing the TOTAL cancelled quantity (4 + 2 = "
+            "6) across both lines must be recorded - 'quantity: 6 -> 0, cancelled_qty: 6'.")
+
+    def test_full_line_removal_reconciliation_is_idempotent(self):
+        """Repeated sync/polling must NOT create duplicate cancellation
+        events or re-process an already-cancelled line."""
+        order = self._create_active_pos_order([(self.product_burger, 3)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+        line.action_complete()
+
+        pos_line = order.lines
+        pos_line.unlink()
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+
+        line.invalidate_recordset()
+        self.assertEqual(line.state, 'cancelled')
+        first_cancelled_at = line.cancelled_at
+        events_after_first = self.env['kds.event'].search_count([
+            ('order_id', '=', kds_order.id), ('event_type', '=', 'line_removed'),
+        ])
+        self.assertGreaterEqual(events_after_first, 1)
+
+        # Simulate repeated polling: run the reconciliation again
+        # directly (matching a duplicate webhook/poll/retry).
+        order.sudo()._flexsys_kds_diff_lines()
+        order.sudo()._flexsys_kds_diff_lines()
+
+        line.invalidate_recordset()
+        events_after_repeat = self.env['kds.event'].search_count([
+            ('order_id', '=', kds_order.id), ('event_type', '=', 'line_removed'),
+        ])
+        self.assertEqual(line.state, 'cancelled')
+        self.assertEqual(line.cancelled_at, first_cancelled_at,
+                          "Re-running reconciliation must not touch an already-cancelled line again.")
+        self.assertEqual(
+            events_after_repeat, events_after_first,
+            "Repeated reconciliation must not create duplicate cancellation events.")
+
+    def test_full_line_removal_does_not_create_negative_qty_line(self):
+        order = self._create_active_pos_order([(self.product_burger, 6)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+        line.action_complete()
+
+        order.lines.unlink()
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+
+        kds_order.invalidate_recordset()
+        for kline in kds_order.line_ids:
+            self.assertGreaterEqual(kline.qty, 0, "No line's own quantity may ever go negative.")
+        self.assertFalse(
+            kds_order.line_ids.filtered(lambda l: l.qty < 0),
+            "Do not create a negative work item such as -6 x FLAT WHITE.")
+
+    def test_simple_full_line_removal_still_works_no_delta_complexity(self):
+        """Baseline regression guard: the simple single-kline-per-
+        pos_order_line_id removal case (already covered by other tests
+        in this file) must remain completely unaffected by the group-by
+        rewrite."""
+        order = self._create_active_pos_order([(self.product_burger, 1), (self.product_cappuccino, 1)])
+        kds_order = order.kds_order_id
+        kds_order.line_ids.action_accept()
+        kds_order.line_ids.action_start()
+        cappuccino_pos_line = order.lines.filtered(lambda l: l.product_id == self.product_cappuccino)
+
+        cappuccino_pos_line.unlink()
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+
+        kds_order.invalidate_recordset()
+        cappuccino_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        burger_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_burger)
+        self.assertEqual(cappuccino_line.state, 'cancelled')
+        self.assertEqual(burger_line.state, 'preparing', "The untouched product remains unaffected.")
+
+    # -----------------------------------------------------------------
+    # Dev report "BUG FIX REQUEST - Retention Must Follow POS Order
+    # Lifecycle": extends BUG-14's own pos_closed_at gating (which only
+    # covered Completed) to Cancelled lines too. Required Acceptance
+    # Tests 1-5.
+    # -----------------------------------------------------------------
+    def _display_visible(self, kline, kds_order, pos_closed_cutoff, cancelled_cutoff):
+        """Python port of both controllers' own display_lines filter -
+        kept deliberately in lockstep with controllers/kds.py and
+        controllers/kds_kiosk.py, including the pos_order_id-gated
+        fallback for a ticket with no linked POS order at all (which
+        must keep expiring from its own completed_at/cancelled_at
+        directly, never gaining an unintended "never expires" behavior
+        just because pos_closed_at itself is unset)."""
+        if kline.state not in ('completed', 'cancelled'):
+            return True
+        if kline.state == 'completed':
+            if kds_order.pos_order_id:
+                return not kds_order.pos_closed_at or kds_order.pos_closed_at >= pos_closed_cutoff
+            return bool(kline.completed_at and kline.completed_at >= pos_closed_cutoff)
+        if kds_order.pos_order_id:
+            return not kds_order.pos_closed_at or kds_order.pos_closed_at >= cancelled_cutoff
+        return bool(kline.cancelled_at and kline.cancelled_at >= cancelled_cutoff)
+
+    def test_retention_test1_completed_pos_active_never_expires(self):
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+        line.action_complete()
+        self.assertFalse(kds_order.pos_closed_at)
+        line.sudo().write({'completed_at': fields.Datetime.now() - timedelta(minutes=60)})
+
+        pos_closed_cutoff = fields.Datetime.now() - timedelta(minutes=5)
+        cancelled_cutoff = fields.Datetime.now() - timedelta(minutes=5)
+        self.assertTrue(
+            self._display_visible(line, kds_order, pos_closed_cutoff, cancelled_cutoff),
+            "A Completed ticket whose POS order is still active must remain visible "
+            "indefinitely - no auto-hide while POS is active.")
+
+    def test_retention_test2_completed_pos_closed_expires_from_closure(self):
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+        line.action_complete()
+        line.sudo().write({'completed_at': fields.Datetime.now() - timedelta(minutes=60)})
+
+        order.write({'state': 'paid', 'amount_paid': order.amount_total})
+        kds_order.invalidate_recordset()
+        self.assertTrue(kds_order.pos_closed_at, "POS closure must be recorded.")
+
+        pos_closed_cutoff = fields.Datetime.now() - timedelta(minutes=5)
+        cancelled_cutoff = fields.Datetime.now() - timedelta(minutes=5)
+        self.assertTrue(
+            self._display_visible(line, kds_order, pos_closed_cutoff, cancelled_cutoff),
+            "Immediately after closure, still within the grace window.")
+        # Simulate the grace period having elapsed since closure.
+        kds_order.pos_closed_at = fields.Datetime.now() - timedelta(minutes=10)
+        self.assertFalse(
+            self._display_visible(line, kds_order, pos_closed_cutoff, cancelled_cutoff),
+            "Ticket disappears only after pos_closed_at + retention has elapsed.")
+
+    def test_retention_test3_cancelled_pos_active_never_expires(self):
+        """The dev report's own exact confirmed runtime scenario: qty
+        1 -> 0, POS order not paid/finalized/closed, wait beyond
+        retention - the ticket must NOT disappear."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+
+        order.lines.write({'qty': 0})
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+
+        line.invalidate_recordset()
+        self.assertEqual(line.state, 'cancelled')
+        self.assertFalse(kds_order.pos_closed_at, "POS order was never paid/finalized/closed.")
+        line.sudo().write({'cancelled_at': fields.Datetime.now() - timedelta(minutes=60)})
+
+        pos_closed_cutoff = fields.Datetime.now() - timedelta(minutes=5)
+        cancelled_cutoff = fields.Datetime.now() - timedelta(minutes=5)
+        self.assertTrue(
+            self._display_visible(line, kds_order, pos_closed_cutoff, cancelled_cutoff),
+            "A Cancelled ticket whose POS order is still active must remain visible - "
+            "it must NOT disappear while POS is still active, regardless of how long "
+            "ago the cancellation itself happened.")
+
+    def test_retention_test4_cancelled_pos_closed_expires_from_closure(self):
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+
+        order.lines.write({'qty': 0})
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        line.invalidate_recordset()
+        self.assertEqual(line.state, 'cancelled')
+        line.sudo().write({'cancelled_at': fields.Datetime.now() - timedelta(minutes=60)})
+
+        order.write({'state': 'paid', 'amount_paid': 0.0})
+        kds_order.invalidate_recordset()
+        self.assertTrue(kds_order.pos_closed_at, "Closing the POS order must record its closure.")
+
+        pos_closed_cutoff = fields.Datetime.now() - timedelta(minutes=5)
+        cancelled_cutoff = fields.Datetime.now() - timedelta(minutes=5)
+        self.assertTrue(
+            self._display_visible(line, kds_order, pos_closed_cutoff, cancelled_cutoff),
+            "Immediately after closure, still within the grace window.")
+        kds_order.pos_closed_at = fields.Datetime.now() - timedelta(minutes=10)
+        self.assertFalse(
+            self._display_visible(line, kds_order, pos_closed_cutoff, cancelled_cutoff),
+            "Ticket disappears only after the configured retention period past closure.")
+
+    def test_retention_test5_reopen_after_cancelled_while_pos_active(self):
+        """The existing KDS order lifecycle must be reconciled/reopened
+        correctly when a new product is added to the same still-active
+        POS order, even after the ticket became fully Cancelled and
+        even after waiting beyond the normal retention duration - the
+        order record itself must never have been lost."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        kds_order_id_value = kds_order.id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+
+        order.lines.write({'qty': 0})
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        line.invalidate_recordset()
+        self.assertEqual(line.state, 'cancelled')
+        self.assertFalse(kds_order.pos_closed_at)
+        # Wait beyond normal retention duration (simulated by backdating).
+        line.sudo().write({'cancelled_at': fields.Datetime.now() - timedelta(minutes=60)})
+
+        # Confirm the record itself was never lost/deleted.
+        self.assertTrue(
+            self.env['kds.order'].browse(kds_order_id_value).exists(),
+            "The kds.order record itself must never be deleted merely due to retention "
+            "elapsing while the POS order stays active.")
+
+        # Add a new product to the same still-active POS order.
+        self.env['pos.order.line'].create({
+            'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 1,
+            'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
+        })
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 3}}'})
+
+        kds_order.invalidate_recordset()
+        self.assertEqual(
+            kds_order.id, kds_order_id_value,
+            "The SAME kds.order must be reused - not a new, duplicate ticket.")
+        new_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        self.assertTrue(new_line, "The new product must be added to the existing order's own lifecycle.")
+        self.assertEqual(new_line.state, 'new')
+
+    def test_pos_closed_at_gates_both_completed_and_cancelled_consistently(self):
+        """Confirmation: BOTH terminal states use pos_closed_at through
+        the exact same gating logic, not two different mechanisms."""
+        order = self._create_active_pos_order([(self.product_burger, 1), (self.product_cappuccino, 1)])
+        kds_order = order.kds_order_id
+        burger_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_burger)
+        coffee_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        burger_line.action_accept()
+        burger_line.action_start()
+        burger_line.action_ready()
+        burger_line.action_complete()
+        coffee_line.action_accept()
+        coffee_line.action_start()
+        coffee_pos_line = order.lines.filtered(lambda l: l.product_id == self.product_cappuccino)
+        coffee_pos_line.unlink()
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+
+        kds_order.invalidate_recordset()
+        burger_line.invalidate_recordset()
+        coffee_line.invalidate_recordset()
+        self.assertEqual(burger_line.state, 'completed')
+        self.assertEqual(coffee_line.state, 'cancelled')
+        self.assertFalse(kds_order.pos_closed_at, "Neither terminal line has a closed POS order yet.")
+
+        pos_closed_cutoff = fields.Datetime.now() - timedelta(minutes=5)
+        cancelled_cutoff = fields.Datetime.now() - timedelta(minutes=5)
+        self.assertTrue(self._display_visible(burger_line, kds_order, pos_closed_cutoff, cancelled_cutoff))
+        self.assertTrue(self._display_visible(coffee_line, kds_order, pos_closed_cutoff, cancelled_cutoff))
+
+    def test_no_pos_linkage_falls_back_to_direct_expiry_never_expires_would_be_wrong(self):
+        """REAL BUG FIX, found via this module's own review while
+        implementing "Retention Must Follow POS Order Lifecycle": a
+        kds.order with no linked POS order at all (pos_order_id unset -
+        created directly, outside any POS flow) must NOT gain an
+        unintended "never expires" behavior just because pos_closed_at
+        is also, necessarily, always unset for it. It must keep expiring
+        from its own cancelled_at/completed_at directly, exactly as
+        before this whole round of fixes."""
+        order = self._make_order([(self.product_burger, 1)])
+        self._route_line_to_station(order.line_ids, self.station_kitchen)
+        line = order.line_ids
+        self.assertFalse(order.pos_order_id, "This order has no POS linkage at all.")
+        line.with_user(self.admin).action_accept()
+        line.with_user(self.admin).action_start()
+        line.with_user(self.admin).action_cancel(reason='test')
+        self.assertEqual(line.state, 'cancelled')
+        line.sudo().write({'cancelled_at': fields.Datetime.now() - timedelta(minutes=20)})
+
+        cancelled_cutoff = fields.Datetime.now() - timedelta(minutes=5)
+        pos_closed_cutoff = fields.Datetime.now() - timedelta(minutes=5)
+        self.assertFalse(
+            self._display_visible(line, order, pos_closed_cutoff, cancelled_cutoff),
+            "A ticket with NO linked POS order must still expire normally from its own "
+            "cancelled_at - the POS-lifecycle retention rule only applies to a ticket "
+            "genuinely waiting on a linked POS order's own closure, never to one with no "
+            "POS order to wait on in the first place.")

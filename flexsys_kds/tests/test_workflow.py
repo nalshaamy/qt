@@ -671,6 +671,18 @@ class TestWorkflow(FlexSysKdsTestCommon):
             "the KDS screens' own query domain.")
 
     def test_grace_period_domain_excludes_line_cancelled_outside_the_window(self):
+        # STILL CORRECT, confirmed by explicit re-review ("Retention
+        # Must Follow POS Order Lifecycle"): order.pos_closed_at now
+        # gates a Cancelled line's own retention too (see both
+        # controllers' own search domain) - but only for a ticket that
+        # actually has a linked POS order at all
+        # (order_id.pos_order_id). self._order() below creates a
+        # kds.order with no POS linkage whatsoever, so it correctly
+        # falls back to expiring from its own cancelled_at directly,
+        # exactly as this test already asserts - this scenario is
+        # untouched by the new POS-lifecycle rule, which only applies to
+        # a ticket genuinely waiting on a linked POS order's own
+        # closure.
         from datetime import timedelta
         from odoo.fields import Datetime
         order = self._order()
@@ -876,6 +888,11 @@ class TestWorkflow(FlexSysKdsTestCommon):
             "list within the grace window - never silently disappear.")
 
     def test_cancelled_line_payload_filter_excludes_expired_cancellation(self):
+        # STILL CORRECT, confirmed by explicit re-review - see
+        # test_grace_period_domain_excludes_line_cancelled_outside_the_
+        # window's own matching comment just above: self._order() has no
+        # linked POS order, so this correctly still expires from its own
+        # cancelled_at directly.
         from datetime import timedelta
         from odoo.fields import Datetime
         order = self._order()

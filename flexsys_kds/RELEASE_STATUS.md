@@ -1,18 +1,18 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.8.0**
+**Version: 19.0.7.9.0**
 **Status as of this document: code-complete, including everything
-through v7.7.4 (see CHANGELOG.md for the full history), plus this
-round's major architectural fixes: BUG-12 (READY partial-decrease
-reconciliation, investigated and confirmed already correct), BUG-13
-(COMPLETED lines now reconcile quantity changes while the linked POS
-order remains active/open - a genuine, explicit business-rule change
-from every earlier round's "Completed is always frozen" principle),
-and BUG-14 (COMPLETED retention now anchored to POS order closure, not
-kitchen-side completion - new `pos_closed_at` field and database
-migration). 268 automated tests, all `py_compile`/XML/JS checks
-passing, plus a custom AST-based undefined-name sweep across every file
-changed this round. Not yet signed off on a live instance — see "What
+through v7.8.1 (see CHANGELOG.md for the full history), plus this
+round's fix: "Retention Must Follow POS Order Lifecycle" - extends
+v7.8.0's own `pos_closed_at` gating (which only covered Completed) to
+Cancelled tickets too, plus a second, real gap found via this module's
+own test review (not from any report): the original gate treated "no
+linked POS order at all" identically to "linked POS order still
+active" - both fixed now, with an explicit fallback to the original
+direct-timestamp expiry for a ticket with no POS order to wait on in
+the first place. 279 automated tests, all `py_compile`/XML/JS checks
+passing, plus a custom AST-based undefined-name sweep on every file
+this round touched. Not yet signed off on a live instance — see "What
 still needs a human" at the end.**
 
 
@@ -506,6 +506,65 @@ round's own architectural change. Pay particular attention to Test 7/8
 test can only simulate by backdating timestamps directly, not by
 actually waiting.
 
+## KDS Full Line Removal / Quantity -> 0: multi-line removal detection gap
+**Confirmed live**: the removal-detection loop in
+`_flexsys_kds_diff_lines()` used a dict keyed by `pos_order_line_id`
+with "last write wins" semantics - correct for its OTHER purpose
+(forward-matching future diffs), but silently able to hold only ONE
+value per key. A `pos_order_line_id` with two simultaneously-active
+`kds.order.line` records (an original Completed line plus a delta line
+from an earlier increase) meant only one of the two was ever detected
+as removed when the POS line itself was deleted - the other stayed
+invisibly active forever.
+
+Fixed by replacing the dict with a proper one-to-many grouping,
+processing every active line sharing a now-missing
+`pos_order_line_id`, not just the last one a dict happened to retain.
+A new consolidated audit event now also logs the TOTAL cancelled
+quantity per removed POS line (e.g. "quantity: 6 -> 0, cancelled_qty:
+6"), in addition to each individual line's own existing cancellation
+event.
+
+**What still needs a human**: the dev report's own full Acceptance
+Test (steps 1-9) run against a real Odoo.sh staging instance -
+specifically confirming the exact frontend behavior when a cashier
+reduces a quantity to 0 in the POS cart (whether this reaches the
+backend as an explicit line deletion, which this fix's own test suite
+exercises directly, or via some other mechanism this delivery could not
+observe without live access).
+
+## Retention Must Follow POS Order Lifecycle: extends pos_closed_at to CANCELLED too
+**Confirmed live**: a Cancelled ticket (POS qty 1 -> 0, order never
+paid/finalized/closed) disappeared after the ordinary retention window,
+even though its linked POS order was still active - extending BUG-14
+(v7.8.0), which only gated Completed-line retention on `pos_closed_at`,
+to Cancelled tickets too. Both controllers' search domain and
+`display_lines` Python filter now apply the identical gate to
+`cancelled_at` that `completed_at` already had.
+
+**A second, real gap found via this module's own test review, not from
+any report**: the original gate treated "no linked POS order at all"
+(`pos_order_id` unset - a `kds.order` created directly, outside any POS
+flow) identically to "linked POS order still active" - both read
+`pos_closed_at` as `False`, which would have given a non-POS ticket an
+unintended "never expires" behavior it was never supposed to have.
+Found by reviewing whether two existing `test_workflow.py` tests
+(covering a non-POS-linked order) were still *logically* correct, not
+just still passing - they asserted the old, direct-`cancelled_at`
+expiry, which turned out to still be exactly right for that specific
+scenario, but only once the gate was corrected to condition on
+`pos_order_id` being set at all. Both controllers now fall back to the
+original direct-timestamp comparison for a ticket with no POS order to
+wait on in the first place.
+
+**What still needs a human**: the dev report's own 5 Required
+Acceptance Tests, run against a real Odoo.sh staging instance -
+particularly Test 5 (reopening after Cancelled while POS stays active),
+since this delivery's own test suite confirms the same `kds.order`
+record is reused at the model level but cannot substitute for
+confirming both KDS screens correctly display the reopened ticket in
+real time.
+
 ---
 
 ## What still needs a human
@@ -769,7 +828,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 268 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 279 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

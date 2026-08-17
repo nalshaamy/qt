@@ -8,6 +8,135 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.9.0 — Retention Must Follow POS Order Lifecycle: extends pos_closed_at to CANCELLED too
+
+**Confirmed live**: a Cancelled ticket (POS qty 1 -> 0, order never
+paid/finalized/closed) disappeared after the ordinary retention window
+elapsed, even though its linked POS order was still active - "this rule
+applies regardless of the current KDS terminal state, including
+COMPLETED [and] CANCELLED," extending BUG-14 (v7.8.0), which only
+covered the Completed side.
+
+### Root cause
+BUG-14 introduced `pos_closed_at` and correctly gated Completed-line
+retention with it, but the Cancelled branch in both controllers' own
+retention query was left using `cancelled_at` directly and
+unconditionally - the exact same class of gap BUG-14 already fixed for
+Completed, just not yet applied to Cancelled.
+
+### Fix
+Both controllers' search domain and `display_lines` Python filter now
+gate `cancelled_at` with `order_id.pos_closed_at` exactly the same way
+`completed_at` already is - unset means unconditional visibility,
+regardless of how long ago the cancellation itself happened.
+
+### A second, real gap found via this module's own test review, not by any report
+The initial `pos_closed_at` gate (`not o.pos_closed_at or ...`) treated
+"no linked POS order at all" (`pos_order_id` unset - a `kds.order`
+created directly, outside any POS flow) identically to "linked POS
+order still active" - both read `pos_closed_at` as `False`. That's
+wrong: a ticket with no POS order to wait on in the first place has no
+business gaining a "never expires" behavior; it must keep expiring from
+its own `completed_at`/`cancelled_at` directly, exactly as before this
+entire retention-rework effort. Found because two existing tests in
+`test_workflow.py` (using a non-POS-linked `kds.order`) asserted the
+**old** expiry behavior directly - reviewing whether they were still
+*logically* correct (not just still passing) surfaced this distinction
+before it shipped. Both controllers' retention logic now conditions
+every `completed_at`/`cancelled_at` check on `order_id.pos_order_id`
+being set at all, falling back to the direct-timestamp comparison
+otherwise.
+
+### Tests
+7 new tests in `test_pos_sync.py` covering the dev report's own 5
+Required Acceptance Tests (Completed/Cancelled x POS-active/POS-closed,
+plus reopening after Cancelled while POS stays active - confirming the
+same `kds.order` record is reused, never lost or duplicated), a
+consistency check that both terminal states use the identical gating
+mechanism, and an explicit test for the no-POS-linkage fallback found
+above. Two existing `test_workflow.py` tests were reviewed and
+confirmed still correct as-is (their own non-POS-linked scenario is
+exactly the case that must keep the old direct-expiry behavior) -
+annotated with a comment explaining why, rather than left unexplained.
+
+**Total: 279 tests** (up from 272). No database migration required -
+`pos_closed_at` itself was already introduced in v7.8.0's own migration.
+
+---
+
+## v7.8.1 — KDS Full Line Removal / Quantity -> 0: multi-line removal detection gap
+
+**Confirmed live**: 5 -> Send -> Complete -> 4 (correct) -> 6 (correct,
+creates a delta line for +2) -> complete the +2 -> 0 (POS removes the
+line entirely). KDS kept showing BOTH "4 x FLAT WHITE" and
+"2 x FLAT WHITE" - the removal was never detected at all.
+
+### Root cause
+`_flexsys_kds_diff_lines()`'s own removal-detection loop iterated
+`existing.items()` - but `existing` is a **dict** keyed by
+`pos_order_line_id`, built with "last write wins" semantics
+(deliberately correct for its OTHER purpose - forward-matching future
+diffs against the most recently active line). This exact scenario -
+an original Completed line plus a delta line from an earlier increase,
+**both simultaneously active and sharing the same
+`pos_order_line_id`** - is precisely the case a dict can't represent:
+only the last of the two ever survived in `existing` at all. The other
+was completely invisible to the removal loop, silently never
+cancelled, no matter how many times sync ran.
+
+### Fix
+Replaced the dict-based removal loop with a proper one-to-many grouping
+(`active_lines_by_pos_line`, a plain `dict` of `id -> list`) built from
+every currently-active `kds.order.line`, not just the one `existing`
+happened to retain. Every line sharing a now-missing
+`pos_order_line_id` is found and cancelled together, each through the
+correct state-appropriate path (`action_cancel()` for a still-active
+line, `_system_cancel_after_completion()` for one already Completed -
+matching the existing per-state handling exactly). Neither path ever
+creates a new production line or a negative quantity - both lines'
+own historical quantities (4 and 2) remain visible as cancelled
+history, summing honestly to the original 6.
+
+**New**: one additional, consolidated audit event is now logged per
+removed POS line, summarizing the *total* cancelled quantity across
+every one of its own `kds.order.line` records together -
+`"<product> fully removed from POS order (quantity: 6 -> 0,
+cancelled_qty: 6)"` - satisfying the dev report's own explicit
+requirement for a single legible total, in addition to (not instead
+of) each individual line's own existing cancellation event.
+
+Does not reopen the order to PREPARING merely because of the
+cancellation - `is_expeditor_ready` already excludes cancelled lines by
+construction, so an order whose every line just became cancelled
+together correctly stays exactly where it was.
+
+**Idempotent by construction**, not by extra bookkeeping: once
+cancelled, a line permanently satisfies `state != 'cancelled'` as
+`False`, so it's simply absent from `active_lines_by_pos_line` on every
+subsequent poll/sync - nothing can re-cancel the same line or log the
+same event twice.
+
+Left the existing `pending_removal` mechanism (redesigned in v7.7.1,
+triggered by `pos.order.line.unlink()`) fully in place and unchanged -
+it already correctly handles the multi-line case too (a recordset
+filter, not a dict), providing defense in depth alongside this fix
+regardless of which exact path a given POS sync takes to signal a
+line's removal.
+
+### Tests
+4 new tests: the dev report's own full Acceptance Test scenario end to
+end (both the original and delta lines correctly detected and
+cancelled, the consolidated audit event, no reopening), explicit
+idempotency (repeated reconciliation produces no duplicate
+cancellation or event), confirming no line's own quantity ever goes
+negative, and a baseline regression guard confirming the simple
+single-line-per-`pos_order_line_id` removal case (already covered
+elsewhere in this suite) remains completely unaffected by the rewrite.
+
+**Total: 272 tests** (up from 268). No database migration required.
+
+---
+
 ## v7.8.0 — BUG-12 + BUG-13 + BUG-14: COMPLETED/READY reconciliation, POS-active retention
 
 Major architectural round addressing the client's own explicit

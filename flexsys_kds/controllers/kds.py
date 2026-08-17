@@ -233,33 +233,59 @@ class FlexSysKdsController(http.Controller):
         # exactly like a single-station order's completed line always
         # has - completion elsewhere on the order no longer keeps a
         # finished station's own card alive indefinitely.
-        #
-        # REAL BUG FIX ("BUG-14 - COMPLETED Retention Must Depend on POS
-        # Closure"), confirmed live as an explicit new business rule,
-        # superseding the completed_at-based check above: "if KDS starts
-        # the retention timer immediately when the KDS ticket reaches
-        # COMPLETED, the ticket may disappear while the corresponding
-        # POS order is still active. That is operationally unsafe." The
-        # cutoff for a completed line is now computed against
-        # order_id.pos_closed_at (kds_order.py - stamped the moment the
-        # linked POS order's own state is observed transitioning to a
-        # closed state), not completed_at - and a completed line whose
-        # order hasn't closed at all (pos_closed_at still False) is
-        # always shown, with no grace-period check applied whatsoever -
-        # "the ticket must remain visible under COMPLETED regardless of
-        # how long it remains open... no KDS completion timeout may hide
-        # it." Only once the POS order genuinely closes does the exact
-        # same 5-minute grace window begin, now correctly anchored to
-        # that closure moment instead of to kitchen-side completion.
+        # REAL BUG FIX ("Retention Must Follow POS Order Lifecycle"),
+        # confirmed live as an explicit new business rule, extending
+        # BUG-14's own principle (which only fixed the Completed side)
+        # to Cancelled too: "A KDS ticket linked to an ACTIVE/OPEN POS
+        # order must NEVER be removed from the live KDS by the retention
+        # timer. This rule applies regardless of the current KDS
+        # terminal state, including COMPLETED [and] CANCELLED." The
+        # confirmed runtime scenario: a Cancelled ticket (POS quantity
+        # 1 -> 0, order still active/unpaid) disappeared after the
+        # ordinary cancelled_at-based grace window, even though the POS
+        # order itself was never closed - "if the cashier later adds
+        # another item to the same active POS order, the same KDS order/
+        # ticket lifecycle must still be available for reconciliation/
+        # reopen," which a prematurely-vanished ticket makes impossible.
+        # cancelled_at is now gated by order_id.pos_closed_at exactly the
+        # same way completed_at already is just above - unset means
+        # unconditional visibility, regardless of how long ago the
+        # cancellation itself happened.
         pos_closed_cutoff = fields.Datetime.now() - timedelta(minutes=COMPLETED_GRACE_MINUTES)
         cancelled_cutoff = fields.Datetime.now() - timedelta(minutes=CANCELLED_GRACE_MINUTES)
+        # REAL BUG FIX (found via this module's own review while
+        # implementing "Retention Must Follow POS Order Lifecycle" -
+        # caught by an existing test whose own assertion turned out to
+        # encode exactly the OLD, now-incorrect behavior, not by any
+        # report): the pos_closed_at gate as first written treated "no
+        # linked POS order at all" (order_id.pos_order_id unset -
+        # entirely possible for a kds.order created directly, outside
+        # any POS flow) identically to "linked POS order still active" -
+        # both read pos_closed_at as False, so a non-POS ticket would
+        # have gained the exact same "never expires" behavior a POS
+        # ticket correctly gets while genuinely open. That's wrong: the
+        # dev report's own rule is specifically about a ticket "linked
+        # to an ACTIVE/OPEN POS order" - it has no bearing on a ticket
+        # with no POS order to wait on in the first place, which must
+        # keep expiring the original way (its own completed_at/
+        # cancelled_at directly). Every completed_at/cancelled_at
+        # comparison below is therefore now itself conditioned on
+        # order_id.pos_order_id being set, not just on pos_closed_at's
+        # own value.
         lines = request.env['kds.order.line'].search([
             ('station_id', '=', station.id),
             '|', '|',
                 ('state', 'not in', ('completed', 'cancelled')),
                 '&', ('state', '=', 'completed'),
-                    '|', ('order_id.pos_closed_at', '=', False), ('order_id.pos_closed_at', '>=', pos_closed_cutoff),
-                '&', ('state', '=', 'cancelled'), ('cancelled_at', '>=', cancelled_cutoff),
+                    '|',
+                        '&', ('order_id.pos_order_id', '!=', False),
+                            '|', ('order_id.pos_closed_at', '=', False), ('order_id.pos_closed_at', '>=', pos_closed_cutoff),
+                        '&', ('order_id.pos_order_id', '=', False), ('completed_at', '>=', pos_closed_cutoff),
+                '&', ('state', '=', 'cancelled'),
+                    '|',
+                        '&', ('order_id.pos_order_id', '!=', False),
+                            '|', ('order_id.pos_closed_at', '=', False), ('order_id.pos_closed_at', '>=', cancelled_cutoff),
+                        '&', ('order_id.pos_order_id', '=', False), ('cancelled_at', '>=', cancelled_cutoff),
         ])
         orders = lines.mapped('order_id').sorted(
             key=lambda o: (o.priority != 'vip', o.priority != 'urgent',
@@ -299,11 +325,28 @@ class FlexSysKdsController(http.Controller):
             # order.pos_closed_at (not completed_at) anchors a completed
             # line's own grace check, and an order whose POS side hasn't
             # closed at all is unconditionally kept.
+            #
+            # REAL BUG FIX ("Retention Must Follow POS Order Lifecycle"):
+            # mirrors the search domain's own change above for Cancelled
+            # too - order.pos_closed_at gates cancelled_at exactly the
+            # same way it already gates completed_at, so a Cancelled
+            # line's own retention now also depends on POS closure, not
+            # purely on how long ago the cancellation itself occurred.
+            # Also mirrors the search domain's own pos_order_id branch -
+            # a ticket with no linked POS order at all falls back to the
+            # original completed_at/cancelled_at expiry directly, never
+            # gaining an unintended "never expires" behavior.
             display_lines = order.line_ids.filtered(
                 lambda l, sid=station.id, cc=cancelled_cutoff, pcc=pos_closed_cutoff, o=order: l.station_id.id == sid and (
                     (l.state not in ('completed', 'cancelled'))
-                    or (l.state == 'completed' and (not o.pos_closed_at or o.pos_closed_at >= pcc))
-                    or (l.state == 'cancelled' and l.cancelled_at and l.cancelled_at >= cc)
+                    or (l.state == 'completed' and (
+                        (o.pos_order_id and (not o.pos_closed_at or o.pos_closed_at >= pcc))
+                        or (not o.pos_order_id and l.completed_at and l.completed_at >= pcc)
+                    ))
+                    or (l.state == 'cancelled' and (
+                        (o.pos_order_id and (not o.pos_closed_at or o.pos_closed_at >= cc))
+                        or (not o.pos_order_id and l.cancelled_at and l.cancelled_at >= cc)
+                    ))
                 ))
             if not display_lines:
                 continue

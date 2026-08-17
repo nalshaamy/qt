@@ -963,24 +963,79 @@ class PosOrder(models.Model):
                     kds_order, event_type='line_added', station=kline.station_id,
                     note=_("%s added after order was sent") % kline.product_name)
 
-        for pos_line_id, kline in existing.items():
-            if pos_line_id not in current_ids and kline.state not in ('cancelled', 'completed'):
-                kline.action_cancel(reason=_('Removed from POS order after send'), bypass_check=True)
+        # REAL BUG FIX ("KDS Full Line Removal / Quantity -> 0"),
+        # confirmed live (5 -> 4 -> 6 -> complete the +2 delta -> 0: KDS
+        # kept showing BOTH "4 x FLAT WHITE" and "2 x FLAT WHITE" after
+        # the POS line was deleted entirely - "the synchronization/
+        # reconciliation logic appears to process only lines that still
+        # exist in the current POS snapshot... a line that existed
+        # previously but is missing from the current snapshot is
+        # therefore ignored"): the removal-detection loop below used to
+        # iterate `existing.items()` - but `existing` is a dict keyed by
+        # pos_order_line_id, and this exact scenario (original completed
+        # line + a delta line from an earlier increase, BOTH
+        # simultaneously active/non-cancelled, BOTH sharing the SAME
+        # pos_order_line_id) is precisely the case `existing`'s own
+        # "last write wins" construction (a few lines above) was never
+        # meant to fully represent for THIS purpose - its own comment
+        # already acknowledges "a pos_order_line_id CAN end up pointing
+        # at more than one kds.order.line" (correctly, for forward-
+        # matching future diffs against the most recent one), but a
+        # dict can only ever hold ONE value per key, so only the LAST of
+        # the two active lines ever appeared in `existing` at all - the
+        # other was completely invisible to this loop, silently never
+        # cancelled, no matter how many times sync ran.
+        #
+        # Fixed by grouping EVERY currently-active kds.order.line on
+        # this order by its own pos_order_line_id (a real multi-value
+        # grouping, not a dict that can only hold one) - every line
+        # sharing a now-missing pos_order_line_id is found and cancelled
+        # together, each through the correct state-appropriate path
+        # (action_cancel() for a still-active line,
+        # _system_cancel_after_completion() for one already Completed -
+        # never a negative-quantity "work item", never new production,
+        # matching "do not create a new preparation work item" and "do
+        # not reopen the order to PREPARING merely because of the
+        # cancellation" exactly - is_expeditor_ready naturally already
+        # excludes cancelled lines, so an order whose every line just
+        # became cancelled together correctly stays wherever it already
+        # was). One additional, consolidated audit event is logged per
+        # removed POS line summarizing the TOTAL cancelled quantity
+        # across every one of its own kds.order.line records together
+        # ("quantity: 6 -> 0, cancelled_qty: 6") - each individual
+        # line's own cancellation still logs its own event too (via
+        # action_cancel()/_system_cancel_after_completion() themselves),
+        # so the full per-line history remains intact; this additional
+        # event exists specifically to make the TOTAL immediately
+        # legible without needing to sum several separate entries by
+        # hand.
+        #
+        # Idempotent by construction, not by any extra bookkeeping: once
+        # cancelled, every line permanently satisfies `l.state !=
+        # 'cancelled'` as False, so it's simply absent from
+        # `active_lines_by_pos_line` on every subsequent poll/sync -
+        # nothing here can ever re-cancel the same line or log the same
+        # event twice.
+        active_lines_by_pos_line = {}
+        for l in kds_order.line_ids:
+            if l.pos_order_line_id and l.state != 'cancelled':
+                active_lines_by_pos_line.setdefault(l.pos_order_line_id.id, []).append(l)
+        for pos_line_id, klines in active_lines_by_pos_line.items():
+            if pos_line_id in current_ids:
+                continue
+            total_removed_qty = sum(kl.qty for kl in klines)
+            for kline in klines:
+                if kline.state == 'completed':
+                    kline._system_cancel_after_completion(
+                        reason=_('Removed from POS order after the order was already completed'))
+                else:
+                    kline.action_cancel(reason=_('Removed from POS order after send'), bypass_check=True)
                 touched_stations |= kline.station_id
-            # REAL BUG FIX ("Change Request After BUG-11", item 1),
-            # confirmed live: a POS line deleted after its KDS line had
-            # already reached 'completed' used to fall through this
-            # entire block untouched (action_cancel() above is only
-            # reachable for a NOT-yet-completed line) - the deleted
-            # product stayed displayed as if normally completed forever.
-            # Routed through the dedicated _system_cancel_after_completion()
-            # instead - see that method's own docstring in
-            # kds_order_line.py for the full explanation of why this
-            # needs a separate path from the normal action_cancel().
-            elif pos_line_id not in current_ids and kline.state == 'completed':
-                kline._system_cancel_after_completion(
-                    reason=_('Removed from POS order after the order was already completed'))
-                touched_stations |= kline.station_id
+            self.env['kds.event'].log(
+                kds_order, event_type='line_removed', station=klines[0].station_id,
+                note=_("%(product)s fully removed from POS order (quantity: %(qty)s -> 0, "
+                       "cancelled_qty: %(qty)s)")
+                % {'product': klines[0].product_name, 'qty': total_removed_qty})
 
         # AUDIT FIX ("POS Delta Sync Still Bypasses The Central
         # Workflow", HIGH/FINAL BLOCKER): replaces the previous raw

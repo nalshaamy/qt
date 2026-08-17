@@ -130,13 +130,16 @@ class FlexSysKdsKioskController(http.Controller):
         # station's own completion timestamp, independent of any other
         # station on the same order.
         #
-        # BUG-14 FIX ("COMPLETED Retention Must Depend on POS Closure")
-        # - see controllers/kds.py's own matching, more detailed comment
-        # for the full explanation: supersedes the completed_at-based
-        # check above. The cutoff for a completed line is now computed
-        # against order_id.pos_closed_at (kds_order.py), not
-        # completed_at - a completed line whose order hasn't closed at
-        # all (pos_closed_at still False) is always shown, unconditionally.
+        # REAL BUG FIX ("Retention Must Follow POS Order Lifecycle") -
+        # see controllers/kds.py's own matching, more detailed comment
+        # for the full explanation: extends the same pos_closed_at gate
+        # to Cancelled too - "this rule applies regardless of the
+        # current KDS terminal state, including COMPLETED [and]
+        # CANCELLED." Also gated on order_id.pos_order_id being set at
+        # all - see controllers/kds.py's own matching comment for the
+        # full explanation of why a ticket with no linked POS order must
+        # fall back to its own completed_at/cancelled_at directly,
+        # rather than unintentionally never expiring.
         pos_closed_cutoff = fields.Datetime.now() - timedelta(minutes=COMPLETED_GRACE_MINUTES)
         cancelled_cutoff = fields.Datetime.now() - timedelta(minutes=CANCELLED_GRACE_MINUTES)
         lines = env['kds.order.line'].sudo().search([
@@ -144,8 +147,15 @@ class FlexSysKdsKioskController(http.Controller):
             '|', '|',
                 ('state', 'not in', ('completed', 'cancelled')),
                 '&', ('state', '=', 'completed'),
-                    '|', ('order_id.pos_closed_at', '=', False), ('order_id.pos_closed_at', '>=', pos_closed_cutoff),
-                '&', ('state', '=', 'cancelled'), ('cancelled_at', '>=', cancelled_cutoff),
+                    '|',
+                        '&', ('order_id.pos_order_id', '!=', False),
+                            '|', ('order_id.pos_closed_at', '=', False), ('order_id.pos_closed_at', '>=', pos_closed_cutoff),
+                        '&', ('order_id.pos_order_id', '=', False), ('completed_at', '>=', pos_closed_cutoff),
+                '&', ('state', '=', 'cancelled'),
+                    '|',
+                        '&', ('order_id.pos_order_id', '!=', False),
+                            '|', ('order_id.pos_closed_at', '=', False), ('order_id.pos_closed_at', '>=', cancelled_cutoff),
+                        '&', ('order_id.pos_order_id', '=', False), ('cancelled_at', '>=', cancelled_cutoff),
         ])
         orders = lines.mapped('order_id').sorted(
             key=lambda o: (o.priority != 'vip', o.priority != 'urgent',
@@ -174,11 +184,22 @@ class FlexSysKdsKioskController(http.Controller):
             # BUG-14 FIX: order.pos_closed_at (not completed_at) anchors
             # a completed line's own grace check - see controllers/
             # kds.py's own matching comment for the full explanation.
+            # REAL BUG FIX ("Retention Must Follow POS Order Lifecycle"):
+            # order.pos_closed_at now also gates cancelled_at, exactly
+            # the same way it already gates completed_at - and both are
+            # themselves conditioned on order_id.pos_order_id being set
+            # (see controllers/kds.py's own matching comment).
             display_lines = order.line_ids.filtered(
                 lambda l, sid=station.id, cc=cancelled_cutoff, pcc=pos_closed_cutoff, o=order: l.station_id.id == sid and (
                     (l.state not in ('completed', 'cancelled'))
-                    or (l.state == 'completed' and (not o.pos_closed_at or o.pos_closed_at >= pcc))
-                    or (l.state == 'cancelled' and l.cancelled_at and l.cancelled_at >= cc)
+                    or (l.state == 'completed' and (
+                        (o.pos_order_id and (not o.pos_closed_at or o.pos_closed_at >= pcc))
+                        or (not o.pos_order_id and l.completed_at and l.completed_at >= pcc)
+                    ))
+                    or (l.state == 'cancelled' and (
+                        (o.pos_order_id and (not o.pos_closed_at or o.pos_closed_at >= cc))
+                        or (not o.pos_order_id and l.cancelled_at and l.cancelled_at >= cc)
+                    ))
                 ))
             if not display_lines:
                 continue
