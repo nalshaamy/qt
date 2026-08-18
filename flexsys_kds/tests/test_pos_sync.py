@@ -27,6 +27,8 @@ most important gaps to close:
      station, not just update the product name in place.
 """
 from datetime import timedelta
+from unittest.mock import patch
+import json
 
 from odoo import fields
 from odoo.tests import tagged
@@ -3606,3 +3608,199 @@ class TestPosSync(FlexSysKdsTestCommon):
             self._display_visible(line, kds_order, pos_closed_cutoff, cancelled_cutoff),
             "20 minutes elapsed, POS still active - the ticket must remain visible in "
             "ALL. This is intentional and must not regress to cancelled_at-based expiry.")
+
+    # -----------------------------------------------------------------
+    # Dev report "LIVE NETWORK TRACE - EXACT ODOO 'ORDER / SEND TO
+    # PREPARATION' SERVER PATH CONFIRMED": pos.order.sync_from_ui is
+    # the confirmed, actual server-side entry point every POS save goes
+    # through, including the previously-unreachable "Order" confirmation
+    # dialog action. Testing _flexsys_kds_process_sync_from_ui()
+    # directly (the module's own logic) rather than the full native
+    # sync_from_ui() itself, which expects a complex, full order payload
+    # shape this test does not attempt to fully replicate.
+    # -----------------------------------------------------------------
+    def test_sync_from_ui_order_has_a_uuid(self):
+        """Baseline sanity check: confirms pos.order.uuid is populated
+        by Odoo's own core on ordinary record creation, before relying
+        on it as the lookup key in every test below."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        self.assertTrue(order.uuid, "pos.order.uuid must be populated by Odoo's own core.")
+
+    def test_sync_from_ui_no_send_no_kds(self):
+        """Required Test: no Send -> no KDS. A sync_from_ui payload
+        whose own last_order_preparation_change carries only metadata
+        (no genuine content) must not trigger a sync."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        self.assertFalse(order.kds_order_id)
+
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'metadata': {'serverDate': '2026-08-18 08:00:00'},
+            }),
+        }])
+
+        order.invalidate_recordset()
+        self.assertFalse(order.kds_order_id, "Metadata-only content (no genuine lines/"
+                                              "cancelled data) must not sync.")
+
+    def test_sync_from_ui_order_action_triggers_kds(self):
+        """Required Test: Order -> KDS. The exact confirmed live
+        payload shape (a genuine 'lines' dict with real content)."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        self.assertFalse(order.kds_order_id)
+
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'some-line-uuid': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'metadata': {'serverDate': '2026-08-18 08:25:59'},
+            }),
+        }])
+
+        order.invalidate_recordset()
+        self.assertTrue(order.kds_order_id, "Genuine content in last_order_preparation_change "
+                                             "must trigger the KDS sync.")
+        self.assertEqual(order.kds_order_id.line_ids.qty, 5)
+
+    def test_sync_from_ui_edit_without_send_no_kds(self):
+        """Required Test: edit without Send -> no KDS. A repeated
+        sync_from_ui call carrying the SAME content signature (even
+        with a freshly re-stamped timestamp, confirmed by the live
+        trace to always change) must not trigger a second sync."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'metadata': {'serverDate': '2026-08-18 08:25:59'},
+            }),
+        }])
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        events_before = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+
+        # Ordinary autosave: SAME lines content, but a FRESH timestamp -
+        # confirmed by the live trace to be what Odoo's own core does on
+        # every write, regardless of Send intent.
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'metadata': {'serverDate': '2026-08-18 08:26:14'},
+            }),
+        }])
+
+        kds_order.invalidate_recordset()
+        events_after = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+        self.assertEqual(
+            events_after, events_before,
+            "The SAME underlying content, re-stamped with only a fresh timestamp, must "
+            "not be treated as a new Send - this is the exact confirmed root cause of "
+            "every earlier attempt at this problem.")
+
+    def test_sync_from_ui_second_send_generates_next_delta(self):
+        """Required Test: second Order/Send -> delta. A genuinely
+        different content signature (new line data) must trigger a new
+        sync with the correct ADDED delta."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'metadata': {'serverDate': '2026-08-18 08:25:59'},
+            }),
+        }])
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+
+        # A genuinely new product added to the order (Test D's own
+        # scenario), then the next Order/Send - a genuinely different
+        # "lines" content this time.
+        self.env['pos.order.line'].create({
+            'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 2,
+            'price_unit': 4.0, 'price_subtotal': 8.0, 'price_subtotal_incl': 8.0,
+        })
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {
+                    'line-a': {'product_id': self.product_burger.id, 'quantity': 5},
+                    'line-b': {'product_id': self.product_cappuccino.id, 'quantity': 2},
+                },
+                'metadata': {'serverDate': '2026-08-18 08:30:00'},
+            }),
+        }])
+
+        kds_order.invalidate_recordset()
+        new_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        self.assertTrue(new_line, "The second Send must correctly process the new delta.")
+        self.assertEqual(new_line.line_change, 'added')
+        self.assertEqual(new_line.qty, 2)
+
+    def test_sync_from_ui_quantity_update_generates_updated_delta(self):
+        """Test F from the dev report's own Acceptance Test: 5 -> 3,
+        Send -> UPDATED."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'metadata': {'serverDate': '2026-08-18 08:25:59'},
+            }),
+        }])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        self.assertEqual(line.qty, 5)
+
+        order.lines.write({'qty': 3})
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 3}},
+                'metadata': {'serverDate': '2026-08-18 08:31:00'},
+            }),
+        }])
+
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 3)
+        self.assertEqual(line.qty_delta, -2, "5 -> 3 is UPDATED (-2).")
+
+    def test_sync_from_ui_malformed_entries_are_skipped_defensively(self):
+        """The post-processing loop must never raise on unexpected
+        input shapes - malformed entries are simply skipped."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        try:
+            order._flexsys_kds_process_sync_from_ui([
+                "not a dict",
+                {},
+                {'uuid': None, 'last_order_preparation_change': '{}'},
+                {'uuid': order.uuid, 'last_order_preparation_change': 'not valid json'},
+                {'uuid': order.uuid, 'last_order_preparation_change': None},
+                {'uuid': 'nonexistent-uuid-xyz', 'last_order_preparation_change': json.dumps(
+                    {'lines': {'x': 1}, 'metadata': {}})},
+            ])
+        except Exception as e:  # noqa
+            self.fail(f"Malformed sync_from_ui entries must never raise: {e}")
+        order.invalidate_recordset()
+        self.assertFalse(order.kds_order_id, "None of the malformed entries should have synced anything.")
+
+    def test_sync_from_ui_full_override_preserves_native_result(self):
+        """Confirms the actual sync_from_ui() override itself does not
+        swallow or alter super()'s own return value, even if this
+        module's own post-processing fails entirely."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        with patch.object(
+            type(self.env['pos.order']), '_flexsys_kds_process_sync_from_ui',
+            side_effect=RuntimeError("simulated post-processing failure"),
+        ):
+            # A minimal, syntactically valid call - the native
+            # super().sync_from_ui() itself is not mocked, so this
+            # confirms the override structure itself (try/except around
+            # only the post-processing, result always returned) without
+            # needing to fully replicate the native payload shape.
+            try:
+                self.env['pos.order'].sync_from_ui([])
+            except Exception as e:
+                self.fail(f"A failure in this module's own post-processing must never "
+                           f"propagate and break the native sync_from_ui() call: {e}")

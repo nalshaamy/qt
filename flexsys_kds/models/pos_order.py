@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 import json
+import logging
 
 from odoo import _, api, fields, models
+
+_logger = logging.getLogger(__name__)
 
 
 def _pos_note(record, default=''):
@@ -91,6 +94,50 @@ def _is_genuine_send_signal(vals):
     if not isinstance(parsed, dict):
         return False
     return bool(parsed.get('metadata'))
+
+
+def _extract_preparation_content_signature(raw):
+    """REAL BUG FIX ("LIVE NETWORK TRACE - EXACT ODOO 'ORDER / SEND TO
+    PREPARATION' SERVER PATH CONFIRMED"): confirmed directly from Odoo
+    19's own core source (addons/point_of_sale/models/pos_order.py) that
+    the server ITSELF re-stamps `metadata.serverDate` with the current
+    timestamp essentially every time last_order_preparation_change gets
+    written at all - `local_change['metadata']['serverDate'] =
+    fields.Datetime.now().strftime(...)`, followed by
+    `vals['last_order_preparation_change'] = json.dumps(local_change)`.
+    This is the confirmed root cause of every earlier attempt at this
+    exact problem: comparing the field's own RAW value (v7.9.2's
+    kds_last_processed_send_signal, and the abandoned
+    _flexsys_kds_should_treat_as_send()) could never reliably detect
+    "is this a genuine new Send" this way, because the value looks
+    different on effectively every write regardless of send intent -
+    the ever-changing timestamp swamps the actual content.
+
+    Returns a signature (a JSON string) built from ONLY the genuine
+    content of the value - every key except 'metadata' entirely (not
+    just serverDate specifically, to stay robust against any other
+    volatile key Odoo's own core might add to metadata in the future) -
+    so two calls carrying the identical underlying change-set compare
+    equal regardless of their own, ever-different timestamps. Returns
+    None for missing/malformed/non-dict input (fails closed - same
+    reasoning as _is_genuine_send_signal's own docstring: missing a
+    genuine Send only delays a sync, never leaks an unsent one).
+    """
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw) if isinstance(raw, str) else raw
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    content = {k: v for k, v in parsed.items() if k != 'metadata'}
+    if not content:
+        return None
+    try:
+        return json.dumps(content, sort_keys=True)
+    except (TypeError, ValueError):
+        return None
 
 
 class PosOrder(models.Model):
@@ -339,6 +386,86 @@ class PosOrder(models.Model):
         other sudo() call in this module).
         """
         for order in self.sudo():
+            order._flexsys_kds_sync(is_send_write=True)
+
+    @api.model
+    def sync_from_ui(self, orders, *args, **kwargs):
+        """REAL BUG FIX ("LIVE NETWORK TRACE - EXACT ODOO 'ORDER / SEND
+        TO PREPARATION' SERVER PATH CONFIRMED"): the client's own live
+        browser Network trace confirmed the actual RPC the "Order"
+        confirmation-dialog action makes is `pos.order.sync_from_ui`
+        (not the sendOrderInPreparation()/updateLastOrderChange()
+        frontend methods the two earlier patches hooked - confirmed by
+        the KDS Audit Log itself showing ZERO events for this action,
+        meaning neither frontend hook fired at all for this specific UI
+        path) - and that the request's own payload carries
+        last_order_preparation_change directly, containing genuine
+        content (a real "lines" dict with product/quantity data), not
+        an empty placeholder.
+
+        This is the authoritative, confirmed-from-a-live-trace
+        server-side entry point every save from the POS frontend goes
+        through - including, but not limited to, both the normal Send
+        button and the confirmation dialog's "Order" action - so gating
+        here, rather than continuing to guess at which specific
+        frontend method a given UI action calls, is no longer a guess:
+        it's what the actual traffic shows.
+
+        Genuine-Send detection is NOT based on last_order_preparation_change's
+        own raw value or presence (both already confirmed unreliable by
+        three prior rounds) - it's based on
+        _extract_preparation_content_signature()'s own content-only
+        comparison (that function's own docstring has the complete
+        explanation of why the raw value can never work: Odoo's own
+        core re-stamps a fresh timestamp into the value on every write
+        that touches it at all, regardless of Send intent).
+
+        Idempotent by construction, not by extra bookkeeping: a
+        repeated sync_from_ui call carrying the SAME underlying
+        content signature (even with a fresh timestamp) compares equal
+        to kds_last_processed_send_signal and is correctly skipped:
+        the "mark processed" write happens only once, at the point
+        where content genuinely changed.
+
+        The KDS-relevant post-processing below is best-effort and
+        strictly additive - super().sync_from_ui(orders)'s own result is
+        always computed first and always returned completely
+        unmodified; a failure in this module's own post-processing
+        (malformed order dict, unexpected shape, anything at all) is
+        caught and logged, never allowed to affect the actual order-
+        saving flow every POS session depends on.
+        """
+        result = super().sync_from_ui(orders, *args, **kwargs)
+        try:
+            self._flexsys_kds_process_sync_from_ui(orders)
+        except Exception:
+            _logger.exception("FlexSys KDS: sync_from_ui post-processing failed; "
+                               "native POS sync itself was not affected.")
+        return result
+
+    def _flexsys_kds_process_sync_from_ui(self, orders):
+        self = self.sudo()
+        for order_data in (orders or []):
+            if not isinstance(order_data, dict):
+                continue
+            raw = order_data.get('last_order_preparation_change')
+            signature = _extract_preparation_content_signature(raw)
+            if not signature:
+                continue
+            order_uuid = order_data.get('uuid') or order_data.get('id')
+            if not order_uuid:
+                continue
+            # Same lookup pattern as Odoo's own core sync_from_ui() uses
+            # internally to resolve an incoming order dict back to its
+            # persisted record (order='id desc' picks the most recent
+            # match if, for any reason, more than one exists).
+            order = self.env['pos.order'].search(
+                [('uuid', '=', order_uuid)], limit=1, order='id desc')
+            if not order:
+                continue
+            if signature == order.kds_last_processed_send_signal:
+                continue
+            order.kds_last_processed_send_signal = signature
             order._flexsys_kds_sync(is_send_write=True)
 
     def _flexsys_kds_cancel(self):

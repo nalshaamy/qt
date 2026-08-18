@@ -1,24 +1,25 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.9.6**
+**Version: 19.0.7.9.7**
 **Status as of this document: code-complete, including everything
-through v7.9.5 (see CHANGELOG.md for the full history), plus this
-round's fix: "Explicit POS Send Must Trigger KDS Sync" - the normal
-Send button was confirmed working (blocking correctly proven), but
-Odoo's own native unsent-order confirmation dialog ("would you like to
-send it to preparation?" → "Order") did not reliably trigger the same
-`sendOrderInPreparation()` method the existing frontend patch hooks. A
-second, independently-isolated frontend patch now hooks
-`order.updateLastOrderChange()` directly - the confirmed lower-level
-persistence point common to every genuine Send path, regardless of
-which button or dialog triggers it - kept in its own separate file so
-an import failure in one patch cannot cascade into breaking the other.
-303 automated tests, all `py_compile`/XML/JS checks passing, plus a
-custom AST-based undefined-name sweep. **Two frontend patches now
-patch Odoo's own core POS register - both remain the highest-risk,
-still-unverified pieces of this entire delivery - see the dedicated
-sections below - not yet signed off on a live instance — see "What
-still needs a human" at the end.**
+through v7.9.6 (see CHANGELOG.md for the full history), plus this
+round's fix: "Explicit POS Send: authoritative server-side gate via
+sync_from_ui" - confirmed via a real browser Network trace, provided
+directly by the client, that the "Order" confirmation-dialog action's
+actual RPC call is `pos.order.sync_from_ui`, not either frontend method
+the two prior patches hooked (confirmed by zero KDS Audit Log events
+for that action). New `sync_from_ui()` override gates directly on this
+confirmed, universal server-side entry point, comparing only the
+genuine content of `last_order_preparation_change` (explicitly
+excluding `metadata`, confirmed from Odoo's own core source to always
+carry a fresh timestamp regardless of Send intent - the actual reason
+every earlier value-comparison attempt failed). **Both frontend JS
+patches from v7.9.3/v7.9.6 are now removed entirely** - this module no
+longer touches Odoo's own POS register frontend at all; the fix is now
+fully backend-only, eliminating this delivery's two highest-risk
+pieces. 311 automated tests, all `py_compile`/XML/JS checks passing,
+plus a custom AST-based undefined-name sweep. Not yet signed off on a
+live instance — see "What still needs a human" at the end.**
 
 
 This document maps directly to that request's own section structure
@@ -626,115 +627,24 @@ still correctly produces a fresh, distinct
 one part of this fix's own reasoning that rests on Odoo's own frontend
 behavior rather than something this delivery could verify directly.
 
-## On Send to KDS: explicit frontend signal (v7.9.3) — ⚠️ HIGHEST RISK CHANGE IN THIS MODULE'S HISTORY
-**Confirmed still reproducing on v7.9.2**, with a real ticket
-(`2629-3-000019`): a product added to an already-committed order,
-without pressing Send again, still appeared in KDS immediately. Two
-consecutive rounds of purely backend-side detection - each individually
-reasoned from Odoo 19's own core source, each still failing in live
-testing - led to a change of strategy: rather than continue guessing at
-exactly how Odoo's own frontend populates `last_order_preparation_change`
-on every possible kind of save (a detail this delivery process cannot
-directly observe or test), this round adds an **explicit signal this
-module controls directly**.
-
-### What changed
-- New `pos.order.flexsys_kds_register_send()` - a public RPC method
-  that immediately triggers the authoritative sync.
-- New `static/src/js/flexsys_kds_pos_send_signal.js` - patches
-  `PosStore.prototype.sendOrderInPreparation` (confirmed from Odoo 19's
-  own core source to be the native "Send" action's own method) to call
-  the RPC method above immediately after Odoo's own native Send logic
-  completes.
-- New `point_of_sale._assets_pos` bundle entry in `__manifest__.py`
-  (the actual POS register's own frontend bundle - distinct from this
-  module's existing `web.assets_backend` KDS-screen bundle).
-
-### Why this is genuinely higher risk than anything shipped before
-Every prior round of this project's own work has been confined to this
-module's own models, controllers, and its own KDS-screen frontend. This
-is the first change that **patches a core Odoo POS register frontend
-service** - if the patch's own import paths or method signature don't
-match the target Odoo 19 build exactly, the risk is not "FlexSys KDS
-doesn't work" but potentially **the POS register's own JS module fails
-to load entirely**.
-
-### How the risk was mitigated, given no live Odoo instance is available to this delivery process
-- The patched method name and its own file path were confirmed via a
-  **direct citation of Odoo 19's own core GitHub source**, not guessed
-  or inferred from documentation alone.
-- The patch **never modifies or wraps** the native Send behavior -
-  `super.sendOrderInPreparation()` is always called first, unconditionally,
-  and its own result is always returned unchanged.
-- The added RPC call is wrapped in its **own, separate** try/catch - a
-  failure there cannot propagate back into the native Send/print flow
-  the cashier depends on.
-- `node --check` confirms the file's own JavaScript syntax is valid -
-  but this **cannot** verify the ES module import paths resolve
-  correctly inside a real Odoo asset bundle, which is a live-runtime
-  concern this delivery process has no way to check.
-
-### Required rollout verification, in this specific order
-1. **Before enabling for real cashiers**: open the POS register on a
-   staging instance after this upgrade and confirm the register loads
-   normally at all - open the browser console and confirm no red
-   "module not defined" or import errors appear, specifically anything
-   mentioning `flexsys_kds_pos_send_signal` or `pos_store`.
-2. Confirm a completely ordinary sale (add a product, pay, print
-   receipt) still works exactly as before - this patch must have zero
-   observable effect on a POS not using "On Send to KDS" mode at all.
-3. Only then, run the dev report's own exact reproduction: an existing,
-   already-committed KDS ticket, add a new product without pressing
-   Send, confirm KDS is unchanged, press Send, confirm the new product
-   now appears correctly as ADDED.
-4. If step 1 shows any error, **do not proceed** - this specific asset
-   entry should be reverted (removing the `point_of_sale._assets_pos`
-   key from the manifest) while the exact Odoo 19 build's own
-   `pos_store.js` structure is re-confirmed against the live instance
-   directly, rather than via the citation this delivery relied on.
-
-## Explicit POS Send Must Trigger KDS Sync (v7.9.6) — ⚠️ SECOND CORE-POS FRONTEND PATCH
-**Confirmed live**: the normal Send button was confirmed working
-(blocking correctly proven - "Part 1 PASSED"). But Odoo's own native
-unsent-order confirmation dialog ("It seems that the order has not been
-sent. Would you like to send it to preparation?" → "Order") did not
-reliably trigger the v7.9.3 patch's own
-`sendOrderInPreparation()` hook - "the current implementation
-successfully blocks automatic synchronization, but it also blocks or
-misses the legitimate explicit Send to Preparation event."
-
-**Fix**: a second, independent frontend patch,
-`flexsys_kds_pos_send_signal_order_model.js`, hooks
-`order.updateLastOrderChange()` directly - confirmed from Odoo 19's own
-core source to be the actual lower-level method that persists the send
-signal to the server, common to every UI path that leads to a genuine
-Send (`sendOrderInPreparation()` calls this method internally). Kept in
-its own separate file specifically so a wrong import path in this
-second patch cannot also break the already-confirmed-working first one
-- a JS module import failure prevents everything else in that same
-file from loading.
-
-**Confirmed harmless double-fire**: since the two patches' own target
-methods call each other internally, a genuine Send via the normal
-button now fires both. Verified via a dedicated test that this is
-completely idempotent - the redundant second RPC call's own diff logic
-against an unchanged POS state is a correct no-op.
-
-### Required rollout verification, in addition to the v7.9.3 section above
-1. Confirm the POS register still loads with no console errors after
-   this upgrade too (same check as v7.9.3's own step 1, now covering
-   BOTH patch files).
-2. Reproduce the dev report's own exact Part 2 scenario: trigger Odoo's
-   native unsent-order confirmation dialog (e.g. by trying to switch
-   orders or leave the screen with unsent changes present), click
-   "Order", confirm the KDS ticket now appears/updates correctly.
-3. Re-confirm the normal Send button (v7.9.3's own scenario) still
-   works correctly too - this round must not have regressed it.
-4. If step 1 shows an error specifically traceable to
-   `flexsys_kds_pos_send_signal_order_model.js`, remove only that
-   specific line from the `point_of_sale._assets_pos` manifest entry
-   (not the whole bundle) while `PosOrder`'s own exact import path is
-   re-confirmed against the live instance directly.
+## On Send to KDS: two frontend patches (v7.9.3, v7.9.6) — SUPERSEDED AND REMOVED IN v7.9.7
+Both of this project's own attempts at hooking Odoo's core POS register
+frontend directly (`flexsys_kds_pos_send_signal.js` targeting
+`PosStore.prototype.sendOrderInPreparation`, and
+`flexsys_kds_pos_send_signal_order_model.js` targeting
+`PosOrder.prototype.updateLastOrderChange`) were confirmed, via a real
+browser Network trace the client provided directly, to never fire at
+all for the "Order" confirmation-dialog action - the KDS Audit Log
+showed zero events for that action. The actual RPC call for that
+action is `pos.order.sync_from_ui`, confirmed live and now handled
+directly server-side - see "Explicit POS Send: authoritative
+server-side gate via sync_from_ui (v7.9.7)" below for the current,
+confirmed-correct mechanism. Both JS files and the
+`point_of_sale._assets_pos` manifest bundle were removed entirely in
+v7.9.7 - this module no longer touches the POS register's own frontend
+at all. Left here, not deleted, as a record of what was tried and why
+it didn't work - see CHANGELOG.md's own v7.9.3/v7.9.6/v7.9.7 entries
+for the complete history.
 
 ## On Send to KDS: removed the last backend inference path entirely (v7.9.4)
 **Confirmed still reproducing on v7.9.3**, with a real ticket
@@ -821,6 +731,48 @@ mix of NEW/PREPARING/READY/COMPLETED/CANCELLED tickets, confirm the NEW
 tab and its own counter show only genuine NEW tickets) and that the
 newly-added `pos_closed_at`-on-cancel stamping correctly triggers
 retention for a real POS order cancellation on the live instance.
+
+## Explicit POS Send: authoritative server-side gate via sync_from_ui (v7.9.7)
+**Confirmed via a real browser Network trace, provided directly by the
+client**: the "Order" confirmation-dialog action's actual RPC call is
+`pos.order.sync_from_ui` - not either frontend method the two prior
+patches (v7.9.3, v7.9.6) hooked, confirmed by zero KDS Audit Log
+events for that specific action. The same trace's own payload showed
+`last_order_preparation_change` with genuine content directly.
+
+**A second confirmed root cause, found by reading Odoo 19's own core
+source in response to this trace**: the server itself re-stamps
+`metadata.serverDate` with a fresh timestamp essentially every time
+this field gets written at all, regardless of genuine Send intent -
+confirmed the exact reason every earlier value-comparison attempt
+(v7.9.2, the abandoned `_flexsys_kds_should_treat_as_send()`) could
+never reliably work.
+
+**Fix**: new `pos.order.sync_from_ui()` override - the confirmed,
+universal, live-traced server-side entry point every POS save goes
+through. Detection now compares only the genuine content of
+`last_order_preparation_change` (`lines`/`cancelled`/etc.), with
+`metadata` explicitly stripped before comparison. `super()`'s own
+result is always returned unmodified; a failure in this module's own
+post-processing is caught and logged, never allowed to affect the
+native save flow.
+
+**Both frontend JS patches removed entirely** - see the superseded
+note above. This module no longer touches Odoo's own POS register
+frontend at all; the fix is now fully backend-only, eliminating this
+delivery's two previously-highest-risk pieces.
+
+**What still needs a human**: the dev report's own required
+reproductions, run against a real Odoo.sh staging instance -
+specifically both the normal Send button AND the "Order" confirmation-
+dialog action, confirming both now correctly trigger the KDS sync, and
+confirming an ordinary autosave/edit still does not. Since this round
+removes both frontend patches, also worth confirming the POS register's
+own console shows no errors related to the now-removed
+`flexsys_kds_pos_send_signal*.js` files (there should be none, since
+they're no longer referenced in the manifest at all) - a clean, purely
+backend-only upgrade should have zero frontend-visible footprint beyond
+the KDS sync itself now working correctly.
 
 ---
 
@@ -1085,7 +1037,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 303 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 311 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

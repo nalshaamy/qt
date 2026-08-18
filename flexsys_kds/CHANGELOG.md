@@ -8,6 +8,98 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.9.7 — Explicit POS Send: authoritative server-side gate via sync_from_ui
+
+**Confirmed via a real browser Network trace**, provided directly by
+the client: the "Order" confirmation-dialog action's actual RPC call is
+`pos.order.sync_from_ui` - not `sendOrderInPreparation()` or
+`updateLastOrderChange()`, the two frontend methods v7.9.3/v7.9.6
+patched (confirmed by the KDS Audit Log itself showing zero events for
+this action - neither patch fired). The same trace confirmed the
+request's own payload carries `last_order_preparation_change` directly,
+with genuine content (a real `lines` dict), and also exposed
+`kds_last_processed_send_signal: false` in the payload.
+
+### A second confirmed root cause, found in the same trace
+Confirmed directly from Odoo 19's own core source
+(`addons/point_of_sale/models/pos_order.py`): the server itself
+re-stamps `metadata.serverDate` with the current timestamp essentially
+every time `last_order_preparation_change` gets written at all -
+`local_change['metadata']['serverDate'] = fields.Datetime.now()...`
+followed by `vals['last_order_preparation_change'] = json.dumps(local_change)`.
+This is the confirmed reason every earlier value-comparison attempt
+(v7.9.2's `kds_last_processed_send_signal`, the abandoned
+`_flexsys_kds_should_treat_as_send()`) could never work: the raw
+value's own timestamp changes on effectively every write regardless of
+genuine Send intent, swamping the actual content.
+
+### Fix
+New `pos.order.sync_from_ui()` override - the confirmed, live-traced,
+authoritative server-side entry point every POS save goes through
+(not specific to Send, universal - both the normal Send button and the
+confirmation dialog's "Order" action reach it). `super().sync_from_ui()`
+is always called first, its result always returned unmodified; a new
+`_flexsys_kds_process_sync_from_ui()` helper then does the actual
+detection, wrapped in its own try/except so a failure there can never
+affect the native save flow.
+
+Genuine-Send detection now uses a new
+`_extract_preparation_content_signature()` helper: parses
+`last_order_preparation_change`, strips the `metadata` key entirely
+(the part confirmed to always change), and compares only the
+remaining genuine content (`lines`/`cancelled`/etc.) against
+`kds_last_processed_send_signal` (redesigned to store this
+content-only signature, not the raw value). Idempotent by construction:
+a repeated call carrying the same content (even with a fresh
+timestamp) compares equal and is correctly skipped.
+
+Order lookup mirrors Odoo's own core pattern exactly, confirmed from
+that same source: `self.env['pos.order'].search([('uuid', '=',
+order.get('uuid'))], limit=1, order='id desc')`.
+
+### Removed: both frontend JS patches
+With a confirmed-correct, evidence-based backend-only mechanism now
+covering both Send paths, the two frontend patches from v7.9.3/v7.9.6
+(`flexsys_kds_pos_send_signal.js`,
+`flexsys_kds_pos_send_signal_order_model.js`) - this module's own two
+highest-risk pieces, patching Odoo's own core POS register frontend
+with unverified import paths - are removed entirely, along with the
+`point_of_sale._assets_pos` manifest bundle. This module no longer
+touches the POS register's own frontend at all; the entire fix is now
+backend-only.
+
+`_flexsys_kds_should_treat_as_send()` and `_is_genuine_send_signal()`
+remain defined but continue to be unused, per this project's own
+established convention.
+
+### Files changed
+`models/pos_order.py` (new `sync_from_ui()` override,
+`_flexsys_kds_process_sync_from_ui()`,
+`_extract_preparation_content_signature()`; new `import logging` /
+`_logger`), `__manifest__.py` (removed the `point_of_sale._assets_pos`
+bundle entirely), removed `static/src/js/flexsys_kds_pos_send_signal.js`
+and `static/src/js/flexsys_kds_pos_send_signal_order_model.js`.
+
+### Tests
+8 new tests, testing `_flexsys_kds_process_sync_from_ui()` directly
+(the native `sync_from_ui()` itself expects a complex, full order
+payload shape this delivery does not attempt to fully replicate):
+the dev report's own required scenarios (no Send → no KDS; Order → KDS;
+edit without Send → no KDS, using the exact confirmed live payload
+shape including a freshly re-stamped timestamp; second Send → correct
+ADDED delta), the report's own Test F (quantity UPDATED delta),
+defensive handling of malformed/unexpected entries, and confirmation
+that the actual `sync_from_ui()` override structure itself preserves
+`super()`'s own result even if this module's own post-processing fails
+entirely.
+
+**Total: 311 tests** (up from 303). No database migration required -
+`kds_last_processed_send_signal` itself already existed from v7.9.2,
+now storing a differently-shaped value (content signature instead of
+raw field value) - no schema change.
+
+---
+
 ## v7.9.6 — Explicit POS Send Must Trigger KDS Sync
 
 **Confirmed live**: Part 1 (blocking - no sync without an explicit

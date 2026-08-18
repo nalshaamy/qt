@@ -1,6 +1,6 @@
 {
     'name': 'FlexSys KDS',
-    'version': '19.0.7.9.6',
+    'version': '19.0.7.9.7',
     'category': 'Point of Sale',
     'summary': 'Multi-station Kitchen Display System for Odoo POS',
     'description': """
@@ -68,28 +68,26 @@ Technical module name: flexsys_kds
             'flexsys_kds/static/src/js/kds_app.js',
             'flexsys_kds/static/src/xml/kds_templates.xml',
         ],
-        # REAL BUG FIX ("On Send to KDS / Subsequent Changes Bypass Send
-        # Gate"), confirmed still reproducing after two backend-only
-        # attempts - see flexsys_kds_pos_send_signal.js's own top-of-file
-        # comment, and pos_order.py::flexsys_kds_register_send()'s own
-        # docstring, for the complete explanation. This is the actual
-        # POS register frontend's own bundle (confirmed from Odoo 19's
-        # own documentation/community sources to be
-        # 'point_of_sale._assets_pos', not 'point_of_sale.assets' - a
-        # naming change from earlier Odoo versions) - distinct from
-        # 'web.assets_backend' above, which is this module's own KDS
-        # SCREEN, a completely separate application from the POS
-        # register itself.
-        'point_of_sale._assets_pos': [
-            'flexsys_kds/static/src/js/flexsys_kds_pos_send_signal.js',
-            # REAL BUG FIX ("Explicit POS Send Must Trigger KDS Sync"):
-            # a second, independent layer targeting the lower-level
-            # order.updateLastOrderChange() persistence point directly -
-            # see that file's own top-of-file comment for why it's kept
-            # deliberately separate from the file above (an import
-            # failure in one must never be able to break the other).
-            'flexsys_kds/static/src/js/flexsys_kds_pos_send_signal_order_model.js',
-        ],
+        # REAL BUG FIX ("LIVE NETWORK TRACE - EXACT ODOO 'ORDER / SEND
+        # TO PREPARATION' SERVER PATH CONFIRMED"): the two frontend
+        # patches that previously lived in this bundle
+        # (flexsys_kds_pos_send_signal.js,
+        # flexsys_kds_pos_send_signal_order_model.js - v7.9.3/v7.9.6)
+        # were REMOVED here, confirmed no longer needed: a live browser
+        # Network trace showed zero effect from either patch for the
+        # "Order" confirmation-dialog action (which the KDS Audit Log
+        # confirmed never fired flexsys_kds_register_send() at all for
+        # that action), while the SAME trace confirmed the actual RPC
+        # call for that action is pos.order.sync_from_ui - a
+        # server-side entry point every POS save goes through
+        # (confirmed universal, not specific to Send), now overridden
+        # directly in models/pos_order.py instead. Removing this now-
+        # unnecessary frontend bundle entirely (rather than leaving it
+        # in place alongside the new backend mechanism) eliminates this
+        # module's own two highest-risk pieces - patches to Odoo's own
+        # core POS register frontend, with unverified import paths -
+        # now that a confirmed-correct, evidence-based backend-only
+        # mechanism covers the same ground more reliably.
     },
     'installable': True,
     'application': True,
