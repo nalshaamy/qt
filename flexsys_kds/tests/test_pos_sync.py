@@ -201,8 +201,8 @@ class TestPosSync(FlexSysKdsTestCommon):
             ],
             'amount_tax': 0.0, 'amount_total': 14.0, 'amount_paid': 0.0, 'amount_return': 0.0,
             'state': 'draft',
-            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}',
         })
+        order.flexsys_kds_register_send()
         kds_order = order.kds_order_id
         self.assertTrue(kds_order, "'send' trigger + the native Send signal should sync to KDS "
                                     "immediately, unpaid.")
@@ -224,7 +224,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             "Immediately after unlink(), with no Send/New signal yet, the line must "
             "still show completely unchanged.")
 
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         cappuccino_kds_line.invalidate_recordset()
         self.assertTrue(cappuccino_kds_line)
@@ -345,8 +345,8 @@ class TestPosSync(FlexSysKdsTestCommon):
             })],
             'amount_tax': 0.0, 'amount_total': 10.0, 'amount_paid': 0.0, 'amount_return': 0.0,
             'state': 'draft',
-            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}',
         })
+        order.flexsys_kds_register_send()
         first_kds_order = order.kds_order_id
         self.assertTrue(first_kds_order)
         order.write({'state': 'paid', 'amount_paid': 10.0})
@@ -363,8 +363,8 @@ class TestPosSync(FlexSysKdsTestCommon):
             'lines': [],
             'amount_tax': 0.0, 'amount_total': 0.0, 'amount_paid': 0.0, 'amount_return': 0.0,
             'state': 'draft',
-            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}',
         })
+        order.flexsys_kds_register_send()
         self.assertFalse(order.kds_order_id,
                           "An order with no lines yet has nothing to send to the kitchen, "
                           "even with the Send/New signal present.")
@@ -421,8 +421,8 @@ class TestPosSync(FlexSysKdsTestCommon):
             })],
             'amount_tax': 0.0, 'amount_total': 10.0, 'amount_paid': 0.0, 'amount_return': 0.0,
             'state': 'draft',
-            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}',
         })
+        order.flexsys_kds_register_send()
         kds_order = order.kds_order_id
         self.assertTrue(kds_order)
         self.assertEqual(kds_order.state, 'new')
@@ -451,8 +451,8 @@ class TestPosSync(FlexSysKdsTestCommon):
             })],
             'amount_tax': 0.0, 'amount_total': 10.0, 'amount_paid': 0.0, 'amount_return': 0.0,
             'state': 'draft',
-            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}',
         })
+        order.flexsys_kds_register_send()
         kds_order = order.kds_order_id
         self.assertTrue(kds_order, "The order must have genuinely reached KDS before "
                                     "cancellation is a meaningful test of anything.")
@@ -477,8 +477,8 @@ class TestPosSync(FlexSysKdsTestCommon):
             })],
             'amount_tax': 0.0, 'amount_total': 10.0, 'amount_paid': 0.0, 'amount_return': 0.0,
             'state': 'draft',
-            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}',
         })
+        order.flexsys_kds_register_send()
         kds_order = order.kds_order_id
         self.assertTrue(kds_order)
         order.write({'state': 'cancel'})
@@ -1679,8 +1679,8 @@ class TestPosSync(FlexSysKdsTestCommon):
             ],
             'amount_tax': 0.0, 'amount_total': 14.0, 'amount_paid': 0.0, 'amount_return': 0.0,
             'state': 'draft',
-            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}',
         })
+        order.flexsys_kds_register_send()
         kds_order = order.kds_order_id
         self.assertTrue(kds_order)
         kds_order.line_ids.action_accept()
@@ -1704,7 +1704,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             "Immediately after unlink(), with no Send/New signal yet, the completed "
             "line must still show completely unchanged.")
 
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         kds_order.invalidate_recordset()
         cappuccino_line.invalidate_recordset()
@@ -1733,8 +1733,8 @@ class TestPosSync(FlexSysKdsTestCommon):
             ],
             'amount_tax': 0.0, 'amount_total': 10.0, 'amount_paid': 0.0, 'amount_return': 0.0,
             'state': 'draft',
-            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}',
         })
+        order.flexsys_kds_register_send()
         kds_order = order.kds_order_id
         self.assertTrue(kds_order)
         line = kds_order.line_ids
@@ -1749,7 +1749,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         # REAL BUG FIX ("redesign the removal sync so it cannot leak
         # early"): the actual cancellation (and its own audit event)
         # only happens on the next genuine Send/New sync.
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         events_after = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
         self.assertGreater(events_after, events_before,
@@ -1937,7 +1937,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         order = self._make_send_write_order()
         self.assertFalse(order.kds_order_id)
 
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
+        order.flexsys_kds_register_send()
 
         self.assertTrue(
             order.kds_order_id,
@@ -1950,7 +1950,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         Send/New synchronizes everything accumulated at once as ADDED/
         UPDATED/CANCELLED."""
         order = self._make_send_write_order()
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
+        order.flexsys_kds_register_send()
         kds_order = order.kds_order_id
         self.assertTrue(kds_order)
         burger_line = kds_order.line_ids
@@ -1970,7 +1970,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             "No sync yet - the newly added product must not appear in KDS at all.")
 
         # Cashier presses Send/New again - accumulated changes sync now.
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         kds_order.invalidate_recordset()
         burger_line.invalidate_recordset()
@@ -1985,7 +1985,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 1,
             'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
         })
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
+        order.flexsys_kds_register_send()
         kds_order = order.kds_order_id
         cappuccino_pos_line = order.lines.filtered(lambda l: l.product_id == self.product_cappuccino)
 
@@ -2001,7 +2001,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             "Immediately after unlink(), with no further Send/New signal yet, the line "
             "must still show completely unchanged.")
 
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         cappuccino_line.invalidate_recordset()
         self.assertTrue(cappuccino_line)
@@ -2022,14 +2022,15 @@ class TestPosSync(FlexSysKdsTestCommon):
         controllers/kds_kiosk.py) - kept deliberately in lockstep with
         those two copies. Same helper already defined in
         test_workflow.py's own TestWorkflow class - duplicated here
-        since this class doesn't inherit from it."""
+        since this class doesn't inherit from it.
+
+        REAL BUG FIX ("CANCELLED FILTER CLASSIFICATION + RETENTION
+        LIFECYCLE", Issue 1): a fully-cancelled station now returns the
+        distinct 'cancelled' value - see the real function's own
+        updated docstring for the complete explanation."""
         active = [l for l in lines if l.state != 'cancelled']
         if not active:
-            if not lines:
-                return 'new'
-            ever_ready = any(l.ready_time for l in lines)
-            ever_preparing = any(l.preparation_start_time for l in lines)
-            return 'ready' if ever_ready else 'preparing' if ever_preparing else 'new'
+            return 'cancelled' if lines else 'new'
         if all(l.state == 'completed' for l in active):
             return 'completed'
         if all(l.state in ('ready', 'completed') for l in active):
@@ -2182,8 +2183,8 @@ class TestPosSync(FlexSysKdsTestCommon):
             'amount_paid': 0.0,
             'amount_return': 0.0,
             'state': 'draft',
-            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}',
         })
+        order.flexsys_kds_register_send()
         return order
 
     # -----------------------------------------------------------------
@@ -2201,7 +2202,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         self.assertEqual(line.state, 'ready')
 
         order.lines.write({'qty': 1})
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         kds_order.invalidate_recordset()
         line.invalidate_recordset()
@@ -2228,7 +2229,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         line.action_ready()
 
         order.lines.write({'qty': 0})
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         line.invalidate_recordset()
         self.assertEqual(line.state, 'cancelled')
@@ -2248,7 +2249,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         original_ready_time = line.ready_time
 
         order.lines.write({'qty': 2})
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         kds_order.invalidate_recordset()
         line.invalidate_recordset()
@@ -2281,7 +2282,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         original_completed_at = line.completed_at
 
         order.lines.write({'qty': 3})
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         kds_order.invalidate_recordset()
         line.invalidate_recordset()
@@ -2313,7 +2314,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         original_completed_at = line.completed_at
 
         order.lines.write({'qty': 7})
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         kds_order.invalidate_recordset()
         line.invalidate_recordset()
@@ -2476,19 +2477,19 @@ class TestPosSync(FlexSysKdsTestCommon):
         line.action_start()
 
         order.lines.write({'qty': 1})
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
         line.invalidate_recordset()
         self.assertEqual(line.qty_delta, -1)
         self.assertEqual(line.state, 'preparing')
 
         order.lines.write({'qty': 3})
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 3}}'})
+        order.flexsys_kds_register_send()
         line.invalidate_recordset()
         self.assertEqual(line.qty_delta, 2)
         self.assertEqual(line.state, 'preparing')
 
         order.lines.write({'qty': 2})
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 4}}'})
+        order.flexsys_kds_register_send()
         line.invalidate_recordset()
         self.assertEqual(line.qty_delta, -1)
         self.assertEqual(line.state, 'preparing')
@@ -2521,7 +2522,7 @@ class TestPosSync(FlexSysKdsTestCommon):
 
         # 5 -> 4: UPDATED (-1), no new preparation.
         order.lines.write({'qty': 4})
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
         line.invalidate_recordset()
         self.assertEqual(line.qty, 4)
         self.assertEqual(line.qty_delta, -1)
@@ -2529,7 +2530,7 @@ class TestPosSync(FlexSysKdsTestCommon):
 
         # 4 -> 6: preserve the completed 4, create 2 as new work.
         order.lines.write({'qty': 6})
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 3}}'})
+        order.flexsys_kds_register_send()
         kds_order.invalidate_recordset()
         line.invalidate_recordset()
         self.assertEqual(line.qty, 4, "The original completed quantity is preserved untouched.")
@@ -2556,7 +2557,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         pos_line = order.lines
         events_before = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
         pos_line.unlink()
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 4}}'})
+        order.flexsys_kds_register_send()
 
         kds_order.invalidate_recordset()
         line.invalidate_recordset()
@@ -2604,7 +2605,7 @@ class TestPosSync(FlexSysKdsTestCommon):
 
         pos_line = order.lines
         pos_line.unlink()
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         line.invalidate_recordset()
         self.assertEqual(line.state, 'cancelled')
@@ -2640,7 +2641,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         line.action_complete()
 
         order.lines.unlink()
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         kds_order.invalidate_recordset()
         for kline in kds_order.line_ids:
@@ -2661,7 +2662,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         cappuccino_pos_line = order.lines.filtered(lambda l: l.product_id == self.product_cappuccino)
 
         cappuccino_pos_line.unlink()
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         kds_order.invalidate_recordset()
         cappuccino_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
@@ -2748,7 +2749,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         line.action_ready()
 
         order.lines.write({'qty': 0})
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         line.invalidate_recordset()
         self.assertEqual(line.state, 'cancelled')
@@ -2772,7 +2773,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         line.action_ready()
 
         order.lines.write({'qty': 0})
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
         line.invalidate_recordset()
         self.assertEqual(line.state, 'cancelled')
         line.sudo().write({'cancelled_at': fields.Datetime.now() - timedelta(minutes=60)})
@@ -2805,7 +2806,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         line.action_start()
 
         order.lines.write({'qty': 0})
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
         line.invalidate_recordset()
         self.assertEqual(line.state, 'cancelled')
         self.assertFalse(kds_order.pos_closed_at)
@@ -2823,7 +2824,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 1,
             'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
         })
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 3}}'})
+        order.flexsys_kds_register_send()
 
         kds_order.invalidate_recordset()
         self.assertEqual(
@@ -2848,7 +2849,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         coffee_line.action_start()
         coffee_pos_line = order.lines.filtered(lambda l: l.product_id == self.product_cappuccino)
         coffee_pos_line.unlink()
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         kds_order.invalidate_recordset()
         burger_line.invalidate_recordset()
@@ -2905,40 +2906,20 @@ class TestPosSync(FlexSysKdsTestCommon):
     # other tests, all of which explicitly use a populated metadata
     # payload).
     # -----------------------------------------------------------------
-    def test_bug_on_send_boundary_empty_metadata_write_does_not_sync(self):
-        """The exact confirmed root cause, isolated directly: a write
-        carrying last_order_preparation_change with EMPTY metadata (the
-        JSON shape an ordinary, non-Send save can carry) must NOT be
-        treated as a genuine Send signal."""
-        self.pos_config.kds_send_trigger = 'send'
-        order = self.env['pos.order'].create({
-            'session_id': self.pos_session.id,
-            'company_id': self.company.id,
-            'lines': [(0, 0, {
-                'product_id': self.product_burger.id, 'qty': 1,
-                'price_unit': 10.0, 'price_subtotal': 10.0, 'price_subtotal_incl': 10.0,
-            })],
-            'amount_tax': 0.0, 'amount_total': 10.0, 'amount_paid': 0.0, 'amount_return': 0.0,
-            'state': 'draft',
-            # Empty metadata - matches an ordinary, non-Send save's own
-            # payload shape, per Odoo 19's own core source.
-            'last_order_preparation_change': '{"lines": [], "metadata": {}}',
-        })
-        self.assertFalse(
-            order.kds_order_id,
-            "A write/create carrying last_order_preparation_change with EMPTY metadata "
-            "must NOT be treated as a genuine Send - this is the exact confirmed root "
-            "cause of the reported leak.")
-
-        # A subsequent write with the SAME empty-metadata shape must also not sync.
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {}}'})
-        self.assertFalse(order.kds_order_id)
-
-        # Only a write with genuinely populated metadata is a real Send.
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
-        self.assertTrue(
-            order.kds_order_id,
-            "A write with genuinely populated metadata must correctly trigger the sync.")
+    # REAL BUG FIX ("RUNTIME FAILURE - 19.0.7.9.3 STILL BYPASSES 'ON
+    # SEND TO KDS'"): the test that lived here -
+    # test_bug_on_send_boundary_empty_metadata_write_does_not_sync -
+    # directly tested the metadata-interpretation mechanism (empty vs
+    # populated `metadata` in last_order_preparation_change) that this
+    # exact round's own fix abandoned entirely, confirmed unsound by the
+    # KDS Audit Log itself (see flexsys_kds_register_send()'s own
+    # docstring in pos_order.py for the complete explanation). Removed
+    # rather than repurposed - the mechanism it tested no longer exists
+    # in the active create()/write() path; the correct new behavior
+    # (an explicit signal, not content interpretation) is already
+    # covered by test_explicit_send_signal_reconciles_pending_changes
+    # and the Required Acceptance Tests below.
+    # -----------------------------------------------------------------
 
     def test_bug_on_send_boundary_test1_no_ticket_before_any_send_signal(self):
         """Required Acceptance Test 1: create order, add product, do NOT
@@ -2982,7 +2963,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             len(kds_order.line_ids), 1,
             "KDS must remain unchanged - the new product must not appear before Send.")
 
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         kds_order.invalidate_recordset()
         new_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
@@ -3009,7 +2990,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             "unchanged - it must NOT become CANCELLED automatically.")
         self.assertNotEqual(line.state, 'cancelled')
 
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         line.invalidate_recordset()
         self.assertEqual(
@@ -3038,7 +3019,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         events_during = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
         self.assertEqual(events_during, events_before, "Zero intermediate KDS events.")
 
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         line.invalidate_recordset()
         self.assertEqual(
@@ -3067,7 +3048,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         cause (a subsequent routine save re-carrying the same,
         already-handled value)."""
         order = self._make_send_write_order()
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
+        order.flexsys_kds_register_send()
         kds_order = order.kds_order_id
         self.assertTrue(kds_order, "The genuine first Send must sync normally.")
         self.assertEqual(
@@ -3082,7 +3063,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 1,
             'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
         })
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
+        order.flexsys_kds_register_send()
 
         kds_order.invalidate_recordset()
         self.assertFalse(
@@ -3095,7 +3076,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         """Required Test A: new line after first Send, without Send ->
         invisible to KDS."""
         order = self._make_send_write_order()
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
+        order.flexsys_kds_register_send()
         kds_order = order.kds_order_id
         self.assertTrue(kds_order)
 
@@ -3115,7 +3096,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         """Required Test B: quantity change after first Send, without
         Send -> invisible to KDS."""
         order = self._make_send_write_order()
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
+        order.flexsys_kds_register_send()
         kds_order = order.kds_order_id
         line = kds_order.line_ids
         self.assertEqual(line.qty, 1)
@@ -3133,7 +3114,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         """Required Test C: line removal/qty 0 after first Send, without
         Send -> invisible to KDS."""
         order = self._make_send_write_order()
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
+        order.flexsys_kds_register_send()
         kds_order = order.kds_order_id
         line = kds_order.line_ids
 
@@ -3151,7 +3132,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         """Required Test D: after pressing Send -> all pending changes
         become visible correctly with the proper Delta markers."""
         order = self._make_send_write_order()
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
+        order.flexsys_kds_register_send()
         kds_order = order.kds_order_id
         line = kds_order.line_ids
 
@@ -3162,7 +3143,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         order.lines.filtered(lambda l: l.product_id == self.product_burger).write({'qty': 3})
 
         # Genuinely NEW send signal (different value) - a real second Send.
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         kds_order.invalidate_recordset()
         line.invalidate_recordset()
@@ -3182,7 +3163,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         Send' worked example (5 -> 4 -> 7 -> 3, add/remove/add products,
         with zero intermediate KDS events, reconciled exactly once)."""
         order = self._make_send_write_order()
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
+        order.flexsys_kds_register_send()
         kds_order = order.kds_order_id
         line = kds_order.line_ids
         self.assertEqual(line.qty, 1)
@@ -3206,7 +3187,7 @@ class TestPosSync(FlexSysKdsTestCommon):
                           "No intermediate KDS events from the un-sent edits.")
 
         # One genuine Send.
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+        order.flexsys_kds_register_send()
 
         kds_order.invalidate_recordset()
         line.invalidate_recordset()
@@ -3299,3 +3280,286 @@ class TestPosSync(FlexSysKdsTestCommon):
             refund_order.kds_order_id,
             "A refund order must never get its own KDS ticket, even via the explicit "
             "Send signal.")
+
+    # -----------------------------------------------------------------
+    # Dev report "RUNTIME FAILURE - 19.0.7.9.3 STILL BYPASSES 'ON SEND
+    # TO KDS'": the exact confirmed runtime scenario, reproduced end to
+    # end - order 2629-3-000021, 5 x HOT AMERICANO committed, then
+    # 3 x Hot Italy added WITHOUT pressing Send/New, confirmed via the
+    # KDS Audit Log itself that a backend path ("Line Added"/"Order
+    # Routed") was still processing this - now confirmed structurally
+    # impossible: create()/write() can never trigger a sync on their
+    # own for 'send' mode, regardless of any vals they carry.
+    # -----------------------------------------------------------------
+    def test_bug_exact_reported_scenario_hot_americano_hot_italy(self):
+        order = self._make_send_write_order()
+        order.lines.write({'qty': 5})
+        order.flexsys_kds_register_send()
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        line = kds_order.line_ids
+        self.assertEqual(line.qty, 5)
+        events_before = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+
+        # Add 3 x Hot Italy - deliberately WITHOUT calling
+        # flexsys_kds_register_send() - simulating ordinary POS editing
+        # (create() on the new line, plus whatever ordinary write()
+        # activity the order itself goes through as part of that same
+        # POS interaction, none of which may carry the explicit signal).
+        self.env['pos.order.line'].create({
+            'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 3,
+            'price_unit': 4.5, 'price_subtotal': 13.5, 'price_subtotal_incl': 13.5,
+        })
+        # Simulate "normal polling/realtime" per the dev report's own
+        # required test step 5 - an ordinary write on the order itself,
+        # touching fields a real background poll might touch, still
+        # carrying no explicit Send signal.
+        order.write({'note': 'table 4'})
+
+        kds_order.invalidate_recordset()
+        self.assertFalse(
+            kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino),
+            "KDS must still contain ONLY the originally-committed 5 x HOT AMERICANO - "
+            "no Line Added, no Order Routed, no audit event at all, until an explicit "
+            "Send signal arrives.")
+        events_after_edit = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+        self.assertEqual(
+            events_after_edit, events_before,
+            "No new KDS audit events (no 'Line Added', no 'Order Routed') may be "
+            "created by ordinary POS editing or polling alone.")
+
+        # Only now, the explicit Send signal.
+        order.flexsys_kds_register_send()
+
+        kds_order.invalidate_recordset()
+        new_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        self.assertTrue(new_line, "Only after the explicit Send signal must Hot Italy appear.")
+        self.assertEqual(new_line.line_change, 'added')
+        self.assertEqual(new_line.qty, 3)
+        line_added_event = self.env['kds.event'].search([
+            ('order_id', '=', kds_order.id), ('event_type', '=', 'line_added'),
+        ])
+        self.assertTrue(line_added_event,
+                         "The 'Line Added' audit event is only correctly created now.")
+
+    def test_bug_ordinary_writes_can_never_trigger_sync_regardless_of_vals(self):
+        """Confirms the structural guarantee directly: create()/write()
+        on pos.order/pos.order.line can never trigger
+        _flexsys_kds_diff_lines() under 'send' mode, no matter what
+        vals they carry - only flexsys_kds_register_send() can. Tries
+        several plausible-looking "trigger" vals shapes directly, none
+        of which may leak anything."""
+        order = self._make_send_write_order()
+        order.flexsys_kds_register_send()
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+
+        self.env['pos.order.line'].create({
+            'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 1,
+            'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
+        })
+        # A write carrying 'lines' AND a populated last_order_preparation_change
+        # together - the exact shape that used to leak through the old,
+        # now-removed inference mechanism.
+        order.write({
+            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 99}}',
+        })
+        order.write({'state': 'draft'})  # re-writing the same state - another plausible leak vector
+
+        kds_order.invalidate_recordset()
+        self.assertFalse(
+            kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino),
+            "None of these ordinary writes - regardless of which fields they touch or "
+            "what values they carry - may trigger a sync. Only the explicit "
+            "flexsys_kds_register_send() call may.")
+
+    # -----------------------------------------------------------------
+    # Dev report "BUG FIX REQUEST - CANCELLED FILTER CLASSIFICATION +
+    # RETENTION LIFECYCLE".
+    # -----------------------------------------------------------------
+
+    # Issue 1 - CANCELLED tickets incorrectly classified under NEW.
+    def test_issue1_fully_cancelled_before_ever_starting_is_not_new(self):
+        """The exact confirmed runtime scenario: "NEW = 6" with all 6
+        visible cards actually CANCELLED - a station cancelled before
+        ever starting (still 'new' when qty -> 0) must classify as
+        'cancelled', never 'new'."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        self.assertEqual(line.state, 'new')
+
+        order.lines.write({'qty': 0})
+        order.flexsys_kds_register_send()
+
+        line.invalidate_recordset()
+        self.assertEqual(line.state, 'cancelled')
+        self.assertEqual(
+            self._effective_stage(kds_order.line_ids), 'cancelled',
+            "A fully-cancelled station must classify as 'cancelled' - never 'new', "
+            "'preparing', 'ready', or 'completed' - so it can never satisfy any of "
+            "those four tabs' own filter/count check.")
+
+    def test_issue1_fully_cancelled_after_preparing_is_not_preparing(self):
+        """The same fix, confirmed for a station cancelled AFTER
+        reaching Preparing - previously classified as 'preparing' (the
+        old BUG-08 'preserved last stage' value), now correctly
+        'cancelled'."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        self.assertEqual(line.state, 'preparing')
+
+        order.lines.write({'qty': 0})
+        order.flexsys_kds_register_send()
+
+        line.invalidate_recordset()
+        self.assertEqual(line.state, 'cancelled')
+        self.assertEqual(
+            self._effective_stage(kds_order.line_ids), 'cancelled',
+            "A station cancelled after reaching Preparing must still classify as "
+            "'cancelled' for tab-matching purposes - the 'was PREPARING' context is "
+            "preserved separately for display text, not through this value.")
+
+    def test_issue1_acceptance_test_filter_classification(self):
+        """The dev report's own exact Acceptance Test: 1 NEW + 1
+        PREPARING + 1 READY + 1 COMPLETED + 1 CANCELLED ticket -
+        ALL=5, NEW=1, PREPARING=1, READY=1, COMPLETED=1, and the
+        CANCELLED ticket appears in none of the four specific tabs."""
+        new_order = self._create_active_pos_order([(self.product_burger, 1)])
+        new_order.flexsys_kds_register_send()
+
+        preparing_order = self._create_active_pos_order([(self.product_burger, 1)])
+        preparing_order.flexsys_kds_register_send()
+        preparing_order.kds_order_id.line_ids.action_accept()
+        preparing_order.kds_order_id.line_ids.action_start()
+
+        ready_order = self._create_active_pos_order([(self.product_burger, 1)])
+        ready_order.flexsys_kds_register_send()
+        ready_order.kds_order_id.line_ids.action_accept()
+        ready_order.kds_order_id.line_ids.action_start()
+        ready_order.kds_order_id.line_ids.action_ready()
+
+        completed_order = self._create_active_pos_order([(self.product_burger, 1)])
+        completed_order.flexsys_kds_register_send()
+        completed_order.kds_order_id.line_ids.action_accept()
+        completed_order.kds_order_id.line_ids.action_start()
+        completed_order.kds_order_id.line_ids.action_ready()
+        completed_order.kds_order_id.line_ids.action_complete()
+
+        cancelled_order = self._create_active_pos_order([(self.product_burger, 1)])
+        cancelled_order.flexsys_kds_register_send()
+        cancelled_order.lines.write({'qty': 0})
+        cancelled_order.flexsys_kds_register_send()
+
+        all_kds_orders = (new_order.kds_order_id | preparing_order.kds_order_id
+                           | ready_order.kds_order_id | completed_order.kds_order_id
+                           | cancelled_order.kds_order_id)
+        self.assertEqual(len(all_kds_orders), 5, "ALL = 5.")
+
+        stages = {}
+        for o in all_kds_orders:
+            stage = self._effective_stage(o.line_ids)
+            stages.setdefault(stage, []).append(o)
+
+        self.assertEqual(len(stages.get('new', [])), 1, "NEW = 1 - only the actual NEW ticket.")
+        self.assertEqual(len(stages.get('preparing', [])), 1, "PREPARING = 1.")
+        self.assertEqual(len(stages.get('ready', [])), 1, "READY = 1.")
+        self.assertEqual(len(stages.get('completed', [])), 1, "COMPLETED = 1.")
+        self.assertEqual(stages.get('cancelled', [None])[0], cancelled_order.kds_order_id,
+                          "The CANCELLED ticket must classify as 'cancelled', appearing in "
+                          "none of the four specific tabs' own stage bucket.")
+
+    def test_issue1_test_c_filter_counters_with_multiple_cancelled(self):
+        """Required Runtime Test C: 1 actual NEW + 6 retained CANCELLED
+        - ALL=7, NEW=1 - never ALL=7/NEW=7, never NEW=6."""
+        new_order = self._create_active_pos_order([(self.product_burger, 1)])
+        new_order.flexsys_kds_register_send()
+
+        cancelled_orders = self.env['pos.order']
+        for _ in range(6):
+            order = self._create_active_pos_order([(self.product_burger, 1)])
+            order.flexsys_kds_register_send()
+            order.lines.write({'qty': 0})
+            order.flexsys_kds_register_send()
+            cancelled_orders |= order
+
+        all_kds_orders = new_order.kds_order_id
+        for o in cancelled_orders:
+            all_kds_orders |= o.kds_order_id
+        self.assertEqual(len(all_kds_orders), 7, "ALL = 7.")
+
+        new_count = sum(1 for o in all_kds_orders if self._effective_stage(o.line_ids) == 'new')
+        cancelled_count = sum(1 for o in all_kds_orders if self._effective_stage(o.line_ids) == 'cancelled')
+        self.assertEqual(new_count, 1, "NEW = 1 - the 6 retained CANCELLED tickets must not "
+                                        "be counted, whether as NEW = 7 or as NEW = 6.")
+        self.assertEqual(cancelled_count, 6)
+
+    # Issue 2 - CANCELLED retention must follow POS closed state.
+    def test_issue2_cancelled_pos_order_stamps_pos_closed_at(self):
+        """REAL BUG FIX found via this module's own re-verification: a
+        POS order that gets CANCELLED outright (state='cancel', never
+        paid) must also stamp pos_closed_at - it is unambiguously no
+        longer active/open, exactly like a paid order, yet the old
+        condition never included 'cancel' in its own closed-state set."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        order.flexsys_kds_register_send()
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        self.assertFalse(kds_order.pos_closed_at)
+
+        order.write({'state': 'cancel'})
+
+        kds_order.invalidate_recordset()
+        self.assertTrue(
+            kds_order.pos_closed_at,
+            "Cancelling the POS order outright must stamp pos_closed_at - a cancelled "
+            "POS order is unambiguously closed, not 'still active'.")
+
+    def test_issue2_cancelled_kds_ticket_expires_after_pos_cancel_and_retention(self):
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        order.flexsys_kds_register_send()
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_cancel(reason='test', bypass_check=True)
+        line.sudo().write({'cancelled_at': fields.Datetime.now() - timedelta(minutes=60)})
+        self.assertFalse(kds_order.pos_closed_at)
+
+        order.write({'state': 'cancel'})
+
+        kds_order.invalidate_recordset()
+        self.assertTrue(kds_order.pos_closed_at)
+        pos_closed_cutoff = fields.Datetime.now() - timedelta(minutes=5)
+        self.assertGreaterEqual(
+            kds_order.pos_closed_at, pos_closed_cutoff,
+            "pos_closed_at reflects the moment of POS cancellation just now, confirming "
+            "retention is anchored to that closure moment, not the much-earlier "
+            "cancellation of the KDS line itself.")
+
+    def test_issue2_active_pos_cancelled_kds_never_expires_do_not_regress(self):
+        """Confirms the previously-approved rule is unchanged: ACTIVE
+        POS + CANCELLED KDS ticket + 20 minutes elapsed - ticket remains
+        visible. This is intentional, and must NOT be "fixed" by
+        reverting to cancelled_at + retention."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        order.flexsys_kds_register_send()
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+
+        order.lines.write({'qty': 0})
+        order.flexsys_kds_register_send()
+        line.invalidate_recordset()
+        self.assertEqual(line.state, 'cancelled')
+        line.sudo().write({'cancelled_at': fields.Datetime.now() - timedelta(minutes=20)})
+        self.assertFalse(kds_order.pos_closed_at, "POS order was never paid/finalized/closed.")
+
+        pos_closed_cutoff = fields.Datetime.now() - timedelta(minutes=5)
+        cancelled_cutoff = fields.Datetime.now() - timedelta(minutes=5)
+        self.assertTrue(
+            self._display_visible(line, kds_order, pos_closed_cutoff, cancelled_cutoff),
+            "20 minutes elapsed, POS still active - the ticket must remain visible in "
+            "ALL. This is intentional and must not regress to cancelled_at-based expiry.")

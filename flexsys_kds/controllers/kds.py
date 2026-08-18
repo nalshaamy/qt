@@ -72,24 +72,45 @@ def _effective_stage(lines):
     impossible rather than something each call site has to
     independently get right.
 
-    Returns exactly one of: 'new', 'preparing', 'ready', 'completed',
-    or a BUG-08 "preserved last stage" value ('new'/'preparing'/'ready')
-    for a station where every line is cancelled with nothing ever
-    completed - that reuses the very same value this function already
-    returns for the genuine, non-cancelled case, so a cancelled-while-
-    Preparing station and a genuinely-still-preparing station both
-    correctly land under the same PREPARING tab, exactly as BUG-08's own
-    "the card should remain temporarily visible under PREPARING"
-    requires. `lines` here must already be pre-filtered to the display
+    Returns exactly one of: 'new', 'preparing', 'ready', 'completed', or
+    'cancelled' for a station where every line is cancelled.
+
+    REAL BUG FIX ("CANCELLED FILTER CLASSIFICATION + RETENTION
+    LIFECYCLE", Issue 1), confirmed live: "NEW = 6" with all 6 visible
+    cards actually CANCELLED - this function used to return a BUG-08
+    "preserved last stage" value ('new'/'preparing'/'ready') for a
+    fully-cancelled station instead of a distinct 'cancelled' value,
+    which is exactly what let a cancelled-before-ever-starting ticket
+    satisfy the NEW tab's own `effective_stage === 'new'` filter check.
+    That BUG-08 behavior was a deliberate design at the time ("the card
+    should remain temporarily visible under PREPARING... matching the
+    real stage the moment it was cancelled") - this report is an
+    explicit, later correction overriding it: "we do NOT want a
+    separate CANCELLED filter/tab... A CANCELLED ticket must NEVER
+    appear under NEW/PREPARING/READY/COMPLETED... It should only remain
+    visible in ALL." Returning a distinct 'cancelled' value here means
+    every tab's own `effective_stage === filter` check (see both
+    screens' own filteredOrders/counts) now automatically and
+    correctly excludes a cancelled ticket from all four specific tabs
+    at once, with no separate per-tab exclusion logic needed - while
+    'all' (which does not filter by effective_stage at all) continues
+    to show it, subject to the normal retention rules.
+
+    The underlying "what stage was this station at when it got
+    cancelled" information (ever_ready/ever_preparing below) is NOT
+    lost - it still drives the card's own "CANCELLED (was PREPARING)"
+    status text, via the completely separate stationLifecycle()/
+    lastStage mechanism (both screens' own mainAction()/statusText
+    already intercept the all-cancelled case before ever consulting
+    effective_stage at all) - only the TAB-MATCHING value itself
+    changes here.
+
+    `lines` here must already be pre-filtered to the display
     grace-period set (this function does not itself apply retention).
     """
     active = [l for l in lines if l.state != 'cancelled']
     if not active:
-        if not lines:
-            return 'new'
-        ever_ready = any(l.ready_time for l in lines)
-        ever_preparing = any(l.preparation_start_time for l in lines)
-        return 'ready' if ever_ready else 'preparing' if ever_preparing else 'new'
+        return 'cancelled' if lines else 'new'
     if all(l.state == 'completed' for l in active):
         return 'completed'
     if all(l.state in ('ready', 'completed') for l in active):

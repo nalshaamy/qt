@@ -56,14 +56,18 @@ CANCELLED_GRACE_MINUTES = 5
 def _effective_stage(lines):
     """BUG-10 FIX - see controllers/kds.py's own matching, more detailed
     docstring for the full explanation. Kept in sync manually, same as
-    COMPLETED_GRACE_MINUTES/CANCELLED_GRACE_MINUTES above."""
+    COMPLETED_GRACE_MINUTES/CANCELLED_GRACE_MINUTES above.
+
+    REAL BUG FIX ("CANCELLED FILTER CLASSIFICATION + RETENTION
+    LIFECYCLE", Issue 1) - see controllers/kds.py's own matching, more
+    detailed docstring for the full explanation: a fully-cancelled
+    station now returns the distinct 'cancelled' value, not a BUG-08
+    "preserved last stage" value - this is what actually fixes "NEW = 6"
+    with all 6 cards genuinely CANCELLED.
+    """
     active = [l for l in lines if l.state != 'cancelled']
     if not active:
-        if not lines:
-            return 'new'
-        ever_ready = any(l.ready_time for l in lines)
-        ever_preparing = any(l.preparation_start_time for l in lines)
-        return 'ready' if ever_ready else 'preparing' if ever_preparing else 'new'
+        return 'cancelled' if lines else 'new'
     if all(l.state == 'completed' for l in active):
         return 'completed'
     if all(l.state in ('ready', 'completed') for l in active):
@@ -1120,16 +1124,21 @@ function render() {
     // card in", not two parallel implementations that could drift.
     const lifecycle = stationLifecycle(order);
     const isCancelledTerminal = !lifecycle.hasActiveWork && lifecycle.allCancelled;
-    // BUG-08 FIX ("No Active Work... visually indicate that the
-    // remaining station work is cancelled... the operator should
-    // understand: this station was preparing this order, but all
-    // remaining work was cancelled"): checked first - effective_stage
-    // for this exact case already returns the *preserved* stage value
-    // (e.g. 'preparing'), which must be labeled as cancelled-at-that-
-    // stage here, not mistaken for genuinely active work.
+    // REAL BUG FIX ("CANCELLED FILTER CLASSIFICATION + RETENTION
+    // LIFECYCLE", Issue 1): order.effective_stage itself is now the
+    // distinct 'cancelled' value for this exact case (see
+    // controllers/kds_kiosk.py's own _effective_stage() docstring for
+    // the full explanation of why - "NEW = 6" with all 6 cards
+    // genuinely CANCELLED, since effective_stage used to reuse the
+    // "preserved last stage" value directly). The "was X" stage label
+    // must therefore come from lifecycle.lastStage (stationLifecycle()
+    // above, computed independently from ever_ready/ever_preparing
+    // timestamps) instead of order.effective_stage, which no longer
+    // carries that information - looking it up there now would
+    // incorrectly read "CANCELLED (was undefined)".
     const stageLabel = {new: 'NEW', preparing: 'PREPARING', ready: 'READY', completed: 'COMPLETED'};
     const statusText = order.state === 'cancelled' ? 'CANCELLED'
-      : isCancelledTerminal ? `CANCELLED (was ${stageLabel[order.effective_stage]})`
+      : isCancelledTerminal ? `CANCELLED (was ${stageLabel[lifecycle.lastStage]})`
       : stageLabel[order.effective_stage] || 'PREPARING';
     const isReadyOrDone = order.effective_stage === 'ready' || order.effective_stage === 'completed';
     const cardClass = order.state === 'cancelled' ? 'cancelled'

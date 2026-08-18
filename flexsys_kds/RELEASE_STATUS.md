@@ -1,22 +1,23 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.9.3**
+**Version: 19.0.7.9.5**
 **Status as of this document: code-complete, including everything
-through v7.9.2 (see CHANGELOG.md for the full history), plus this
-round's fix: abandoning the purely backend-side approach to detecting a
-genuine "Send" (two prior rounds each individually reasoned from Odoo
-19's own core source, each still failed in live testing) in favor of an
-explicit signal this module controls directly - a frontend patch on
-`PosStore.prototype.sendOrderInPreparation` (confirmed from Odoo 19's
-own core source to be the actual native "Send" method) calls a new,
-dedicated RPC method the moment Odoo's own native Send completes. 294
+through v7.9.4 (see CHANGELOG.md for the full history), plus this
+round's fix: "CANCELLED Filter Classification + Retention Lifecycle" -
+`_effective_stage()` (both controllers) now returns a distinct
+`'cancelled'` value for a fully-cancelled station instead of reusing a
+BUG-08 "preserved last stage" value, which was the confirmed root cause
+of "NEW = 6" with all 6 visible cards actually CANCELLED; caught and
+fixed a real regression this introduced in both screens' own "CANCELLED
+(was PREPARING)" status text before shipping; and closed an
+independently-found gap where a POS order cancelled outright
+(`state == 'cancel'`) never stamped `pos_closed_at`, meaning its linked
+CANCELLED KDS ticket could never become retention-eligible at all. 302
 automated tests, all `py_compile`/XML/JS checks passing, plus a custom
-AST-based undefined-name sweep. **This round patches Odoo's own core
-POS register frontend for the first time in this module's history -
-see this document's own dedicated section below for the risk profile
-and required verification steps before this specific piece is not yet
-signed off on a live instance — see "What still needs a human" at the
-end.**
+AST-based undefined-name sweep. **The v7.9.3 frontend patch itself
+remains the highest-risk, still-unverified piece of this entire
+delivery - see that section below - not yet signed off on a live
+instance — see "What still needs a human" at the end.**
 
 
 This document maps directly to that request's own section structure
@@ -691,6 +692,92 @@ to load entirely**.
    `pos_store.js` structure is re-confirmed against the live instance
    directly, rather than via the citation this delivery relied on.
 
+## On Send to KDS: removed the last backend inference path entirely (v7.9.4)
+**Confirmed still reproducing on v7.9.3**, with a real ticket
+(`2629-3-000021`) - and the **KDS Audit Log itself proved this was a
+backend database write, not a frontend display gap**: genuine
+`"Line Added"`/`"Order Routed"` events, with the exact note text
+`_flexsys_kds_diff_lines()` emits, were created without any Send/New
+pressed.
+
+**Root cause**: v7.9.3's own frontend patch was correctly implemented
+and (as far as this delivery can determine) should have been calling
+the new explicit signal correctly - but the OLD backend inference
+mechanism from v7.9.1/v7.9.2 was **never actually removed**, and
+remained fully active in `create()`/`write()` in parallel with the new
+explicit signal. The Audit Log evidence directly disproves that old
+mechanism's own core assumption (that a genuine Send is what makes
+`last_order_preparation_change`'s value both non-empty and different
+from before) - an ordinary product-add write's own value satisfied both
+of that check's own conditions without any genuine Send occurring.
+
+**Fix**: `create()`/`write()` no longer call
+`_flexsys_kds_should_treat_as_send()` at all - `is_send_write` is now
+unconditionally `False` from both, for every trigger mode. Under
+`'send'` mode, `flexsys_kds_register_send()` (the explicit RPC method
+from v7.9.3) is now the **only** possible trigger for a sync -
+structurally, not just in practice.
+
+**A large-scale, individually-verified test migration**: 41 tests using
+the old `last_order_preparation_change`-write pattern were transformed
+to the new explicit call (verified via an exact-pattern search
+confirming structural identity before transformation, not a blind
+mechanical replacement); 10 further occurrences setting the field
+within `create()`'s own vals (including the shared
+`_create_active_pos_order()` helper used across dozens of tests) were
+each reviewed and updated individually; one test that directly tested
+the now-abandoned mechanism itself was removed with an explanatory
+note.
+
+**What still needs a human**: this fix makes the backend structurally
+correct regardless of frontend behavior - but the v7.9.3 frontend
+patch's own live verification (see that section immediately above)
+remains equally necessary and equally unresolved. With this round's own
+fix in place, if the frontend patch itself is NOT working correctly for
+some reason (wrong import path, method not actually called, etc.), the
+symptom would now flip from "leaks early" to "never syncs at all under
+'send' mode" - a safer failure direction, but still one that needs the
+same live verification steps already documented in the v7.9.3 section
+to catch.
+
+## CANCELLED Filter Classification + Retention Lifecycle (v7.9.5)
+**Confirmed live**: "NEW = 6" with all 6 visible cards actually
+CANCELLED. Root cause: `_effective_stage()` - the single authoritative
+value driving every tab filter/count on both KDS screens (from BUG-10)
+- returned a BUG-08 "preserved last stage" value for a fully-cancelled
+station instead of a distinct one, so a station cancelled before ever
+starting satisfied the NEW tab's own filter check exactly. Fixed to
+return a distinct `'cancelled'` value - every tab's own `effective_stage
+=== filter` check now automatically excludes cancelled tickets from all
+four specific tabs at once, while `ALL` (which never filters by
+`effective_stage`) continues to show them.
+
+**A real regression caught before shipping**: both screens' own
+"CANCELLED (was PREPARING)" status text used to read the "was X" label
+directly from `order.effective_stage` itself - which, after this fix,
+no longer carries that information. Fixed to read from
+`stationLifecycle().lastStage` instead (computed independently,
+unaffected by this change).
+
+**A second, independently-found gap**: `pos_closed_at` was never
+stamped for a POS order cancelled outright (`state == 'cancel'`) - only
+for payment-closed states - meaning a CANCELLED KDS ticket linked to an
+outright-cancelled POS order could never become retention-eligible at
+all. `'cancel'` is now included in the closed-state set.
+
+**Confirmed unchanged (by design, not a bug)**: the previously-approved
+rule itself - ACTIVE POS + CANCELLED KDS ticket + any amount of time
+elapsed → ticket remains visible in `ALL`. This is intentional and was
+not modified.
+
+**What still needs a human**: the dev report's own Required Runtime
+Tests A/B/C, run against a real Odoo.sh staging instance - particularly
+confirming the exact screenshot scenario no longer reproduces (create a
+mix of NEW/PREPARING/READY/COMPLETED/CANCELLED tickets, confirm the NEW
+tab and its own counter show only genuine NEW tickets) and that the
+newly-added `pos_closed_at`-on-cancel stamping correctly triggers
+retention for a real POS order cancellation on the live instance.
+
 ---
 
 ## What still needs a human
@@ -954,7 +1041,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 294 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 302 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

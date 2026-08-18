@@ -1322,14 +1322,15 @@ class TestWorkflow(FlexSysKdsTestCommon):
     def _effective_stage(lines):
         """Python port of _effective_stage() (controllers/kds.py /
         controllers/kds_kiosk.py) - kept deliberately in lockstep with
-        those two copies."""
+        those two copies.
+
+        REAL BUG FIX ("CANCELLED FILTER CLASSIFICATION + RETENTION
+        LIFECYCLE", Issue 1): a fully-cancelled station now returns the
+        distinct 'cancelled' value - see the real function's own
+        updated docstring for the complete explanation."""
         active = [l for l in lines if l.state != 'cancelled']
         if not active:
-            if not lines:
-                return 'new'
-            ever_ready = any(l.ready_time for l in lines)
-            ever_preparing = any(l.preparation_start_time for l in lines)
-            return 'ready' if ever_ready else 'preparing' if ever_preparing else 'new'
+            return 'cancelled' if lines else 'new'
         if all(l.state == 'completed' for l in active):
             return 'completed'
         if all(l.state in ('ready', 'completed') for l in active):

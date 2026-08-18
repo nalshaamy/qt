@@ -8,6 +8,171 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.9.5 — CANCELLED Filter Classification + Retention Lifecycle
+
+Two issues confirmed live before the next build's deployment.
+
+### Issue 1 - CANCELLED tickets incorrectly shown under NEW ("NEW = 6" with all 6 cards genuinely CANCELLED)
+**Root cause**: `_effective_stage()` (both controllers) - the single
+authoritative value driving every tab filter/count on both KDS screens
+- returned a BUG-08 "preserved last stage" value
+(`'new'`/`'preparing'`/`'ready'`) for a fully-cancelled station instead
+of a distinct value. A station cancelled before ever starting therefore
+satisfied the NEW tab's own `effective_stage === 'new'` check exactly,
+the confirmed root cause of "NEW = 6" with every visible card actually
+CANCELLED. That behavior was a deliberate BUG-08 design at the time;
+this report is an explicit, later correction overriding it: "we do NOT
+want a separate CANCELLED filter/tab... A CANCELLED ticket must NEVER
+appear under NEW/PREPARING/READY/COMPLETED... only remain visible in
+ALL."
+
+**Fix**: `_effective_stage()` (`controllers/kds.py`,
+`controllers/kds_kiosk.py`) now returns a distinct `'cancelled'` value
+for a fully-cancelled station. Every tab's own `effective_stage ===
+filter` check (already the single mechanism driving both screens' tab
+filters and counts, from BUG-10) now automatically and correctly
+excludes a cancelled ticket from all four specific tabs at once - no
+separate per-tab exclusion logic needed - while `'all'` (which never
+filters by `effective_stage`) continues to show it, subject to normal
+retention.
+
+**A real regression caught while implementing this, before shipping**:
+both screens' own "CANCELLED (was PREPARING)" status-text logic
+(`kds_order_card.js`, the kiosk's own inline JS in
+`controllers/kds_kiosk.py`) looked up the "was X" stage label directly
+from `order.effective_stage` - which, after this fix, is now just
+`'cancelled'` itself, no longer carrying the preserved-stage
+information. Would have shown "CANCELLED (was undefined)" for every
+such card. Fixed to read from `stationLifecycle().lastStage`
+(computed independently from `ever_ready`/`ever_preparing`
+timestamps, entirely unaffected by this change) instead -
+`mainAction()`/`borderClass` on both screens were already safe, since
+they intercept the fully-cancelled case before ever consulting
+`effective_stage` at all.
+
+### Issue 2 - CANCELLED retention must follow POS closed state
+**Confirmed**: the previously-approved `pos_closed_at`-based rule
+(v7.9.0/v7.9.5's own Issue 1 predecessor) is correct and unchanged -
+"ACTIVE POS + CANCELLED KDS ticket + 20 minutes elapsed → ticket
+remains visible. This is intentional." This is by design, not a bug.
+
+**A real, independent gap found via this module's own re-verification
+of the rule** (not from a specific reported symptom): the
+`pos_closed_at` stamping condition in `pos_order.py::write()` only
+included `('paid', 'done', 'invoiced')` - a POS order that gets
+**cancelled outright** (`state == 'cancel'`, never paid) is
+unambiguously no longer active/open, exactly the same as a paid order -
+yet its own linked `kds.order` would never have had `pos_closed_at`
+stamped under the old condition, meaning any CANCELLED KDS ticket
+linked to an outright-cancelled POS order would never become eligible
+for retention at all, staying visible in `ALL` indefinitely. `'cancel'`
+is now included alongside the payment-closed states.
+
+### Files changed
+`controllers/kds.py`, `controllers/kds_kiosk.py` (`_effective_stage()`),
+`static/src/js/kds_order_card.js` (statusText fix), `models/pos_order.py`
+(`pos_closed_at` stamping condition), `tests/test_pos_sync.py`,
+`tests/test_workflow.py` (both Python-port `_effective_stage()` test
+helpers updated to match).
+
+### Tests
+8 new tests: the exact confirmed scenario (cancelled-before-starting no
+longer classifies as 'new'), a station cancelled after reaching
+Preparing (no longer classifies as 'preparing'), the dev report's own
+full Acceptance Test (1 each of NEW/PREPARING/READY/COMPLETED/CANCELLED
+- confirmed ALL=5, each specific tab=1, CANCELLED in none of them),
+Required Test C exactly (1 NEW + 6 retained CANCELLED - ALL=7, NEW=1,
+never NEW=7 or NEW=6), the newly-found `pos_closed_at`-on-cancel gap
+(both the stamping itself and the resulting retention-eligible expiry),
+and an explicit non-regression test confirming the previously-approved
+"20 minutes elapsed, POS still active, ticket stays visible" rule is
+unchanged. Every existing test using either `_effective_stage()` helper
+was individually checked (not assumed) for a fully-cancelled scenario
+that might need an updated assertion - none found; all involve mixed
+active/cancelled or non-cancellation scenarios, correctly unaffected by
+this change.
+
+**Total: 302 tests** (up from 295). No database migration required.
+
+---
+
+## v7.9.4 — On Send to KDS: removed the last backend inference path entirely
+
+**Confirmed still reproducing live** on v7.9.3, with a real ticket
+(`2629-3-000021`): 3 x Hot Italy added to an already-committed order
+(5 x HOT AMERICANO), without Send/New, still appeared in KDS
+immediately - **and the KDS Audit Log itself proved this was a backend
+path**, not a frontend display gap: `"Line Added"` / `"Order Routed"`
+events, with the exact note text
+`_flexsys_kds_diff_lines()` emits (`"Hot Italy added after order was
+sent"`), were genuinely created in the database.
+
+### Root cause
+The v7.9.3 frontend patch (`flexsys_kds_pos_send_signal.js`) was
+correctly calling the new explicit-signal RPC method - but the OLD
+backend inference mechanism from v7.9.1/v7.9.2
+(`_flexsys_kds_should_treat_as_send()`, checking
+`last_order_preparation_change`'s own content and change-in-value) was
+never removed, and remained fully active in `create()`/`write()`
+alongside the new explicit signal. The Audit Log evidence proves this
+old mechanism's own core assumption - that a genuine Send is what makes
+this field's value both non-empty and different from before - is
+false: an ordinary product-add write's own value satisfied both of
+that check's own conditions without any genuine Send occurring.
+
+### Fix
+`pos.order.write()` and `create()` no longer call
+`_flexsys_kds_should_treat_as_send()`/`_is_genuine_send_signal()` at
+all - `is_send_write` is now unconditionally `False` from both of these
+methods, for every trigger mode. Under `'send'` mode, the *only* way to
+trigger `_flexsys_kds_diff_lines()`/`_flexsys_kds_create()` is now the
+explicit `flexsys_kds_register_send()` RPC call (introduced in v7.9.3,
+called by this module's own frontend patch immediately after Odoo's
+own native Send action completes) - never inferred from interpreting
+any Odoo-internal field's own value again. This satisfies the dev
+report's own explicit architecture requirement verbatim: "the backend
+reconciliation must be gated by an explicit 'sent generation /
+committed snapshot' value... reconcile only against the last POS state
+explicitly committed through On Send to KDS."
+
+`_flexsys_kds_should_treat_as_send()` is left defined (not deleted),
+documented as currently unused - matching this project's own
+established convention for methods superseded by a later fix.
+
+### A real, large-scale test migration
+**41 existing tests** used `order.write({'last_order_preparation_change':
+...})` to simulate a Send - verified via an exact-pattern search
+(confirming all 41 occurrences were structurally identical, differing
+only in an arbitrary version number that carried no semantic meaning)
+before a single, targeted, non-blind transformation to
+`order.flexsys_kds_register_send()`. A further **10 occurrences** set
+the field directly within a `create()` call's own vals (including the
+shared `_create_active_pos_order()` helper used by dozens of other
+tests) - each reviewed and updated individually, moving the signal to
+an explicit `flexsys_kds_register_send()` call after creation. One test
+that directly tested the now-abandoned metadata-interpretation
+mechanism itself
+(`test_bug_on_send_boundary_empty_metadata_write_does_not_sync`) was
+removed with an explanatory note, rather than left testing a mechanism
+that no longer exists in the active code path.
+
+### Tests
+2 new tests: the dev report's own exact scenario reproduced end to end
+(5 x HOT AMERICANO committed, 3 x Hot Italy added via ordinary
+`create()` plus an ordinary `write()` simulating normal polling/
+realtime - confirmed zero KDS changes and zero new audit events until
+the explicit signal arrives, then confirmed the pending change
+correctly appears with its own audit event), and a structural
+guarantee test trying several plausible-looking "trigger" vals shapes
+directly against `write()` (including the exact shape that used to leak
+through the old mechanism) - confirming none of them can trigger a sync
+regardless of what they carry.
+
+**Total: 295 tests** (up from 294, net of the one removed obsolete
+test and the new additions). No database migration required.
+
+---
+
 ## v7.9.3 — On Send to KDS: abandoned backend-only signal inference, added an explicit frontend signal instead
 
 **Confirmed still reproducing live** on v7.9.2, with a real ticket

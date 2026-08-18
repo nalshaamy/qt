@@ -140,25 +140,24 @@ class PosOrder(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         orders = super().create(vals_list)
-        for order, vals in zip(orders, vals_list):
-            # CHANGE REQUEST FIX ("On Send to KDS"): a brand-new order
-            # can itself already carry last_order_preparation_change in
-            # its own initial creation vals (e.g. an order created and
-            # immediately Sent in the same frontend round-trip) - checked
-            # here too, not just in write(), so that scenario is
-            # correctly recognized as a genuine Send trigger from the
-            # very first sync attempt.
-            #
-            # REAL BUG FIX ("On Send to KDS / Subsequent Changes Bypass
-            # Send Gate"): routed through
-            # order._flexsys_kds_should_treat_as_send(vals) - which
-            # itself combines _is_genuine_send_signal() with a check
-            # against kds_last_processed_send_signal (that field's own
-            # docstring, just above, has the full explanation) - rather
-            # than the bare _is_genuine_send_signal(vals) call this used
-            # to make on its own.
-            order.sudo()._flexsys_kds_sync(
-                is_send_write=order._flexsys_kds_should_treat_as_send(vals))
+        for order in orders:
+            # REAL BUG FIX ("RUNTIME FAILURE - 19.0.7.9.3 STILL BYPASSES
+            # 'ON SEND TO KDS'"): see write()'s own matching, more
+            # detailed comment for the full explanation of why
+            # interpreting last_order_preparation_change's own content
+            # was abandoned entirely, confirmed unsound by the KDS Audit
+            # Log itself. is_send_write is always False here now too,
+            # for the exact same reason and for consistency - 'payment'
+            # mode is unaffected (its own gate never depended on
+            # is_send_write to begin with); 'send' mode's own genuine
+            # Send/creation now comes exclusively through
+            # flexsys_kds_register_send() (this module's own frontend
+            # patch calls it immediately after Odoo's own native Send
+            # action completes, which itself only runs after the order
+            # this same request is creating already has a real,
+            # persisted id) - never inferred here from this creation's
+            # own initial vals.
+            order.sudo()._flexsys_kds_sync(is_send_write=False)
         return orders
 
     def write(self, vals):
@@ -178,28 +177,49 @@ class PosOrder(models.Model):
         if 'state' in vals or 'lines' in vals or 'last_order_preparation_change' in vals:
             for order in self:
                 order = order.sudo()
-                # REAL BUG FIX ("On Send to KDS / Subsequent Changes
-                # Bypass Send Gate"), confirmed live: adding a product to
-                # an order that had ALREADY been sent once - without
-                # pressing Send again - still leaked straight through to
-                # KDS. The earlier fix here (_is_genuine_send_signal(vals)
-                # alone) checked only whether THIS write's own metadata
-                # was non-empty - but once an order has been sent even
-                # once, its own last_order_preparation_change value stays
-                # non-empty going forward, and Odoo's own frontend
-                # re-serializes that SAME, unchanged value as part of
-                # its routine save payload on essentially every
-                # subsequent write, not exclusively a genuine second
-                # Send. Routed through
-                # order._flexsys_kds_should_treat_as_send(vals) instead -
-                # see kds_last_processed_send_signal's own docstring
-                # (just above the class) for the complete explanation of
-                # the "has this exact value already been processed"
-                # check that closes this gap. Computed per-order now
-                # (each order's own kds_last_processed_send_signal
-                # differs), not once for the whole batch the way the old
-                # single is_send_write value was.
-                is_send_write = order._flexsys_kds_should_treat_as_send(vals)
+                # REAL BUG FIX ("RUNTIME FAILURE - 19.0.7.9.3 STILL
+                # BYPASSES 'ON SEND TO KDS'"), confirmed live via the
+                # KDS Audit Log itself (order 2629-3-000021: "Hot Italy
+                # added after order was sent" - the exact message
+                # _flexsys_kds_diff_lines() emits, proving this write()
+                # gate, not just a frontend display gap, was still
+                # reaching it): two consecutive rounds
+                # (_is_genuine_send_signal()'s non-empty-metadata check,
+                # then kds_last_processed_send_signal's own value-changed
+                # check) each assumed last_order_preparation_change's own
+                # content or its own change in value reliably
+                # distinguishes a genuine Send from a routine save - the
+                # Audit Log evidence now CONFIRMS that assumption itself
+                # is false: an ordinary product-add write's own
+                # last_order_preparation_change value both had non-empty
+                # metadata AND differed from the previously-processed
+                # one, exactly satisfying the old check's own two
+                # conditions, without any genuine Send having occurred.
+                # Continuing to interpret this field's own content, a
+                # third time, is abandoned entirely here rather than
+                # adding a fourth condition to the same fundamentally
+                # unsound mechanism - "the remaining bypass is clearly
+                # server-side... do not add another frontend condition."
+                #
+                # is_send_write is now ALWAYS False from this method,
+                # for every trigger mode - 'send' mode's own genuine
+                # Send signal now comes exclusively from
+                # flexsys_kds_register_send() (see that method's own
+                # docstring below), an explicit RPC call this module's
+                # own frontend patch
+                # (static/src/js/flexsys_kds_pos_send_signal.js) makes
+                # immediately after Odoo's own native Send action
+                # completes - never inferred from interpreting any
+                # Odoo-internal field's own value here. This satisfies
+                # the dev report's own explicit architecture requirement
+                # verbatim: "the backend reconciliation must be gated by
+                # an explicit 'sent generation / committed snapshot'
+                # value... reconcile only against the last POS state
+                # explicitly committed through On Send to KDS" - a plain
+                # write() to this order, regardless of its own vals'
+                # content, can structurally never trigger
+                # _flexsys_kds_diff_lines() on its own again.
+                is_send_write = False
                 # REAL BUG FIX ("BUG-14 - COMPLETED Retention Must
                 # Depend on POS Closure"): stamps kds.order.pos_closed_at
                 # the moment this order's own state is observed
@@ -213,7 +233,23 @@ class PosOrder(models.Model):
                 # with a later one (e.g. paid -> done -> invoiced as
                 # separate writes) - the FIRST genuine closure is the
                 # one that should anchor the retention timer.
-                if (vals.get('state') in ('paid', 'done', 'invoiced')
+                #
+                # REAL BUG FIX ("CANCELLED FILTER CLASSIFICATION +
+                # RETENTION LIFECYCLE", Issue 2), found via this
+                # module's own re-verification of the previously-
+                # approved pos_closed_at rule (not a confirmed report
+                # detail, but a genuine gap this review surfaced): the
+                # closed-state set here never included 'cancel' - a POS
+                # order that gets CANCELLED outright (never paid) is
+                # unambiguously no longer "active/open" - it's
+                # terminated, exactly the same as a paid one - yet its
+                # own linked kds.order would never have pos_closed_at
+                # stamped under the old condition, meaning any CANCELLED
+                # KDS ticket linked to it would never become eligible
+                # for retention at all, staying visible in ALL forever.
+                # 'cancel' is now included alongside the payment-closed
+                # states.
+                if (vals.get('state') in ('paid', 'done', 'invoiced', 'cancel')
                         and order.kds_order_id and not order.kds_order_id.pos_closed_at):
                     order.kds_order_id.pos_closed_at = fields.Datetime.now()
                 if vals.get('state') == 'cancel':
@@ -223,16 +259,32 @@ class PosOrder(models.Model):
         return res
 
     def _flexsys_kds_should_treat_as_send(self, vals):
-        """REAL BUG FIX ("On Send to KDS / Subsequent Changes Bypass
-        Send Gate") - see kds_last_processed_send_signal's own field
-        docstring, just above this class's own start, for the complete
-        root-cause explanation. Combines the existing
-        _is_genuine_send_signal() content check (non-empty metadata)
-        with a fresh check that the incoming value actually DIFFERS from
-        the last value this module itself already processed as a Send -
-        a write carrying the exact same, already-handled value is a
-        routine re-save carrying stale state along, never a new Send on
-        its own.
+        """CURRENTLY UNUSED as of the "RUNTIME FAILURE - 19.0.7.9.3
+        STILL BYPASSES 'ON SEND TO KDS'" fix: create()/write() above no
+        longer call this - see flexsys_kds_register_send()'s own
+        docstring, and write()'s own inline comment, for the full
+        explanation of why interpreting last_order_preparation_change's
+        own content or its own change in value was abandoned entirely,
+        confirmed unsound by the KDS Audit Log itself (a routine
+        product-add write's own value satisfied both of this method's
+        own conditions - non-empty metadata AND differing from the
+        previously-processed value - without any genuine Send having
+        occurred). Left defined, not deleted, since the underlying
+        detection logic itself might still be a useful reference or
+        fallback signal for a future scenario this project hasn't hit
+        yet, but nothing in the active create()/write() path currently
+        calls it.
+
+        Originally: REAL BUG FIX ("On Send to KDS / Subsequent Changes
+        Bypass Send Gate") - see kds_last_processed_send_signal's own
+        field docstring, just above this class's own start, for the
+        complete root-cause explanation this method itself was built to
+        address. Combines the existing _is_genuine_send_signal() content
+        check (non-empty metadata) with a fresh check that the incoming
+        value actually DIFFERS from the last value this module itself
+        already processed as a Send - a write carrying the exact same,
+        already-handled value is a routine re-save carrying stale state
+        along, never a new Send on its own.
         """
         self.ensure_one()
         self = self.sudo()
@@ -288,7 +340,6 @@ class PosOrder(models.Model):
         """
         for order in self.sudo():
             order._flexsys_kds_sync(is_send_write=True)
-
 
     def _flexsys_kds_cancel(self):
         """AUDIT FIX / NEW REQUIREMENT ("POS Cancellation Propagation",

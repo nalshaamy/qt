@@ -142,8 +142,21 @@ export class KdsOrderCard extends Component {
             new: this.labels.filterNew, preparing: this.labels.filterPreparing,
             ready: this.labels.filterReady, completed: this.labels.filterCompleted,
         };
+        // REAL BUG FIX ("CANCELLED FILTER CLASSIFICATION + RETENTION
+        // LIFECYCLE", Issue 1): order.effective_stage itself is now the
+        // distinct "cancelled" value for this exact case (see
+        // controllers/kds.py's own _effective_stage() docstring for the
+        // full explanation of why - "NEW = 6" with all 6 cards
+        // genuinely CANCELLED, since effective_stage used to reuse the
+        // "preserved last stage" value directly). The "was X" stage
+        // label must therefore come from lifecycle.lastStage
+        // (stationLifecycle above, computed independently from
+        // ever_ready/ever_preparing timestamps) instead of
+        // order.effective_stage, which no longer carries that
+        // information - looking it up there now would incorrectly read
+        // "CANCELLED (was undefined)".
         if (!lifecycle.hasActiveWork && lifecycle.allCancelled) {
-            return `${this.labels.filterCancelled || "CANCELLED"} (${this.labels.wasStage || "was"} ${stageLabels[this.props.order.effective_stage]})`;
+            return `${this.labels.filterCancelled || "CANCELLED"} (${this.labels.wasStage || "was"} ${stageLabels[lifecycle.lastStage]})`;
         }
         // BUG-10 FIX: driven by the same single authoritative
         // order.effective_stage every tab filter/count now uses (see
