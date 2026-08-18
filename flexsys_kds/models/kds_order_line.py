@@ -56,6 +56,16 @@ class KdsOrderLine(models.Model):
     station_id = fields.Many2one('kds.station', string='Station')
     company_id = fields.Many2one(related='order_id.company_id', store=True)
     priority = fields.Selection(related='order_id.priority', store=True)
+    # UI/DATA FIX ("UI / DATA IMPROVEMENT REQUEST"), items 3 and 4:
+    # "add POS Status... Do NOT confuse KDS Status with POS Status" and
+    # "add Payment Method." Both computed once on kds.order itself (see
+    # that model's own matching fields for the full explanation - one
+    # computation per order, not duplicated per line) and simply
+    # related through here for the Lines tab's own list view - `state`
+    # just below is deliberately left as this line's own KDS status,
+    # completely unrelated to and never confused with these two.
+    pos_order_state = fields.Selection(related='order_id.pos_order_state', string='POS Status')
+    pos_payment_methods = fields.Char(related='order_id.pos_payment_methods', string='Payment Method')
 
     state = fields.Selection([
         ('new', 'New'),

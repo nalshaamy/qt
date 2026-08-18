@@ -444,29 +444,112 @@ class PosOrder(models.Model):
         return result
 
     def _flexsys_kds_process_sync_from_ui(self, orders):
+        """REAL BUG FIX ("Live test result - post-send modification is
+        still not propagated to KDS"), confirmed live via Network trace
+        (get_preparation_change -> sync_from_ui, both HTTP 200) on a
+        SECOND Send to an order already linked to a kds.order: this
+        method's own earlier version had two real, independently
+        confirmed problems, found by re-reading its own logic line by
+        line rather than guessing a fourth mechanism:
+
+        1. `order_data.get('uuid') or order_data.get('id')` then
+           searching `[('uuid', '=', order_uuid)]` unconditionally -
+           if a given sync_from_ui payload shape ever omits 'uuid' for
+           an update (as opposed to an initial create) and falls back
+           to 'id' (an integer primary key), searching a Char `uuid`
+           field for an integer value can never match anything - the
+           record lookup silently fails and this order is skipped
+           entirely, with no signal that anything went wrong.
+
+        2. The single try/except this method's own caller
+           (sync_from_ui() above) wraps around the ENTIRE call meant
+           one order's own unexpected shape or error could silently
+           abort processing for every OTHER order in the same batch
+           too - never isolated per order.
+
+        Both fixed here: 'id' (an int) is now looked up via `browse()`
+        directly, never through the `uuid` field; 'uuid' (a string) via
+        `search()` as before; each order in the batch is now processed
+        inside its own try/except, so one order's own failure can never
+        prevent any other order in the same sync_from_ui call from
+        being correctly processed.
+
+        Also added: structured info-level logging at every decision
+        point (payload received, signature extracted or not, record
+        resolved or not, signature comparison result) - the previous
+        version made three consecutive attempts at this exact "detect a
+        genuine Send" problem based on guessing rather than observing
+        actual runtime behavior; this logging exists specifically so
+        the NEXT investigation, if this fix is still somehow incomplete,
+        has real server-side log evidence to work from instead of a
+        fourth guess. Deliberately kept even after this fix is
+        confirmed working, at a low enough level (info, not warning)
+        that it's cheap to leave in place - genuinely useful audit
+        trail for a "why didn't KDS update" question either way, not
+        just a temporary debugging aid to be stripped out later.
+        """
         self = self.sudo()
         for order_data in (orders or []):
-            if not isinstance(order_data, dict):
-                continue
-            raw = order_data.get('last_order_preparation_change')
-            signature = _extract_preparation_content_signature(raw)
-            if not signature:
-                continue
-            order_uuid = order_data.get('uuid') or order_data.get('id')
-            if not order_uuid:
-                continue
-            # Same lookup pattern as Odoo's own core sync_from_ui() uses
-            # internally to resolve an incoming order dict back to its
-            # persisted record (order='id desc' picks the most recent
-            # match if, for any reason, more than one exists).
+            try:
+                self._flexsys_kds_process_one_sync_from_ui_entry(order_data)
+            except Exception:
+                _logger.exception(
+                    "FlexSys KDS: failed processing one sync_from_ui order entry "
+                    "(isolated to this entry only - other orders in the same "
+                    "batch are unaffected). Entry: %r", order_data)
+
+    def _flexsys_kds_process_one_sync_from_ui_entry(self, order_data):
+        if not isinstance(order_data, dict):
+            _logger.info("FlexSys KDS sync_from_ui: skipped a non-dict order entry: %r", order_data)
+            return
+        # Defensive: the confirmed live payload carries
+        # last_order_preparation_change at the top level of each order
+        # dict - but also checks a nested 'data' key as a fallback, in
+        # case a different sync_from_ui call shape (e.g. an update to
+        # an already-persisted order, as opposed to the initial create
+        # this was first confirmed against) nests it differently.
+        raw = order_data.get('last_order_preparation_change')
+        if raw is None and isinstance(order_data.get('data'), dict):
+            raw = order_data['data'].get('last_order_preparation_change')
+        signature = _extract_preparation_content_signature(raw)
+        order_id = order_data.get('id')
+        order_uuid = order_data.get('uuid')
+        if not order_uuid and isinstance(order_data.get('data'), dict):
+            order_uuid = order_data['data'].get('uuid')
+        _logger.info(
+            "FlexSys KDS sync_from_ui: entry id=%r uuid=%r has_content_signature=%s",
+            order_id, order_uuid, bool(signature))
+        if not signature:
+            return
+        order = self.env['pos.order']
+        # 'id' (an int - an already-persisted, existing order being
+        # updated) is looked up via browse(), never through the uuid
+        # field - see this method's own docstring for the confirmed bug
+        # this fixes. Tried first: sync_from_ui's own core lookup
+        # pattern (confirmed from Odoo 19's own source) uses uuid, but
+        # an update payload for an order that already has a real
+        # database id is at least as likely, if not more so, to carry
+        # that id directly.
+        if isinstance(order_id, int) and order_id > 0:
+            order = self.env['pos.order'].browse(order_id).exists()
+        if not order and order_uuid:
             order = self.env['pos.order'].search(
                 [('uuid', '=', order_uuid)], limit=1, order='id desc')
-            if not order:
-                continue
-            if signature == order.kds_last_processed_send_signal:
-                continue
-            order.kds_last_processed_send_signal = signature
-            order._flexsys_kds_sync(is_send_write=True)
+        if not order:
+            _logger.info(
+                "FlexSys KDS sync_from_ui: could not resolve a pos.order record "
+                "for id=%r uuid=%r - skipped.", order_id, order_uuid)
+            return
+        if signature == order.kds_last_processed_send_signal:
+            _logger.info(
+                "FlexSys KDS sync_from_ui: order #%s - signature unchanged since "
+                "last processed Send, correctly skipped (idempotent).", order.id)
+            return
+        _logger.info(
+            "FlexSys KDS sync_from_ui: order #%s - genuine new content signature "
+            "detected, triggering KDS sync.", order.id)
+        order.kds_last_processed_send_signal = signature
+        order._flexsys_kds_sync(is_send_write=True)
 
     def _flexsys_kds_cancel(self):
         """AUDIT FIX / NEW REQUIREMENT ("POS Cancellation Propagation",

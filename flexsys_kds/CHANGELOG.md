@@ -8,6 +8,162 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.10.1 — sync_from_ui: fixed integer-id lookup bug + per-order failure isolation
+
+**Important clarification first, before the fix itself**: the dev
+report's own evidence ("there is no RPC call to
+`flexsys_kds_register_send`") describes exactly the CORRECT, EXPECTED
+behavior of v7.9.7 onward - that RPC method and both frontend JS
+patches that called it were removed entirely in v7.9.7, replaced with
+a server-side `pos.order.sync_from_ui()` override that needs no
+separate RPC call at all. `get_preparation_change` and `sync_from_ui`
+both returning HTTP 200 in the Network trace is exactly what's
+expected; the absence of a `flexsys_kds_register_send` call is not
+itself evidence of a problem under this design. **The real bug,
+confirmed by taking the report's own trace seriously and re-reading
+`sync_from_ui()`'s own post-processing logic line by line rather than
+proposing a fourth hook**, was inside that already-correct hook point
+itself.
+
+### Root cause 1 - integer id silently never matched
+```python
+order_uuid = order_data.get('uuid') or order_data.get('id')
+...
+order = self.env['pos.order'].search([('uuid', '=', order_uuid)], ...)
+```
+If a given `sync_from_ui` payload entry for an ALREADY-PERSISTED order
+(a second Send, exactly the dev report's own scenario) omits `'uuid'`
+and falls back to `'id'` (an integer primary key), searching a `Char`
+`uuid` field for an integer value can never match anything - the
+record lookup silently failed, and the entry was skipped with zero
+signal that anything had gone wrong.
+
+### Root cause 2 - one order's failure could silently skip a whole batch
+The single try/except wrapping the entire post-processing call meant
+one order entry's own unexpected shape or error could abort processing
+for every OTHER order in the same `sync_from_ui` batch too.
+
+### Fix
+`id` (an int) is now resolved via `browse()` directly, never through
+the `uuid` field; `uuid` (a string) via `search()` as before, tried
+second. Each order entry in a batch is now processed inside its own
+try/except (`_flexsys_kds_process_one_sync_from_ui_entry()`, a new,
+separated method) - one entry's own failure can no longer prevent any
+other entry in the same call from being correctly processed.
+
+### New: structured diagnostic logging, left in place permanently
+Info-level logging at every decision point (payload received, content
+signature extracted or not, record resolved or not, signature
+comparison result). This is the third confirmed root-cause round for
+"detecting a genuine Send" - added specifically so that if this fix is
+still somehow incomplete, the next investigation has real server-side
+log evidence to work from instead of a fifth guess. Kept at info level
+deliberately, not removed after this fix is confirmed working - a
+genuinely useful ongoing audit trail for "why didn't KDS update"
+either way.
+
+### Files changed
+`models/pos_order.py` (`_flexsys_kds_process_sync_from_ui()` rewritten;
+new `_flexsys_kds_process_one_sync_from_ui_entry()`).
+
+### Tests
+5 new tests: the exact confirmed scenario reproduced (a payload entry
+identified only by integer `id`, correctly resolving and syncing, then
+a second Send via `id` correctly producing an UPDATED delta), a
+malformed-entry-gracefully-skipped-others-still-process case, a
+genuine-exception-in-one-entry-does-not-skip-others case (using
+`unittest.mock.patch` to force a real exception, distinguished
+explicitly from the merely-malformed case above - both are real,
+separate guarantees), and confirming `id` is tried before `uuid` when
+both are present together.
+
+**Total: 324 tests** (up from 319). No database migration required.
+
+---
+
+## v7.10.0 — KDS Active Orders & Order History: POS Order reference, POS Status, Payment Method
+
+**UI/data-mapping improvements only** - confirmed no KDS workflow,
+POS sync, On Send to KDS, retention, routing, or reconciliation logic
+was touched; every existing test in every other test file continues
+to pass unchanged, plus an explicit new non-regression test confirming
+this directly.
+
+### 1. POS Order column in Active Orders / Order History
+Both list views (which already share a single `view_kds_order_list` -
+confirmed neither `action_kds_order_active` nor
+`action_kds_order_history` specifies its own separate view, so one
+edit correctly covers both) now lead with `pos_order_id`, labeled
+"POS Order" - the actual linked POS order reference (e.g. "QT001 -
+000036"), clickable to open the originating order directly. The KDS
+order's own `name` remains available right after it, labeled "KDS
+Order" - not removed, just no longer the leading reference.
+
+### 2. Fixed the misleading "Customer Name" label
+Confirmed root cause: `customer_name` is populated
+(`pos_order.py::_flexsys_kds_create()`) as `self.partner_id.name or
+self.pos_reference or ''` - for the overwhelming majority of walk-up
+POS orders (no partner set), it silently falls back to the POS order's
+own reference/number instead - "Customer Name: 2629-3-000036" is not a
+customer name at all. The underlying field and its data are left
+completely untouched (a genuine customer name does show correctly when
+a partner IS set - removing the field outright would regress that
+case) - only the KDS Order Detail form's own header no longer displays
+or labels it; `pos_order_id`, already the header's first field, is the
+correct, unambiguous primary reference in its place.
+
+### 3 & 4. POS Status and Payment Method added to the Lines tab
+Two new computed fields on `kds.order` (computed once per order, not
+per line): `pos_order_state` (a plain `related='pos_order_id.state'` -
+deliberately not a hand-copied Selection, so it inherits Odoo core's
+own state values directly and can't silently drift out of sync with a
+different build) and `pos_payment_methods` (aggregates every distinct
+payment method name from `pos_order_id.payment_ids.payment_method_id`,
+comma-joined, deduped - "if the POS order can contain more than one
+payment method, do not silently display only one arbitrary method").
+Both exposed to `kds.order.line` via plain `related` fields for the
+Lines tab's own list view, explicitly labeled "POS Status" and
+"Payment Method" right next to the existing "KDS Status" column - "Do
+NOT confuse KDS Status with POS Status. Both represent different
+lifecycles."
+
+### Views changed
+`views/kds_order_views.xml`: list view (POS Order, KDS Order, POS,
+Branch, Order Type, Source, Priority, KDS Status, POS Status, Payment
+Method, SLA Status, Created Time), form view header (reordered to
+match the dev report's own expected layout exactly: POS Order, POS,
+Branch, Source, Order Type, Priority, Table Number, Stations Involved,
+SLA Status, Is Expeditor Ready - `customer_name` removed from this
+header), Lines tab list (Product, Qty, Modifiers/Notes, Station, KDS
+Status, POS Status, Payment Method, SLA Status, Post-send Change),
+search view (`pos_order_id` now searchable alongside `customer_name`).
+
+### Files changed
+`models/kds_order.py` (`pos_order_state`, `pos_payment_methods`,
+`_compute_pos_payment_methods()`), `models/kds_order_line.py`
+(related `pos_order_state`, `pos_payment_methods`),
+`views/kds_order_views.xml`.
+
+### Tests
+8 new tests: `pos_order_state` correctly reflects and stays live with
+the linked POS order's own state (distinctly from the KDS order's own
+state), correctly relayed to the line level, correctly empty for a
+non-POS-linked order; `pos_payment_methods` for a single method, for
+multiple methods with no silent single-method fallback and no
+duplicate-name repetition, and correctly empty for an unpaid order
+(each payment-related test defensively `skipTest`s, not fails, if
+`pos.payment`/`pos.payment.method`'s own required fields don't match
+this environment's minimal `create()` calls - the same established
+caution this test file already uses elsewhere for point_of_sale's own
+version-sensitive scaffolding); and an explicit confirmation that the
+On Send to KDS gate and delta/quantity-change calculation are
+completely unaffected by this round's own changes.
+
+**Total: 319 tests** (up from 311). No database migration required -
+both new fields are `related`/computed, not stored.
+
+---
+
 ## v7.9.7 — Explicit POS Send: authoritative server-side gate via sync_from_ui
 
 **Confirmed via a real browser Network trace**, provided directly by

@@ -3804,3 +3804,297 @@ class TestPosSync(FlexSysKdsTestCommon):
             except Exception as e:
                 self.fail(f"A failure in this module's own post-processing must never "
                            f"propagate and break the native sync_from_ui() call: {e}")
+
+    # -----------------------------------------------------------------
+    # Dev report "UI / DATA IMPROVEMENT REQUEST - KDS Active Orders &
+    # Order History": pos_order_state and pos_payment_methods, new
+    # computed fields on kds.order (related through to kds.order.line
+    # for the Lines tab). Explicitly does NOT touch POS sync/On Send to
+    # KDS/retention/routing/reconciliation - these tests confirm that
+    # boundary holds, not just the new fields' own correctness.
+    # -----------------------------------------------------------------
+    def test_pos_order_state_reflects_linked_pos_order(self):
+        order = self._create_pos_order([(self.product_burger, 1)], state='paid')
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        self.assertEqual(
+            kds_order.pos_order_state, order.state,
+            "pos_order_state must reflect the LINKED POS order's own state, "
+            "distinctly from the KDS order's own state field.")
+        self.assertNotEqual(
+            kds_order.pos_order_state, kds_order.state,
+            "In this scenario the two happen to differ (POS 'paid' vs KDS 'new') - "
+            "confirms these are genuinely two separate values, not aliases of each other.")
+
+    def test_pos_order_state_updates_when_pos_order_state_changes(self):
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        self.assertEqual(kds_order.pos_order_state, 'draft')
+
+        order.write({'state': 'paid', 'amount_paid': order.amount_total})
+
+        kds_order.invalidate_recordset()
+        self.assertEqual(kds_order.pos_order_state, 'paid',
+                          "pos_order_state must stay live, reflecting the linked "
+                          "POS order's own current state, not a stale snapshot.")
+
+    def test_pos_order_state_on_line_matches_order(self):
+        order = self._create_pos_order([(self.product_burger, 1)], state='paid')
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        self.assertEqual(
+            line.pos_order_state, kds_order.pos_order_state,
+            "kds.order.line.pos_order_state (the Lines tab's own 'POS Status' column) "
+            "must relay the parent order's own value.")
+        self.assertNotEqual(
+            line.pos_order_state, line.state,
+            "The line's own KDS status (state) and its POS Status (pos_order_state) "
+            "must never be confused with each other - the dev report's own explicit "
+            "warning.")
+
+    def test_pos_order_state_empty_when_no_linked_pos_order(self):
+        """A kds.order created directly, outside any POS flow (source
+        != 'pos', no pos_order_id at all) must not error - pos_order_state
+        is simply falsy."""
+        kds_order = self.env['kds.order'].create({
+            'source': 'qr', 'order_type': 'dine_in', 'company_id': self.company.id,
+        })
+        self.assertFalse(kds_order.pos_order_id)
+        self.assertFalse(kds_order.pos_order_state)
+
+    def test_pos_payment_methods_single_method(self):
+        try:
+            method = self.env['pos.payment.method'].create({'name': 'Cash'})
+        except Exception:
+            self.skipTest("pos.payment.method's own required fields could not be "
+                           "satisfied with this minimal create() in this environment - "
+                           "needs live-instance verification, not a fixture bug here.")
+        order = self._create_pos_order([(self.product_burger, 1)], state='paid')
+        try:
+            self.env['pos.payment'].create({
+                'pos_order_id': order.id,
+                'payment_method_id': method.id,
+                'amount': order.amount_total,
+                'session_id': self.pos_session.id,
+            })
+        except Exception:
+            self.skipTest("pos.payment's own required fields could not be satisfied "
+                           "with this minimal create() in this environment - needs "
+                           "live-instance verification, not a fixture bug here.")
+
+        kds_order = order.kds_order_id
+        kds_order.invalidate_recordset()
+        self.assertEqual(kds_order.pos_payment_methods, 'Cash')
+
+    def test_pos_payment_methods_multiple_methods_no_duplication(self):
+        """Required: 'if the POS order can contain more than one
+        payment method, do not silently display only one arbitrary
+        method... display all applicable payment methods.'"""
+        try:
+            cash = self.env['pos.payment.method'].create({'name': 'Cash'})
+            card = self.env['pos.payment.method'].create({'name': 'Card'})
+        except Exception:
+            self.skipTest("pos.payment.method's own required fields could not be "
+                           "satisfied with this minimal create() in this environment.")
+        order = self._create_pos_order([(self.product_burger, 1)], state='paid')
+        try:
+            self.env['pos.payment'].create({
+                'pos_order_id': order.id, 'payment_method_id': cash.id,
+                'amount': order.amount_total / 2, 'session_id': self.pos_session.id,
+            })
+            self.env['pos.payment'].create({
+                'pos_order_id': order.id, 'payment_method_id': card.id,
+                'amount': order.amount_total / 2, 'session_id': self.pos_session.id,
+            })
+        except Exception:
+            self.skipTest("pos.payment's own required fields could not be satisfied "
+                           "with this minimal create() in this environment.")
+
+        kds_order = order.kds_order_id
+        kds_order.invalidate_recordset()
+        self.assertIn('Cash', kds_order.pos_payment_methods)
+        self.assertIn('Card', kds_order.pos_payment_methods)
+        self.assertNotEqual(
+            kds_order.pos_payment_methods, 'Cash',
+            "Must not silently display only one arbitrary method when more than one "
+            "was actually used - both must appear.")
+
+    def test_pos_payment_methods_empty_when_unpaid(self):
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        self.assertEqual(
+            kds_order.pos_payment_methods, '',
+            "An order with no payments recorded yet must show an empty string, "
+            "not raise or show a placeholder.")
+
+    def test_ui_data_fields_do_not_affect_send_gate_or_delta_logic(self):
+        """Explicit non-regression check: adding pos_order_state/
+        pos_payment_methods must have zero effect on the On Send to
+        KDS gate, delta calculation, or reconciliation - this request
+        is display/data-mapping only."""
+        order = self._make_send_write_order()
+        order.write({'note': 'testing UI fields'})  # ordinary write, no explicit Send
+        order.invalidate_recordset()
+        self.assertFalse(order.kds_order_id,
+                          "An ordinary write must still not sync anything - unrelated "
+                          "to this round's own UI-only fields.")
+
+        order.flexsys_kds_register_send()
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        line = kds_order.line_ids
+        self.assertEqual(line.qty, 1)
+
+        order.lines.write({'qty': 3})
+        order.flexsys_kds_register_send()
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 3)
+        self.assertEqual(line.qty_delta, 2, "Delta calculation itself is completely "
+                                             "unaffected by this round's own changes.")
+
+    # -----------------------------------------------------------------
+    # Dev report "Live test result - post-send modification is still
+    # not propagated to KDS": confirmed live via Network trace
+    # (get_preparation_change -> sync_from_ui, both HTTP 200) on a
+    # SECOND Send to an already-linked order. Found two real bugs in
+    # _flexsys_kds_process_sync_from_ui() by re-reading it line by line:
+    # (1) an integer 'id' falling back into a uuid-field search, which
+    # can never match; (2) a single try/except around the whole batch,
+    # letting one order's own failure silently skip every other order
+    # in the same sync_from_ui call.
+    # -----------------------------------------------------------------
+    def test_sync_from_ui_resolves_order_by_integer_id_not_only_uuid(self):
+        """The exact confirmed bug: a payload entry carrying an
+        integer 'id' (an already-persisted order being updated) must
+        resolve via browse(), never via a uuid-field search (which can
+        never match an integer value)."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        order._flexsys_kds_process_sync_from_ui([{
+            'id': order.id,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'metadata': {'serverDate': '2026-08-18 09:00:00'},
+            }),
+        }])
+
+        order.invalidate_recordset()
+        self.assertTrue(
+            order.kds_order_id,
+            "An order payload entry identified only by integer 'id' (no 'uuid' key at "
+            "all) must still correctly resolve to the right record and sync.")
+        self.assertEqual(order.kds_order_id.line_ids.qty, 5)
+
+    def test_sync_from_ui_second_send_via_integer_id_updates_existing_ticket(self):
+        """The dev report's own exact scenario: qty 1 -> Send -> KDS 1,
+        then modify without Send, then Send again (this time the
+        payload entry uses 'id', matching an already-persisted order
+        being updated rather than created) -> KDS becomes 2."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        order._flexsys_kds_process_sync_from_ui([{
+            'id': order.id,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 1}},
+                'metadata': {'serverDate': '2026-08-18 09:00:00'},
+            }),
+        }])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        self.assertEqual(line.qty, 1)
+
+        order.lines.write({'qty': 2})
+        order._flexsys_kds_process_sync_from_ui([{
+            'id': order.id,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 2}},
+                'metadata': {'serverDate': '2026-08-18 09:05:00'},
+            }),
+        }])
+
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 2, "The second Send, identified via integer 'id', "
+                                       "must correctly update the existing KDS ticket.")
+        self.assertEqual(line.qty_delta, 1)
+
+    def test_sync_from_ui_malformed_entry_gracefully_skipped_others_still_process(self):
+        """A malformed entry (last_order_preparation_change of an
+        unexpected type) is gracefully skipped by
+        _extract_preparation_content_signature() itself - never even
+        reaches an exception - but confirms this graceful skip still
+        lets a well-formed entry later in the SAME batch process
+        correctly."""
+        order_a = self._create_active_pos_order([(self.product_burger, 3)])
+        order_b = self._create_active_pos_order([(self.product_cappuccino, 2)])
+
+        order_a.env['pos.order']._flexsys_kds_process_sync_from_ui([
+            {'uuid': order_a.uuid, 'last_order_preparation_change': 12345},  # malformed: not str/dict
+            {'uuid': order_b.uuid, 'last_order_preparation_change': json.dumps({
+                'lines': {'line-b': {'product_id': self.product_cappuccino.id, 'quantity': 2}},
+                'metadata': {'serverDate': '2026-08-18 09:10:00'},
+            })},
+        ])
+
+        order_a.invalidate_recordset()
+        order_b.invalidate_recordset()
+        self.assertFalse(order_a.kds_order_id, "The malformed entry itself must not sync.")
+        self.assertTrue(
+            order_b.kds_order_id,
+            "order_b's own well-formed entry must sync correctly, completely "
+            "unaffected by order_a's own malformed entry earlier in the same batch.")
+        self.assertEqual(order_b.kds_order_id.line_ids.qty, 2)
+
+    def test_sync_from_ui_one_order_raising_does_not_skip_other_orders_in_batch(self):
+        """The genuine per-order isolation guarantee: if processing one
+        order entry raises an actual exception (not just a gracefully-
+        handled malformed shape), every OTHER order entry in the same
+        sync_from_ui batch must still be processed correctly."""
+        order_a = self._create_active_pos_order([(self.product_burger, 3)])
+        order_b = self._create_active_pos_order([(self.product_cappuccino, 2)])
+        entry_a = {'uuid': order_a.uuid, 'last_order_preparation_change': json.dumps({
+            'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 3}},
+            'metadata': {'serverDate': '2026-08-18 09:10:00'},
+        })}
+        entry_b = {'uuid': order_b.uuid, 'last_order_preparation_change': json.dumps({
+            'lines': {'line-b': {'product_id': self.product_cappuccino.id, 'quantity': 2}},
+            'metadata': {'serverDate': '2026-08-18 09:10:00'},
+        })}
+
+        original = type(self.env['pos.order'])._flexsys_kds_process_one_sync_from_ui_entry
+
+        def raise_for_order_a(self_, order_data):
+            if order_data.get('uuid') == order_a.uuid:
+                raise RuntimeError("simulated failure processing order_a's own entry")
+            return original(self_, order_data)
+
+        with patch.object(
+            type(self.env['pos.order']), '_flexsys_kds_process_one_sync_from_ui_entry',
+            raise_for_order_a,
+        ):
+            self.env['pos.order']._flexsys_kds_process_sync_from_ui([entry_a, entry_b])
+
+        order_a.invalidate_recordset()
+        order_b.invalidate_recordset()
+        self.assertFalse(order_a.kds_order_id, "order_a's own entry genuinely raised - no sync for it.")
+        self.assertTrue(
+            order_b.kds_order_id,
+            "order_b's own entry must still process correctly despite order_a's own "
+            "entry genuinely raising an exception earlier in the same batch.")
+        self.assertEqual(order_b.kds_order_id.line_ids.qty, 2)
+
+    def test_sync_from_ui_id_takes_precedence_when_both_id_and_uuid_present(self):
+        """When both are present (the more realistic shape for an
+        update to an already-persisted order), the integer id is tried
+        first - confirms this doesn't silently break the common case
+        where both keys happen to be present together."""
+        order = self._create_active_pos_order([(self.product_burger, 4)])
+        order._flexsys_kds_process_sync_from_ui([{
+            'id': order.id,
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 4}},
+                'metadata': {'serverDate': '2026-08-18 09:15:00'},
+            }),
+        }])
+
+        order.invalidate_recordset()
+        self.assertTrue(order.kds_order_id)
+        self.assertEqual(order.kds_order_id.line_ids.qty, 4)

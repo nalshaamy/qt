@@ -1,25 +1,22 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.9.7**
+**Version: 19.0.7.10.1**
 **Status as of this document: code-complete, including everything
-through v7.9.6 (see CHANGELOG.md for the full history), plus this
-round's fix: "Explicit POS Send: authoritative server-side gate via
-sync_from_ui" - confirmed via a real browser Network trace, provided
-directly by the client, that the "Order" confirmation-dialog action's
-actual RPC call is `pos.order.sync_from_ui`, not either frontend method
-the two prior patches hooked (confirmed by zero KDS Audit Log events
-for that action). New `sync_from_ui()` override gates directly on this
-confirmed, universal server-side entry point, comparing only the
-genuine content of `last_order_preparation_change` (explicitly
-excluding `metadata`, confirmed from Odoo's own core source to always
-carry a fresh timestamp regardless of Send intent - the actual reason
-every earlier value-comparison attempt failed). **Both frontend JS
-patches from v7.9.3/v7.9.6 are now removed entirely** - this module no
-longer touches Odoo's own POS register frontend at all; the fix is now
-fully backend-only, eliminating this delivery's two highest-risk
-pieces. 311 automated tests, all `py_compile`/XML/JS checks passing,
-plus a custom AST-based undefined-name sweep. Not yet signed off on a
-live instance — see "What still needs a human" at the end.**
+through v7.10.0 (see CHANGELOG.md for the full history), plus this
+round's fix: two real bugs found inside `sync_from_ui()`'s own
+post-processing (the confirmed-correct hook point from v7.9.7,
+unchanged) by re-reading its own logic line by line against the
+client's own live Network trace evidence, rather than proposing a
+fourth hook - (1) an integer `id` payload key was silently searched
+against the `uuid` field, which can never match, causing a second Send
+on an already-linked order to be silently skipped entirely; (2) one
+order entry's own failure could abort processing for every other order
+in the same `sync_from_ui` batch. Both fixed; new permanent info-level
+diagnostic logging added at every decision point, specifically so any
+future investigation has real server-side log evidence rather than
+another guess. 324 automated tests, all `py_compile`/XML/JS checks
+passing, plus a custom AST-based undefined-name sweep. Not yet signed
+off on a live instance — see "What still needs a human" at the end.**
 
 
 This document maps directly to that request's own section structure
@@ -774,6 +771,68 @@ they're no longer referenced in the manifest at all) - a clean, purely
 backend-only upgrade should have zero frontend-visible footprint beyond
 the KDS sync itself now working correctly.
 
+## KDS Active Orders & Order History: POS Order reference, POS Status, Payment Method (v7.10.0)
+**Display/data-mapping only** - explicitly confirmed no KDS workflow,
+POS sync, On Send to KDS, retention, routing, or reconciliation logic
+was touched, via an explicit new non-regression test plus every
+existing test elsewhere continuing to pass unchanged.
+
+`pos_order_id` now leads both list views and the form's own header,
+labeled "POS Order." The misleading "Customer Name" label (silently
+showing the POS reference for the majority of walk-up orders with no
+partner set) is removed from the header - the underlying field and its
+data are untouched, so a genuine customer name still shows correctly
+whenever a partner IS set. Two new computed fields - `pos_order_state`
+(a plain `related` field, inheriting Odoo core's own state values
+directly rather than a hand-copied list that could drift) and
+`pos_payment_methods` (aggregates every distinct payment method for a
+split payment, comma-joined and deduped, never silently picking one
+arbitrarily) - added to the Lines tab, explicitly labeled apart from
+the existing "KDS Status" column.
+
+**What still needs a human**: visual confirmation on a real Odoo 19
+instance that the reordered form header and the two new Lines tab
+columns render as expected, and - since the payment-method tests in
+this delivery defensively `skipTest` rather than fail if
+`pos.payment`/`pos.payment.method`'s own required fields don't match
+this environment's minimal `create()` calls - confirming
+`pos_payment_methods` actually populates correctly for a real,
+multi-payment-method order on that live instance.
+
+## sync_from_ui: integer-id lookup bug + per-order failure isolation (v7.10.1)
+**Important**: the dev report's own headline symptom ("no RPC call to
+`flexsys_kds_register_send`") is the CORRECT, expected behavior since
+v7.9.7 - that RPC method and the frontend patches that called it were
+removed entirely, replaced with the `sync_from_ui()` server-side
+override, which needs no separate RPC. The real bug was inside that
+already-correct hook's own post-processing logic.
+
+**Root cause 1**: an integer `'id'` payload key (an already-persisted
+order's own primary key, likely present on a second Send to an
+already-linked order) was searched against the `uuid` field, which
+can never match an integer - the record lookup silently failed, no
+signal anything had gone wrong.
+
+**Root cause 2**: a single try/except around the entire batch meant
+one order's own failure could silently prevent every other order in
+the same `sync_from_ui` call from being processed.
+
+**Fix**: `id` now resolved via `browse()`, `uuid` via `search()` as a
+second attempt; each order entry now processed inside its own,
+isolated try/except. New permanent info-level logging at every
+decision point.
+
+**What still needs a human**: reproduce the dev report's own exact
+Acceptance Test on a real Odoo.sh staging instance - qty 1 → Send → 1;
+2 without Send → still 1; Send → 2; 1 without Send → still 2; Send → 1
+- and the same for added/removed lines, modifier/attribute changes,
+and customer note changes. If this specific fix is STILL somehow
+incomplete, the new info-level logs
+(`grep "FlexSys KDS sync_from_ui"` in the Odoo server log) should now
+show exactly which payload shape reached the server and why it was or
+wasn't treated as a genuine Send - real diagnostic data for the next
+round, rather than another guess.
+
 ---
 
 ## What still needs a human
@@ -1037,7 +1096,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 311 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 324 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

@@ -95,8 +95,42 @@ class KdsOrder(models.Model):
     ], string='Status', default='new', required=True)
 
     customer_name = fields.Char()
+    # UI/DATA FIX ("UI / DATA IMPROVEMENT REQUEST - KDS Active Orders &
+    # Order History"), confirmed live: the "Customer Name" field/label
+    # was misleading - it's populated (pos_order.py::_flexsys_kds_create())
+    # as `self.partner_id.name or self.pos_reference or ''`, meaning
+    # for the overwhelming majority of walk-up POS orders (no partner
+    # set at all), it silently falls back to the POS order's own
+    # reference/number instead - "Customer Name: 2629-3-000036" is not
+    # a customer name at all. customer_name itself is left exactly as
+    # it was (unchanged data, unchanged fallback behavior - a real
+    # customer name genuinely does show here when a partner IS set,
+    # so removing the field entirely would be a real regression for
+    # that case) - only the VIEW no longer labels or leads with it as
+    # the primary POS-order reference; see kds_order_views.xml's own
+    # comment for the actual fix (pos_order_id, labeled "POS Order",
+    # now the first, prominent header field instead).
     table_number = fields.Char()
     note = fields.Text()
+
+    # UI/DATA FIX ("UI / DATA IMPROVEMENT REQUEST"), items 3 and 4:
+    # "add POS Status... Do NOT confuse KDS Status with POS Status -
+    # both represent different lifecycles" and "add Payment Method...
+    # if the POS order can contain more than one payment method, do
+    # not silently display only one arbitrary method." Both computed
+    # here, once per kds.order (not per line), and exposed to
+    # kds.order.line via a plain `related` field for the Lines tab -
+    # see that model's own matching fields for the full explanation.
+    #
+    # A plain `related='pos_order_id.state'` (not a hand-defined
+    # Selection here) deliberately inherits pos.order.state's own type
+    # and selection values directly from Odoo core - safer than
+    # hardcoding a copy of that list, which could silently drift out
+    # of sync with a different Odoo build or a state added by another
+    # installed module.
+    pos_order_state = fields.Selection(related='pos_order_id.state', string='POS Status', readonly=True)
+    pos_payment_methods = fields.Char(
+        compute='_compute_pos_payment_methods', string='Payment Method')
 
     line_ids = fields.One2many('kds.order.line', 'order_id', string='Order Lines')
     station_ids = fields.Many2many(
@@ -232,6 +266,27 @@ class KdsOrder(models.Model):
     def _compute_station_ids(self):
         for order in self:
             order.station_ids = order.line_ids.mapped('station_id')
+
+    @api.depends('pos_order_id.payment_ids.payment_method_id.name')
+    def _compute_pos_payment_methods(self):
+        # UI/DATA FIX ("UI / DATA IMPROVEMENT REQUEST"), item 4:
+        # "If the POS order can contain more than one payment method,
+        # do not silently display only one arbitrary method... display
+        # all applicable payment methods." pos.order.payment_ids is a
+        # standard Odoo core One2many to pos.payment (split-payment
+        # orders genuinely have more than one row here) - joins every
+        # distinct method name with a comma rather than picking one
+        # arbitrarily. Empty string, not False, for an order with no
+        # payments yet (unpaid/still-open order) - a plain Char field
+        # displays either the same way in a list view, but an empty
+        # string reads more clearly than "False" if ever inspected via
+        # a raw field export/API response.
+        for order in self:
+            methods = order.pos_order_id.payment_ids.payment_method_id.mapped('name')
+            # dict.fromkeys(...) dedupes while preserving encounter
+            # order - two cash payments (e.g. a partial refund handled
+            # as a second cash line) should not read as "Cash, Cash".
+            order.pos_payment_methods = ', '.join(dict.fromkeys(m for m in methods if m))
 
     @api.depends('line_ids.state')
     def _compute_is_expeditor_ready(self):

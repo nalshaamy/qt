@@ -6,17 +6,48 @@
         <field name="model">kds.order</field>
         <field name="arch" type="xml">
             <list string="Orders" decoration-danger="sla_status == 'late'" decoration-warning="sla_status == 'warning'">
-                <field name="name"/>
-                <field name="pos_config_id"/>
+                <!-- UI/DATA FIX ("UI / DATA IMPROVEMENT REQUEST - KDS
+                     Active Orders & Order History"), item 1: "the
+                     first important reference displayed for the
+                     originating POS order should be: Label: POS
+                     Order, Field: pos_order_id... Do not use the KDS
+                     order number as a replacement for this field."
+                     pos_order_id leads, ahead of name (the KDS
+                     record's own identifier), matching that ordering
+                     exactly - a Many2one field's own list-view display
+                     already shows the linked record's real
+                     reference/name (e.g. "QT001 - 000036"), and stays
+                     clickable to open the originating POS order
+                     directly, satisfying "should allow the user to
+                     immediately identify and open the originating POS
+                     order" with no further work needed. -->
+                <field name="pos_order_id" string="POS Order"/>
+                <field name="name" string="KDS Order"/>
+                <field name="pos_config_id" string="POS"/>
                 <field name="company_id"/>
                 <field name="order_type"/>
                 <field name="source"/>
                 <field name="priority"/>
-                <field name="state" widget="badge"
+                <field name="state" widget="badge" string="KDS Status"
                        decoration-success="state == 'completed'"
                        decoration-info="state in ('new', 'accepted')"
                        decoration-warning="state in ('preparing', 'on_hold')"
                        decoration-danger="state == 'cancelled'"/>
+                <!-- UI/DATA FIX, item 3: "add POS Status... Do NOT
+                     confuse KDS Status with POS Status." Both columns
+                     now sit side by side, each explicitly labeled, so
+                     the distinction is visible at a glance rather than
+                     only documented. -->
+                <field name="pos_order_state" string="POS Status"/>
+                <!-- UI/DATA FIX, item 4 (Active Orders/Order History
+                     section): "Payment Method may also be included in
+                     the list if it can be represented cleanly without
+                     duplicating rows" - pos_payment_methods already
+                     joins every distinct payment method into a single
+                     string (see _compute_pos_payment_methods()'s own
+                     docstring), so one column, never a duplicated row
+                     per payment. -->
+                <field name="pos_payment_methods" string="Payment Method" optional="show"/>
                 <field name="sla_status" widget="badge"
                        decoration-danger="sla_status == 'late'"
                        decoration-warning="sla_status == 'warning'"
@@ -58,17 +89,37 @@
                     <div class="oe_title">
                         <h1><field name="name" readonly="1"/></h1>
                     </div>
+                    <!-- UI/DATA FIX ("UI / DATA IMPROVEMENT REQUEST -
+                         KDS Active Orders & Order History"): header
+                         field order now matches that request's own
+                         "Expected Result - Order Detail" list exactly
+                         (POS Order, POS, Branch, Source, Order Type,
+                         Priority, Table Number, Stations Involved, SLA
+                         Status, Is Expeditor Ready). customer_name is
+                         removed from this header entirely - item 2's
+                         own fix: it was labeled "Customer Name" but
+                         actually displayed the POS order reference
+                         whenever no partner was set (the overwhelming
+                         majority of walk-up orders) - "this is
+                         misleading because this value is not a
+                         customer name." pos_order_id, already the
+                         header's own first field, is now the correct,
+                         unambiguous primary reference in its place;
+                         the field itself is untouched (see
+                         kds_order.py's own matching comment) in case a
+                         genuine customer name is ever needed
+                         separately later, exactly as that item's own
+                         final sentence anticipates. -->
                     <group>
                         <group>
-                            <field name="pos_order_id" readonly="1"/>
-                            <field name="pos_config_id" readonly="1"/>
+                            <field name="pos_order_id" string="POS Order" readonly="1"/>
+                            <field name="pos_config_id" string="POS" readonly="1"/>
                             <field name="company_id" readonly="1"/>
                             <field name="source" readonly="1"/>
                             <field name="order_type" readonly="1"/>
                             <field name="priority" readonly="1"/>
                         </group>
                         <group>
-                            <field name="customer_name" readonly="1"/>
                             <field name="table_number" readonly="1"/>
                             <field name="station_ids" widget="many2many_tags" readonly="1"/>
                             <field name="sla_status" readonly="1"/>
@@ -83,21 +134,40 @@
                                  here disables add/edit/delete on the whole
                                  one2many (no more editable="bottom" list). -->
                             <field name="line_ids" readonly="1">
+                                <!-- UI/DATA FIX ("UI / DATA IMPROVEMENT
+                                     REQUEST"), items 3 and 4: POS
+                                     Status and Payment Method added,
+                                     positioned per that request's own
+                                     "Expected Result" column order
+                                     (Product, Qty, Modifiers / Notes,
+                                     Station, KDS Status, POS Status,
+                                     Payment Method, SLA Status,
+                                     Post-send Change). `state` here
+                                     remains this line's own KDS
+                                     status, labeled explicitly so it's
+                                     never confused with the new,
+                                     separately-labeled POS Status
+                                     column right next to it - "Do NOT
+                                     confuse KDS Status with POS
+                                     Status. Both represent different
+                                     lifecycles." -->
                                 <list decoration-danger="sla_status == 'late'" decoration-warning="sla_status == 'warning'">
                                     <field name="product_id"/>
                                     <field name="qty"/>
-                                    <field name="note"/>
+                                    <field name="note" string="Modifiers / Notes"/>
                                     <field name="station_id"/>
-                                    <field name="state" widget="badge"
+                                    <field name="state" widget="badge" string="KDS Status"
                                            decoration-success="state in ('ready', 'completed')"
                                            decoration-info="state in ('new', 'accepted')"
                                            decoration-warning="state in ('preparing', 'on_hold')"
                                            decoration-danger="state == 'cancelled'"/>
+                                    <field name="pos_order_state" string="POS Status"/>
+                                    <field name="pos_payment_methods" string="Payment Method"/>
                                     <field name="sla_status" widget="badge"
                                            decoration-danger="sla_status == 'late'"
                                            decoration-warning="sla_status == 'warning'"
                                            decoration-success="sla_status == 'normal'"/>
-                                    <field name="line_change"/>
+                                    <field name="line_change" string="Post-send Change"/>
                                 </list>
                             </field>
                         </page>
@@ -174,6 +244,12 @@
         <field name="arch" type="xml">
             <search>
                 <field name="name"/>
+                <!-- UI/DATA FIX ("UI / DATA IMPROVEMENT REQUEST"): the
+                     new primary reference is searchable here too, not
+                     just displayed - a user looking for a specific POS
+                     order can now search directly by its own
+                     reference, not only by the KDS record's own name. -->
+                <field name="pos_order_id" string="POS Order"/>
                 <field name="customer_name"/>
                 <field name="station_ids"/>
                 <filter string="Active" name="active_orders" domain="[('state','not in',('completed','cancelled'))]"/>
