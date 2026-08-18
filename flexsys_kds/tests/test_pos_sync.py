@@ -3263,6 +3263,49 @@ class TestPosSync(FlexSysKdsTestCommon):
                           "Calling the explicit signal under 'payment' mode must not "
                           "create a duplicate or otherwise misbehave.")
 
+    def test_explicit_send_signal_double_fire_is_idempotent(self):
+        """Dev report 'Explicit POS Send Must Trigger KDS Sync': two
+        independent frontend patches now both call
+        flexsys_kds_register_send() for the same genuine Send event
+        (PosStore.prototype.sendOrderInPreparation AND
+        PosOrder.prototype.updateLastOrderChange, since the former
+        calls the latter internally, per Odoo's own core source) -
+        confirms this natural double-fire is completely harmless: no
+        duplicate ticket, no duplicate delta, no duplicate audit event."""
+        order = self._make_send_write_order()
+        order.lines.write({'qty': 5})
+        order.flexsys_kds_register_send()
+        order.flexsys_kds_register_send()  # simulates the second patch firing for the same Send
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        line = kds_order.line_ids
+        self.assertEqual(line.qty, 5)
+        self.assertEqual(len(kds_order.line_ids), 1, "No duplicate line/ticket.")
+
+        events_before = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+
+        # A genuine subsequent edit, then BOTH patches fire again for the next Send.
+        self.env['pos.order.line'].create({
+            'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 2,
+            'price_unit': 4.0, 'price_subtotal': 8.0, 'price_subtotal_incl': 8.0,
+        })
+        order.flexsys_kds_register_send()
+        order.flexsys_kds_register_send()  # the second patch firing again
+
+        kds_order.invalidate_recordset()
+        new_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        self.assertEqual(len(new_line), 1, "Exactly one ADDED line, not duplicated by the second call.")
+        self.assertEqual(new_line.line_change, 'added')
+        line_added_events = self.env['kds.event'].search_count([
+            ('order_id', '=', kds_order.id), ('event_type', '=', 'line_added'),
+        ])
+        events_after = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+        self.assertEqual(
+            events_after - events_before, line_added_events,
+            "The second, redundant call must add no further events beyond the genuine "
+            "ones from the first call - the diff against an unchanged POS state is a "
+            "correct no-op.")
+
     def test_explicit_send_signal_does_not_leak_refund_orders(self):
         """The refund-order exclusion (BUG-06) must still apply even
         when this new explicit signal is called."""

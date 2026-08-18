@@ -8,6 +8,70 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.9.6 — Explicit POS Send Must Trigger KDS Sync
+
+**Confirmed live**: Part 1 (blocking - no sync without an explicit
+Send) PASSED. Part 2 FAILED: when Odoo's own native "the order has not
+been sent - would you like to send it to preparation?" confirmation
+dialog appeared and the cashier clicked "Order" (Odoo's own explicit
+Send-to-preparation confirmation), FlexSys KDS never received the
+sync - the fix successfully blocks automatic synchronization, but also
+misses this legitimate explicit Send path.
+
+### Root cause
+The existing frontend patch
+(`flexsys_kds_pos_send_signal.js`, v7.9.3) hooks
+`PosStore.prototype.sendOrderInPreparation()` - confirmed, from Odoo
+19's own core source, to be the native "Send" button's own target. It
+was never independently confirmed whether the unsent-order confirmation
+dialog's own "Order" button calls that exact same method or a different
+one on its way to actually persisting the send - and the dev report's
+own live test confirms it does not (or does not reliably).
+
+### Fix
+A second, independent frontend patch,
+`flexsys_kds_pos_send_signal_order_model.js`, hooks
+`order.updateLastOrderChange()` directly - confirmed, from that same
+Odoo 19 core source, to be the actual lower-level method that persists
+`last_order_preparation_change` to the server, common to every UI path
+that leads to a genuine Send, regardless of which specific button or
+dialog triggered it (`sendOrderInPreparation()` itself calls this
+method internally). Both patches now call the same
+`flexsys_kds_register_send()` RPC method.
+
+**Deliberately kept in its own, separate file** rather than added to
+the existing patch file: a JS module's own import failure prevents
+everything else in that same file from loading too - keeping these as
+two separate files means a problem with one (e.g. a wrong import path
+for a specific Odoo 19 build) cannot cascade into breaking the other,
+already-confirmed-working patch.
+
+**Confirmed harmless double-fire**: since `sendOrderInPreparation()`
+calls `updateLastOrderChange()` internally, a genuine Send via the
+normal button now fires both patches for the same event. Verified this
+is naturally idempotent -
+`flexsys_kds_register_send()`'s own diff logic against an unchanged POS
+state is a correct no-op on the redundant second call; no duplicate
+ticket, delta, or audit event.
+
+### Files changed
+New: `static/src/js/flexsys_kds_pos_send_signal_order_model.js`.
+Modified: `__manifest__.py` (added to the `point_of_sale._assets_pos`
+bundle).
+
+### Tests
+1 new test confirming the double-fire scenario is completely
+idempotent, both for the initial Send and a subsequent one after a
+genuine edit. The frontend patch itself cannot be tested by this
+delivery process without a live Odoo 19 browser session - stated
+plainly, not glossed over; the backend RPC method it calls
+(`flexsys_kds_register_send()`) was already covered by v7.9.3's own
+tests.
+
+**Total: 303 tests** (up from 302). No database migration required.
+
+---
+
 ## v7.9.5 — CANCELLED Filter Classification + Retention Lifecycle
 
 Two issues confirmed live before the next build's deployment.

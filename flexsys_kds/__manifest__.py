@@ -1,6 +1,6 @@
 {
     'name': 'FlexSys KDS',
-    'version': '19.0.7.9.5',
+    'version': '19.0.7.9.6',
     'category': 'Point of Sale',
     'summary': 'Multi-station Kitchen Display System for Odoo POS',
     'description': """
@@ -82,6 +82,13 @@ Technical module name: flexsys_kds
         # register itself.
         'point_of_sale._assets_pos': [
             'flexsys_kds/static/src/js/flexsys_kds_pos_send_signal.js',
+            # REAL BUG FIX ("Explicit POS Send Must Trigger KDS Sync"):
+            # a second, independent layer targeting the lower-level
+            # order.updateLastOrderChange() persistence point directly -
+            # see that file's own top-of-file comment for why it's kept
+            # deliberately separate from the file above (an import
+            # failure in one must never be able to break the other).
+            'flexsys_kds/static/src/js/flexsys_kds_pos_send_signal_order_model.js',
         ],
     },
     'installable': True,
