@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<odoo>
-    <record id="action_kds_screen" model="ir.actions.client">
-        <field name="name">KDS Screen</field>
-        <field name="tag">flexsys_kds_screen</field>
-    </record>
-</odoo>
