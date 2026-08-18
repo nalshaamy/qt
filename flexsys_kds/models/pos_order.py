@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import json
+
 from odoo import _, api, fields, models
 
 
@@ -46,10 +48,94 @@ def _pos_line_variant_info(line):
     return ' / '.join(p for p in parts if p)
 
 
+def _is_genuine_send_signal(vals):
+    """REAL BUG FIX ("CRITICAL BUG FIX REQUEST - On Send to KDS Boundary
+    Is Being Bypassed"), confirmed live: mere presence of
+    'last_order_preparation_change' in a write()/create() vals dict is
+    NOT a reliable "the cashier genuinely pressed Send/New" signal -
+    every single POS order sync (routine autosave, adding a product,
+    changing a quantity, anything at all) goes through Odoo's own core
+    `sync_from_ui` entry point, and this field is part of the order's
+    own standard payload on effectively every one of those saves, not
+    exclusively on a genuine Send. The earlier fix (v7.7.0/v7.7.1),
+    which only checked field presence, was therefore leaking every
+    ordinary edit straight through to KDS - exactly the confirmed
+    runtime bug this fix addresses.
+
+    Confirmed directly from Odoo 19's own core source
+    (addons/point_of_sale/models/pos_order.py,
+    `_ensure_to_keep_last_preparation_change`): the field's own JSON
+    value carries a `metadata` key specifically to distinguish a
+    genuine preparation-change event from an ordinary save that merely
+    happens to carry the field along - that method's own logic
+    explicitly preserves the record's existing value whenever the
+    incoming vals' own metadata is empty, meaning an empty/missing
+    metadata write is understood, by Odoo's own core, as NOT a genuine
+    preparation-change event. This checks that same distinction: only a
+    non-empty `metadata` key counts as a genuine Send/New signal.
+
+    Deliberately conservative on malformed/unexpected input (missing
+    key, invalid JSON, wrong type) - returns False rather than raising,
+    since failing to detect a genuine Send only delays a sync to the
+    next one (safe), while a false positive would leak an unsent
+    working-state edit straight to the kitchen (unsafe) - the wrong
+    direction to fail in for this specific check.
+    """
+    raw = vals.get('last_order_preparation_change')
+    if not raw:
+        return False
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(parsed, dict):
+        return False
+    return bool(parsed.get('metadata'))
+
+
 class PosOrder(models.Model):
     _inherit = 'pos.order'
 
     kds_order_id = fields.Many2one('kds.order', string='FlexSys KDS Order', copy=False)
+    # REAL BUG FIX ("On Send to KDS / Subsequent Changes Bypass Send
+    # Gate"), confirmed live: adding a product to an order that had
+    # ALREADY been sent once - without pressing Send again - still
+    # appeared in KDS immediately with an ADDED marker, even though the
+    # initial "before first Send" case (this same file's own
+    # _is_genuine_send_signal()) was already confirmed working
+    # correctly. Root cause, confirmed directly from Odoo 19's own core
+    # frontend source (addons/point_of_sale/static/src/app/services/
+    # pos_store.js, sendOrderInPreparation()): order.updateLastOrderChange()
+    # - the call that actually writes last_order_preparation_change to
+    # the backend - is only invoked from within that same Send-handling
+    # method, confirming the field genuinely is Send-specific. But the
+    # field's OWN VALUE, once populated by a genuine first Send, remains
+    # non-empty (with non-empty metadata) on the order going forward -
+    # and Odoo's own frontend order model re-serializes and re-saves
+    # this SAME, unchanged field value as part of its own routine order
+    # payload on essentially every subsequent save of that order
+    # (adding a product, changing a quantity, anything at all), not
+    # exclusively on a genuine second Send. _is_genuine_send_signal()'s
+    # own "non-empty metadata" check could therefore no longer
+    # distinguish "a fresh, second Send actually happened" from "the
+    # stale, already-processed value from the FIRST Send is simply
+    # being carried along again" - once an order had been sent even
+    # once, every subsequent routine save looked identical to a second
+    # Send.
+    #
+    # Fixed by tracking the exact value already processed as a genuine
+    # Send here - a write is only treated as a NEW Send if the incoming
+    # last_order_preparation_change value both has non-empty metadata
+    # (the existing check) AND differs from this field's own stored
+    # value (see _flexsys_kds_should_sync() below, which combines both
+    # conditions and updates this field immediately after a successful
+    # sync). A genuine second Send always produces a fresh value here
+    # (Odoo's own core stamps a new print-history entry/timestamp each
+    # time sendOrderInPreparation() actually runs), so this correctly
+    # keeps recognizing real, repeated Sends while no longer
+    # mistaking the same stale value for a new one on every routine
+    # save in between.
+    kds_last_processed_send_signal = fields.Char(copy=False)
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -62,7 +148,17 @@ class PosOrder(models.Model):
             # here too, not just in write(), so that scenario is
             # correctly recognized as a genuine Send trigger from the
             # very first sync attempt.
-            order._flexsys_kds_sync(is_send_write='last_order_preparation_change' in vals)
+            #
+            # REAL BUG FIX ("On Send to KDS / Subsequent Changes Bypass
+            # Send Gate"): routed through
+            # order._flexsys_kds_should_treat_as_send(vals) - which
+            # itself combines _is_genuine_send_signal() with a check
+            # against kds_last_processed_send_signal (that field's own
+            # docstring, just above, has the full explanation) - rather
+            # than the bare _is_genuine_send_signal(vals) call this used
+            # to make on its own.
+            order.sudo()._flexsys_kds_sync(
+                is_send_write=order._flexsys_kds_should_treat_as_send(vals))
         return orders
 
     def write(self, vals):
@@ -80,13 +176,30 @@ class PosOrder(models.Model):
         # trigger check in the first place. Added explicitly to the
         # gate condition itself, not just used inside it.
         if 'state' in vals or 'lines' in vals or 'last_order_preparation_change' in vals:
-            # CHANGE REQUEST FIX ("On Send to KDS"), confirmed live -
-            # see _flexsys_kds_sync()'s own docstring for the full
-            # explanation of why last_order_preparation_change is the
-            # signal used here.
-            is_send_write = 'last_order_preparation_change' in vals
             for order in self:
                 order = order.sudo()
+                # REAL BUG FIX ("On Send to KDS / Subsequent Changes
+                # Bypass Send Gate"), confirmed live: adding a product to
+                # an order that had ALREADY been sent once - without
+                # pressing Send again - still leaked straight through to
+                # KDS. The earlier fix here (_is_genuine_send_signal(vals)
+                # alone) checked only whether THIS write's own metadata
+                # was non-empty - but once an order has been sent even
+                # once, its own last_order_preparation_change value stays
+                # non-empty going forward, and Odoo's own frontend
+                # re-serializes that SAME, unchanged value as part of
+                # its routine save payload on essentially every
+                # subsequent write, not exclusively a genuine second
+                # Send. Routed through
+                # order._flexsys_kds_should_treat_as_send(vals) instead -
+                # see kds_last_processed_send_signal's own docstring
+                # (just above the class) for the complete explanation of
+                # the "has this exact value already been processed"
+                # check that closes this gap. Computed per-order now
+                # (each order's own kds_last_processed_send_signal
+                # differs), not once for the whole batch the way the old
+                # single is_send_write value was.
+                is_send_write = order._flexsys_kds_should_treat_as_send(vals)
                 # REAL BUG FIX ("BUG-14 - COMPLETED Retention Must
                 # Depend on POS Closure"): stamps kds.order.pos_closed_at
                 # the moment this order's own state is observed
@@ -108,6 +221,26 @@ class PosOrder(models.Model):
                 else:
                     order._flexsys_kds_sync(is_send_write=is_send_write)
         return res
+
+    def _flexsys_kds_should_treat_as_send(self, vals):
+        """REAL BUG FIX ("On Send to KDS / Subsequent Changes Bypass
+        Send Gate") - see kds_last_processed_send_signal's own field
+        docstring, just above this class's own start, for the complete
+        root-cause explanation. Combines the existing
+        _is_genuine_send_signal() content check (non-empty metadata)
+        with a fresh check that the incoming value actually DIFFERS from
+        the last value this module itself already processed as a Send -
+        a write carrying the exact same, already-handled value is a
+        routine re-save carrying stale state along, never a new Send on
+        its own.
+        """
+        self.ensure_one()
+        self = self.sudo()
+        if not _is_genuine_send_signal(vals):
+            return False
+        raw = vals.get('last_order_preparation_change')
+        return raw != self.kds_last_processed_send_signal
+
 
     def _flexsys_kds_cancel(self):
         """AUDIT FIX / NEW REQUIREMENT ("POS Cancellation Propagation",
@@ -369,34 +502,56 @@ class PosOrder(models.Model):
         # must be the cashier's explicit action: Send or New."
         #
         # 'send' mode now requires is_send_write=True - set by write()/
-        # create() above only when the vals being saved include
-        # last_order_preparation_change, Odoo's own core pos.order field
-        # (addons/point_of_sale/models/pos_order.py, "Last printed state
-        # of the order") that the native Preparation Display's own
-        # "Send" action updates - not a new custom button, using the
-        # existing/native Odoo POS workflow exactly as required. Every
-        # OTHER write (add/remove/qty/attribute changes, simply viewing
-        # or re-saving the order) leaves this False, so it correctly
-        # accumulates with zero KDS sync until the next genuine Send.
+        # create() above via _is_genuine_send_signal() (top of this
+        # file). Every OTHER write (add/remove/qty/attribute changes,
+        # simply viewing or re-saving the order) leaves this False, so
+        # it correctly accumulates with zero KDS sync until the next
+        # genuine Send.
         #
-        # Honest caveat, stated plainly rather than guessed past: this
-        # field is confirmed, from Odoo 19's own core source, to be
-        # updated by the Preparation-Display-enabled "Send" action
-        # (Scenario 1). Whether the "New" action also updates this same
-        # field when Preparation Display is *disabled* (Scenario 2) has
-        # not been confirmed against a live instance - this is the one
-        # part of this change that still needs that verification (see
-        # RELEASE_STATUS.md). If it turns out "New" doesn't update this
-        # field on a given build, orders under that specific
-        # configuration would never sync under 'send' mode - a fail-
-        # closed gap (nothing reaches the kitchen) rather than fail-open
-        # (syncing too early), which is the safer direction for this
-        # kind of uncertainty.
+        # REAL BUG FIX ("On Send to KDS Boundary Is Being Bypassed"),
+        # confirmed live: this comment previously described the
+        # trigger as "the vals being saved include
+        # last_order_preparation_change" - mere presence, which turned
+        # out to leak every single POS edit straight through, since
+        # that field is part of nearly every save's own payload, not
+        # exclusively a genuine Send. _is_genuine_send_signal() now
+        # checks the field's own JSON content for a non-empty
+        # `metadata` key specifically - confirmed from Odoo 19's own
+        # core source (_ensure_to_keep_last_preparation_change) to be
+        # the actual distinguishing signal between a genuine
+        # preparation-change event and an ordinary save that merely
+        # carries the field along.
+        #
+        # Honest caveat, stated plainly rather than guessed past: the
+        # `metadata`-key distinction itself is confirmed, from Odoo 19's
+        # own core source, to be how the Preparation-Display-enabled
+        # "Send" action's own write is distinguished from an ordinary
+        # save (Scenario 1). Whether the "New" action (Scenario 2,
+        # Preparation Display *disabled*) populates this same metadata
+        # key has not been confirmed against a live instance - this
+        # remains the one part of this change that still needs that
+        # verification (see RELEASE_STATUS.md). Fails closed under this
+        # uncertainty exactly as before: if "New" doesn't populate
+        # metadata on a given build, orders under that configuration
+        # simply never sync under 'send' mode, rather than syncing too
+        # early.
         trigger = self.config_id.kds_send_trigger or 'payment'
         if trigger == 'payment':
             ready = self.state in ('paid', 'done', 'invoiced')
         else:
             ready = is_send_write and self.state != 'cancel' and bool(self.lines)
+            # REAL BUG FIX ("On Send to KDS / Subsequent Changes Bypass
+            # Send Gate"): records the exact value just recognized as a
+            # genuine Send, the moment it's recognized - regardless of
+            # whether `ready` ends up True overall (e.g. a Send signal
+            # arriving on a momentarily empty order) - so this specific
+            # value is never treated as a "new" Send signal again later.
+            # See kds_last_processed_send_signal's own field docstring
+            # for the complete explanation; _flexsys_kds_should_treat_as_send()
+            # (create()/write(), above) is what actually compares
+            # against this value on the NEXT write.
+            if is_send_write:
+                self.kds_last_processed_send_signal = self.last_order_preparation_change
         if not ready:
             return
         if not self.kds_order_id:

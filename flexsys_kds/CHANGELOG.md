@@ -8,6 +8,165 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.9.2 — On Send to KDS / Subsequent Changes Bypass Send Gate
+
+**Confirmed live**: the initial Send-gate fix (v7.9.1) worked correctly
+for a brand-new order (nothing leaked before the first Send). But after
+that first Send, adding a new product to the SAME order - without
+pressing Send again - still appeared in KDS immediately with an ADDED
+marker.
+
+### Root cause
+Confirmed directly from Odoo 19's own core frontend source
+(`addons/point_of_sale/static/src/app/services/pos_store.js`,
+`sendOrderInPreparation()`): `order.updateLastOrderChange()` - the call
+that actually writes `last_order_preparation_change` to the backend -
+is only invoked from within that same Send-handling method, confirming
+the field genuinely is Send-specific. But the field's own **value**,
+once populated by a genuine first Send, stays non-empty (with non-empty
+`metadata`) on the order going forward - and Odoo's own frontend order
+model re-serializes and re-saves this SAME, unchanged value as part of
+its routine order payload on essentially every subsequent save (adding
+a product, changing a quantity, anything at all), not exclusively on a
+genuine second Send. v7.9.1's own `_is_genuine_send_signal()` check
+(non-empty `metadata`) could therefore no longer distinguish "a fresh,
+second Send actually happened" from "the stale, already-processed value
+from the first Send is simply being carried along again" - once an
+order had been sent even once, every subsequent routine save looked
+identical to a second Send.
+
+### Fix
+New `kds_last_processed_send_signal` field (`pos_order.py`) tracks the
+exact `last_order_preparation_change` value already recognized as a
+genuine, processed Send. New `_flexsys_kds_should_treat_as_send(vals)`
+method combines the existing non-empty-`metadata` check with a fresh
+comparison: a write is only treated as a NEW Send if the incoming value
+both has non-empty metadata AND **differs** from this tracked value.
+The tracked value is updated the moment a genuine Send is recognized
+(`_flexsys_kds_sync()`), regardless of whether the sync itself
+ultimately proceeds further. A genuine second Send always produces a
+fresh value (Odoo's own core stamps a new print-history entry each time
+`sendOrderInPreparation()` actually runs), so this correctly keeps
+recognizing real, repeated Sends while no longer mistaking the same
+stale value for a new one on every routine save in between.
+
+`is_send_write` is now computed per-order (each order's own
+`kds_last_processed_send_signal` differs) inside `write()`'s own loop,
+rather than once for the whole batch.
+
+### Database migration
+A brand-new field defaults to `NULL` for every existing row. For an
+order already linked to a `kds.order` before this upgrade, its own
+`last_order_preparation_change` already holds a genuinely non-empty
+value from a prior Send - the very next write after upgrading, even a
+routine one carrying that same pre-existing value along, would
+otherwise be incorrectly recognized as a "new" Send exactly once
+(harmless - `_flexsys_kds_diff_lines()` only ever applies genuine
+deltas - but unnecessary). New
+`migrations/19.0.7.9.2/post-migrate.py` backfills
+`kds_last_processed_send_signal` to match each such order's own current
+value, closing this one-time edge case.
+
+### Tests
+6 new tests: the confirmed root cause isolated directly (a write
+carrying the same, already-processed value does not leak), and the dev
+report's own Required Tests A-E (new line/qty change/removal after
+first Send all remain invisible until the next genuine Send; pending
+changes become visible correctly with proper Delta markers on Send;
+multiple edits before Send reconcile exactly once against the final
+state only). Audited every existing test using multiple Send events
+within the same test - all already used distinct metadata values per
+intentional Send, so none required changes.
+
+**Total: 291 tests** (up from 285). Database migration required this
+time - see `migrations/19.0.7.9.2/post-migrate.py`.
+
+---
+
+## v7.9.1 — CRITICAL: "On Send to KDS" boundary was being bypassed entirely
+
+**Confirmed live, Critical severity**: adding a single product to an
+active POS order - with neither Send nor New ever pressed - appeared
+in KDS immediately as a NEW ticket. A second product added afterward,
+still with no Send/New, appeared in the existing ticket as ADDED. The
+"On Send to KDS" synchronization boundary was not functioning at all.
+
+### Root cause
+The `'send'` trigger's own gate (introduced across v7.7.0/v7.7.1)
+checked only whether `last_order_preparation_change` was *present* in
+a `write()`/`create()` vals dict - treating presence itself as proof
+the cashier had pressed Send. Confirmed directly from Odoo 19's own
+core source
+(`addons/point_of_sale/models/pos_order.py::_ensure_to_keep_last_preparation_change`)
+that this assumption was wrong: the field is part of the order's own
+standard payload on effectively *every* POS save (routine autosave,
+adding a product, changing a quantity - anything at all going through
+Odoo's own `sync_from_ui` entry point), not exclusively a genuine Send.
+Mere presence was therefore never a reliable signal, and every ordinary
+edit leaked straight through to KDS - exactly the confirmed bug.
+
+### Fix
+That same Odoo core method's own logic reveals the actual
+distinguishing signal: the field's JSON value carries a `metadata` key
+specifically to separate a genuine preparation-change event from an
+ordinary save that merely carries the field along - the core method
+explicitly preserves a record's existing value whenever an incoming
+write's own `metadata` is empty, meaning Odoo's own core treats an
+empty/missing `metadata` as *not* a genuine preparation-change event.
+
+New `_is_genuine_send_signal(vals)` helper (`pos_order.py`) parses the
+field's JSON content and requires a **non-empty** `metadata` key -
+replacing the old presence-only check at both call sites (`create()`
+and `write()`). Deliberately fails closed on any malformed/unexpected
+input (missing key, invalid JSON, wrong type, non-dict value) rather
+than raising - a missed genuine Send only delays a sync to the next one
+(safe); a false positive leaks an unsent edit straight to the kitchen
+(unsafe) - the correct direction to fail in for this specific check.
+Verified directly against 12 edge cases (empty/missing/malformed/
+wrong-type input) outside of Odoo's own runtime, confirming the
+implementation matches its own documented defensive behavior exactly.
+
+### Architecture confirmation (per the dev report's own numbered questions)
+- **POS Working State vs. KDS Committed State**: enforced entirely at
+  the backend gate - `_flexsys_kds_sync()` is only ever called from
+  `pos.order`'s own `write()`/`create()` and `pos.order.line`'s own
+  hooks (which always pass `is_send_write=False`, deferring to the
+  order-level write), and the sync itself only proceeds when
+  `_is_genuine_send_signal()` returns `True`.
+- **Generic POS writes cannot trigger KDS sync**: confirmed - every
+  call site was re-audited; `pos.order.line`'s own create/write/unlink
+  hooks never call the sync internals directly, only through this same
+  gated path.
+- **Polling/cron cannot leak unsent changes**: confirmed - both cron
+  jobs defined in this module (`_cron_refresh_sla_status`,
+  `_cron_reconcile_stuck_orders`) operate exclusively on `kds.order`,
+  never touch `pos.order`/`pos.order.line`, and never call
+  `_flexsys_kds_sync()`/`_flexsys_kds_diff_lines()` - there is no
+  background path that could read unsent POS state.
+
+### A real gap in this module's own test suite, found and fixed before shipping
+Every existing test in `test_pos_sync.py` simulating a Send signal used
+`'last_order_preparation_change': '...{"metadata": {}}'` - an empty
+metadata payload, which the newly-correct logic (accurately) no longer
+treats as a genuine Send. All 12 occurrences (verified individually as
+structurally identical before a single mechanical substitution) were
+updated to a genuinely populated payload
+(`{"metadata": {"v": 1}}`) - the exact same class of "test payload
+matches the *old*, exact bug being fixed" issue this whole fix exists
+to correct, caught here before delivery rather than by yet another
+runtime report.
+
+### Tests
+7 new tests: the exact confirmed root cause isolated directly (empty
+metadata does not sync; populated metadata does), the dev report's own
+Required Acceptance Tests 1, 2, 3, 5, and 9 (multiple edits before Send
+reconcile exactly once, against the final POS state only - zero
+intermediate KDS events).
+
+**Total: 285 tests** (up from 279). No database migration required.
+
+---
+
 ## v7.9.0 — Retention Must Follow POS Order Lifecycle: extends pos_closed_at to CANCELLED too
 
 **Confirmed live**: a Cancelled ticket (POS qty 1 -> 0, order never

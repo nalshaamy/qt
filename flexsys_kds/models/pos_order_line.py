@@ -27,10 +27,11 @@ class PosOrderLine(models.Model):
             # Routed through _flexsys_kds_sync() instead - is_send_write
             # is always False from THIS specific hook (a line-level
             # create/write alone is never itself the Send/New signal;
-            # see pos_order.py's own write() override, which passes
-            # True only when last_order_preparation_change is part of
-            # the SAME transaction's order-level write - the two happen
-            # as separate write() calls within one overall _process_
+            # see pos_order.py's own write() override and
+            # _is_genuine_send_signal(), which recognizes the genuine
+            # Send/New signal only when it's part of the SAME
+            # transaction's order-level write - the two happen as
+            # separate write() calls within one overall _process_
             # order() request, per Odoo core's own pos_order.py) -
             # 'payment' mode is unaffected either way (its own gate
             # checks payment state, not is_send_write), and 'send' mode

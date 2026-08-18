@@ -1,18 +1,20 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.9.0**
+**Version: 19.0.7.9.2**
 **Status as of this document: code-complete, including everything
-through v7.8.1 (see CHANGELOG.md for the full history), plus this
-round's fix: "Retention Must Follow POS Order Lifecycle" - extends
-v7.8.0's own `pos_closed_at` gating (which only covered Completed) to
-Cancelled tickets too, plus a second, real gap found via this module's
-own test review (not from any report): the original gate treated "no
-linked POS order at all" identically to "linked POS order still
-active" - both fixed now, with an explicit fallback to the original
-direct-timestamp expiry for a ticket with no POS order to wait on in
-the first place. 279 automated tests, all `py_compile`/XML/JS checks
-passing, plus a custom AST-based undefined-name sweep on every file
-this round touched. Not yet signed off on a live instance — see "What
+through v7.9.1 (see CHANGELOG.md for the full history), plus this
+round's fix: "On Send to KDS / Subsequent Changes Bypass Send Gate" -
+v7.9.1's own metadata-presence check correctly gated the FIRST Send,
+but once an order had been sent once, Odoo's own frontend kept
+re-serializing that same, already-populated field value on every
+subsequent routine save (adding a product, changing a quantity - not
+exclusively a genuine second Send), which looked identical to a new
+Send under the old check. New `kds_last_processed_send_signal` field
+now tracks the exact value already recognized as a processed Send - a
+write only counts as NEW if its value both has non-empty metadata AND
+differs from that tracked value. 291 automated tests, all
+`py_compile`/XML/JS checks passing, plus a custom AST-based
+undefined-name sweep. Not yet signed off on a live instance — see "What
 still needs a human" at the end.**
 
 
@@ -565,6 +567,62 @@ record is reused at the model level but cannot substitute for
 confirming both KDS screens correctly display the reopened ticket in
 real time.
 
+## On Send to KDS Boundary Is Being Bypassed (v7.9.1)
+**Confirmed live, Critical severity**: adding a single product to an
+active POS order - with neither Send nor New ever pressed - appeared
+in KDS immediately as a NEW ticket. Root cause: the `'send'` trigger's
+own gate checked only whether `last_order_preparation_change` was
+*present* in a write/create vals dict - but confirmed directly from
+Odoo 19's own core source
+(`addons/point_of_sale/models/pos_order.py::_ensure_to_keep_last_preparation_change`)
+that this field is part of nearly every POS save, not exclusively a
+genuine Send. New `_is_genuine_send_signal(vals)` helper requires a
+non-empty `metadata` key within the field's own JSON content - the
+actual distinguishing signal Odoo's own core uses. A real gap in this
+module's own test suite (every existing Send-signal test used an
+empty-metadata payload) was found and fixed before shipping.
+
+**What still needs a human**: the dev report's own Required Acceptance
+Tests, run against a real Odoo.sh staging instance - see the v7.9.2
+section immediately below for what turned out to still be incomplete
+about this fix.
+
+## On Send to KDS / Subsequent Changes Bypass Send Gate (v7.9.2)
+**Confirmed live**: v7.9.1's own fix correctly gated the FIRST Send
+(nothing leaked before it) - but a subsequent edit to an ALREADY-sent
+order, without pressing Send again, still leaked through immediately.
+Root cause, confirmed directly from Odoo 19's own core frontend source
+(`addons/point_of_sale/static/src/app/services/pos_store.js::sendOrderInPreparation`):
+`order.updateLastOrderChange()` is only called from within that same
+Send-handling method - but the field's own **value**, once populated by
+a genuine first Send, stays non-empty going forward, and Odoo's own
+frontend re-serializes that SAME, unchanged value as part of its
+routine save payload on essentially every subsequent write, not
+exclusively a genuine second Send. v7.9.1's own "non-empty metadata"
+check alone could no longer distinguish a genuine second Send from a
+stale value being carried along again.
+
+New `kds_last_processed_send_signal` field (`pos_order.py`) tracks the
+exact value already recognized as a processed Send - a write only
+counts as a NEW Send if its value both has non-empty metadata AND
+differs from this tracked value. Updated the moment a genuine Send is
+recognized, regardless of whether the sync itself proceeds further.
+
+**⚠️ Third database migration**: `migrations/19.0.7.9.2/post-migrate.py`
+backfills `kds_last_processed_send_signal` for every order already
+linked to a `kds.order` before this upgrade - without it, the very next
+write to such an order after upgrading (even a routine one) would be
+incorrectly recognized as a "new" Send exactly once (harmless but
+unnecessary - closed here regardless).
+
+**What still needs a human**: the dev report's own Required Tests A-E,
+run against a real Odoo.sh staging instance - particularly confirming
+that a GENUINE second Send (the cashier actually pressing Send again)
+still correctly produces a fresh, distinct
+`last_order_preparation_change` value on the real Odoo 19 frontend, the
+one part of this fix's own reasoning that rests on Odoo's own frontend
+behavior rather than something this delivery could verify directly.
+
 ---
 
 ## What still needs a human
@@ -828,7 +886,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 279 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 291 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

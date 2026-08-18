@@ -201,7 +201,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             ],
             'amount_tax': 0.0, 'amount_total': 14.0, 'amount_paid': 0.0, 'amount_return': 0.0,
             'state': 'draft',
-            'last_order_preparation_change': '{"lines": [], "metadata": {}}',
+            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}',
         })
         kds_order = order.kds_order_id
         self.assertTrue(kds_order, "'send' trigger + the native Send signal should sync to KDS "
@@ -345,7 +345,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             })],
             'amount_tax': 0.0, 'amount_total': 10.0, 'amount_paid': 0.0, 'amount_return': 0.0,
             'state': 'draft',
-            'last_order_preparation_change': '{"lines": [], "metadata": {}}',
+            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}',
         })
         first_kds_order = order.kds_order_id
         self.assertTrue(first_kds_order)
@@ -363,7 +363,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             'lines': [],
             'amount_tax': 0.0, 'amount_total': 0.0, 'amount_paid': 0.0, 'amount_return': 0.0,
             'state': 'draft',
-            'last_order_preparation_change': '{"lines": [], "metadata": {}}',
+            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}',
         })
         self.assertFalse(order.kds_order_id,
                           "An order with no lines yet has nothing to send to the kitchen, "
@@ -421,7 +421,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             })],
             'amount_tax': 0.0, 'amount_total': 10.0, 'amount_paid': 0.0, 'amount_return': 0.0,
             'state': 'draft',
-            'last_order_preparation_change': '{"lines": [], "metadata": {}}',
+            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}',
         })
         kds_order = order.kds_order_id
         self.assertTrue(kds_order)
@@ -451,7 +451,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             })],
             'amount_tax': 0.0, 'amount_total': 10.0, 'amount_paid': 0.0, 'amount_return': 0.0,
             'state': 'draft',
-            'last_order_preparation_change': '{"lines": [], "metadata": {}}',
+            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}',
         })
         kds_order = order.kds_order_id
         self.assertTrue(kds_order, "The order must have genuinely reached KDS before "
@@ -477,7 +477,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             })],
             'amount_tax': 0.0, 'amount_total': 10.0, 'amount_paid': 0.0, 'amount_return': 0.0,
             'state': 'draft',
-            'last_order_preparation_change': '{"lines": [], "metadata": {}}',
+            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}',
         })
         kds_order = order.kds_order_id
         self.assertTrue(kds_order)
@@ -1679,7 +1679,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             ],
             'amount_tax': 0.0, 'amount_total': 14.0, 'amount_paid': 0.0, 'amount_return': 0.0,
             'state': 'draft',
-            'last_order_preparation_change': '{"lines": [], "metadata": {}}',
+            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}',
         })
         kds_order = order.kds_order_id
         self.assertTrue(kds_order)
@@ -1733,7 +1733,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             ],
             'amount_tax': 0.0, 'amount_total': 10.0, 'amount_paid': 0.0, 'amount_return': 0.0,
             'state': 'draft',
-            'last_order_preparation_change': '{"lines": [], "metadata": {}}',
+            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}',
         })
         kds_order = order.kds_order_id
         self.assertTrue(kds_order)
@@ -1937,7 +1937,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         order = self._make_send_write_order()
         self.assertFalse(order.kds_order_id)
 
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {}}'})
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
 
         self.assertTrue(
             order.kds_order_id,
@@ -1950,7 +1950,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         Send/New synchronizes everything accumulated at once as ADDED/
         UPDATED/CANCELLED."""
         order = self._make_send_write_order()
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {}}'})
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
         kds_order = order.kds_order_id
         self.assertTrue(kds_order)
         burger_line = kds_order.line_ids
@@ -1985,7 +1985,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 1,
             'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
         })
-        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {}}'})
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
         kds_order = order.kds_order_id
         cappuccino_pos_line = order.lines.filtered(lambda l: l.product_id == self.product_cappuccino)
 
@@ -2182,7 +2182,7 @@ class TestPosSync(FlexSysKdsTestCommon):
             'amount_paid': 0.0,
             'amount_return': 0.0,
             'state': 'draft',
-            'last_order_preparation_change': '{"lines": [], "metadata": {}}',
+            'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}',
         })
         return order
 
@@ -2889,3 +2889,332 @@ class TestPosSync(FlexSysKdsTestCommon):
             "cancelled_at - the POS-lifecycle retention rule only applies to a ticket "
             "genuinely waiting on a linked POS order's own closure, never to one with no "
             "POS order to wait on in the first place.")
+
+    # -----------------------------------------------------------------
+    # Dev report "CRITICAL BUG FIX REQUEST - On Send to KDS Boundary Is
+    # Being Bypassed": confirmed live - adding a single product, with
+    # NEITHER Send nor New pressed, appeared in KDS immediately. Root
+    # cause: mere presence of last_order_preparation_change in a
+    # write()/create() vals dict is not a reliable "genuine Send/New"
+    # signal - confirmed from Odoo 19's own core source
+    # (_ensure_to_keep_last_preparation_change) that the field's own
+    # JSON payload carries a `metadata` key specifically to distinguish
+    # a genuine preparation-change event from an ordinary save that
+    # merely carries the field along. Required Acceptance Tests 1-3
+    # (Test 4/5/6/7/8/9 are already exercised throughout this file's
+    # other tests, all of which explicitly use a populated metadata
+    # payload).
+    # -----------------------------------------------------------------
+    def test_bug_on_send_boundary_empty_metadata_write_does_not_sync(self):
+        """The exact confirmed root cause, isolated directly: a write
+        carrying last_order_preparation_change with EMPTY metadata (the
+        JSON shape an ordinary, non-Send save can carry) must NOT be
+        treated as a genuine Send signal."""
+        self.pos_config.kds_send_trigger = 'send'
+        order = self.env['pos.order'].create({
+            'session_id': self.pos_session.id,
+            'company_id': self.company.id,
+            'lines': [(0, 0, {
+                'product_id': self.product_burger.id, 'qty': 1,
+                'price_unit': 10.0, 'price_subtotal': 10.0, 'price_subtotal_incl': 10.0,
+            })],
+            'amount_tax': 0.0, 'amount_total': 10.0, 'amount_paid': 0.0, 'amount_return': 0.0,
+            'state': 'draft',
+            # Empty metadata - matches an ordinary, non-Send save's own
+            # payload shape, per Odoo 19's own core source.
+            'last_order_preparation_change': '{"lines": [], "metadata": {}}',
+        })
+        self.assertFalse(
+            order.kds_order_id,
+            "A write/create carrying last_order_preparation_change with EMPTY metadata "
+            "must NOT be treated as a genuine Send - this is the exact confirmed root "
+            "cause of the reported leak.")
+
+        # A subsequent write with the SAME empty-metadata shape must also not sync.
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {}}'})
+        self.assertFalse(order.kds_order_id)
+
+        # Only a write with genuinely populated metadata is a real Send.
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
+        self.assertTrue(
+            order.kds_order_id,
+            "A write with genuinely populated metadata must correctly trigger the sync.")
+
+    def test_bug_on_send_boundary_test1_no_ticket_before_any_send_signal(self):
+        """Required Acceptance Test 1: create order, add product, do NOT
+        trigger On Send to KDS - no KDS ticket at all."""
+        self.pos_config.kds_send_trigger = 'send'
+        order = self.env['pos.order'].create({
+            'session_id': self.pos_session.id,
+            'company_id': self.company.id,
+            'lines': [(0, 0, {
+                'product_id': self.product_burger.id, 'qty': 1,
+                'price_unit': 10.0, 'price_subtotal': 10.0, 'price_subtotal_incl': 10.0,
+            })],
+            'amount_tax': 0.0, 'amount_total': 10.0, 'amount_paid': 0.0, 'amount_return': 0.0,
+            'state': 'draft',
+        })
+        self.assertFalse(order.kds_order_id, "No KDS ticket at all before any Send signal.")
+
+    def test_bug_on_send_boundary_test2_send_creates_exactly_one_ticket(self):
+        """Required Acceptance Test 2: continue Test 1, press Send -
+        exactly one KDS ticket appears."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        self.assertTrue(order.kds_order_id)
+        self.assertEqual(
+            len(order.kds_order_id.line_ids), 1,
+            "Exactly one KDS ticket, containing the product added before Send.")
+
+    def test_bug_on_send_boundary_test3_second_product_before_send_invisible(self):
+        """Required Acceptance Test 3: after the initial Send, add
+        another product without Send - KDS unchanged; press Send - the
+        new product appears as ADDED."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        self.assertEqual(len(kds_order.line_ids), 1)
+
+        self.env['pos.order.line'].create({
+            'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 1,
+            'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
+        })
+        kds_order.invalidate_recordset()
+        self.assertEqual(
+            len(kds_order.line_ids), 1,
+            "KDS must remain unchanged - the new product must not appear before Send.")
+
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+
+        kds_order.invalidate_recordset()
+        new_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        self.assertTrue(new_line, "The new product must now appear as ADDED, after Send.")
+        self.assertEqual(new_line.line_change, 'added')
+
+    def test_bug_on_send_boundary_qty_zero_stays_unchanged_until_send(self):
+        """Required Acceptance Test 5, isolated: committed qty 1,
+        changed to 0 without Send - KDS must remain unchanged (not
+        auto-cancelled) until the next genuine Send."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+
+        order.lines.write({'qty': 0})
+        # Deliberately NOT sending the Send signal here.
+
+        line.invalidate_recordset()
+        self.assertEqual(
+            line.qty, 1,
+            "Before On Send to KDS, the previously committed quantity must remain "
+            "unchanged - it must NOT become CANCELLED automatically.")
+        self.assertNotEqual(line.state, 'cancelled')
+
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+
+        line.invalidate_recordset()
+        self.assertEqual(
+            line.state, 'cancelled',
+            "Only after On Send to KDS does the quantity->0 cancellation logic execute.")
+
+    def test_bug_on_send_boundary_multiple_edits_before_send_reconcile_once(self):
+        """Required Acceptance Test 9: several POS edits before Send -
+        no intermediate KDS events; after one Send, exactly one
+        reconciliation against the final POS state (not a replay of
+        every intermediate edit)."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        events_before = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+
+        # Multiple edits, no Send signal in between.
+        order.lines.write({'qty': 4})
+        order.lines.write({'qty': 7})
+        order.lines.write({'qty': 3})
+
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 5, "No intermediate changes must reach KDS at all.")
+        events_during = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+        self.assertEqual(events_during, events_before, "Zero intermediate KDS events.")
+
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+
+        line.invalidate_recordset()
+        self.assertEqual(
+            line.qty, 3,
+            "Only the FINAL POS state (3) reconciles - the intermediate 4 and 7 are "
+            "never separately replayed.")
+        self.assertEqual(line.qty_delta, -2, "Delta is calculated as final(3) - committed(5) = -2.")
+
+    # -----------------------------------------------------------------
+    # Dev report "BUG FIX REQUEST - On Send to KDS / Subsequent Changes
+    # Bypass Send Gate": confirmed live - initial Send correctly gated,
+    # but a subsequent edit to an ALREADY-sent order (no Send pressed
+    # again) still leaked through immediately. Root cause: once an order
+    # has been sent even once, Odoo's own frontend re-serializes that
+    # SAME, already-populated last_order_preparation_change value as
+    # part of its routine save payload on essentially every subsequent
+    # write - _is_genuine_send_signal()'s own "non-empty metadata" check
+    # alone could no longer distinguish a genuine second Send from a
+    # stale value being carried along again. Required Tests A-E below.
+    # -----------------------------------------------------------------
+    def test_bug_stale_send_signal_repeated_after_first_send_does_not_leak(self):
+        """The dev report's own exact reproduction, isolated directly:
+        a write carrying the SAME last_order_preparation_change value
+        already processed by an earlier genuine Send must NOT be
+        treated as a new Send - this is the precise confirmed root
+        cause (a subsequent routine save re-carrying the same,
+        already-handled value)."""
+        order = self._make_send_write_order()
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order, "The genuine first Send must sync normally.")
+        self.assertEqual(
+            order.kds_last_processed_send_signal, '{"lines": [], "metadata": {"v": 1}}',
+            "The processed value must be recorded immediately after a genuine Send.")
+
+        # A routine save re-carrying the EXACT SAME value (matching how
+        # Odoo's own frontend re-serializes the order's existing field
+        # value on essentially every subsequent save, not exclusively a
+        # genuine second Send) must NOT be treated as a new Send.
+        self.env['pos.order.line'].create({
+            'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 1,
+            'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
+        })
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
+
+        kds_order.invalidate_recordset()
+        self.assertFalse(
+            kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino),
+            "A write carrying the SAME, already-processed last_order_preparation_change "
+            "value must not sync anything new - this is the confirmed root cause of the "
+            "reported leak.")
+
+    def test_bug_a_new_line_after_first_send_invisible_until_next_send(self):
+        """Required Test A: new line after first Send, without Send ->
+        invisible to KDS."""
+        order = self._make_send_write_order()
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+
+        self.env['pos.order.line'].create({
+            'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 1,
+            'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
+        })
+        # No Send pressed - KDS must remain unchanged.
+        kds_order.invalidate_recordset()
+        self.assertFalse(
+            kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino),
+            "A new line added after the first Send, without pressing Send again, must "
+            "remain completely invisible to KDS.")
+        self.assertEqual(len(kds_order.line_ids), 1, "Only the originally-sent line exists.")
+
+    def test_bug_b_qty_change_after_first_send_invisible_until_next_send(self):
+        """Required Test B: quantity change after first Send, without
+        Send -> invisible to KDS."""
+        order = self._make_send_write_order()
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        self.assertEqual(line.qty, 1)
+
+        order.lines.write({'qty': 5})
+        # No Send pressed.
+        line.invalidate_recordset()
+        self.assertEqual(
+            line.qty, 1,
+            "A quantity change after the first Send, without pressing Send again, must "
+            "remain completely invisible to KDS - committed state stays at 1.")
+        self.assertEqual(line.qty_delta, 0, "No delta must be shown before the next Send.")
+
+    def test_bug_c_line_removal_after_first_send_invisible_until_next_send(self):
+        """Required Test C: line removal/qty 0 after first Send, without
+        Send -> invisible to KDS."""
+        order = self._make_send_write_order()
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+
+        order.lines.write({'qty': 0})
+        # No Send pressed.
+        line.invalidate_recordset()
+        self.assertEqual(
+            line.state, 'new',
+            "A quantity-to-zero change after the first Send, without pressing Send "
+            "again, must remain completely invisible to KDS - the line must not become "
+            "CANCELLED yet.")
+        self.assertEqual(line.qty, 1, "The committed quantity itself is untouched.")
+
+    def test_bug_d_pending_changes_become_visible_correctly_on_next_send(self):
+        """Required Test D: after pressing Send -> all pending changes
+        become visible correctly with the proper Delta markers."""
+        order = self._make_send_write_order()
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+
+        self.env['pos.order.line'].create({
+            'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 1,
+            'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
+        })
+        order.lines.filtered(lambda l: l.product_id == self.product_burger).write({'qty': 3})
+
+        # Genuinely NEW send signal (different value) - a real second Send.
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+
+        kds_order.invalidate_recordset()
+        line.invalidate_recordset()
+        new_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        self.assertEqual(line.qty, 3, "The quantity change is now correctly reflected.")
+        self.assertEqual(line.qty_delta, 2, "UPDATED (+2) - 1 -> 3.")
+        self.assertTrue(new_line, "The new line is now correctly visible.")
+        self.assertEqual(new_line.line_change, 'added')
+        self.assertEqual(
+            order.kds_last_processed_send_signal, '{"lines": [], "metadata": {"v": 2}}',
+            "The newly-processed value must now be recorded as the latest.")
+
+    def test_bug_e_multiple_edits_before_send_reconcile_once_on_final_state(self):
+        """Required Test E: multiple POS edits before Send -> KDS
+        receives only the final resulting state/delta when Send is
+        pressed - matching the dev report's own 'multiple edits before
+        Send' worked example (5 -> 4 -> 7 -> 3, add/remove/add products,
+        with zero intermediate KDS events, reconciled exactly once)."""
+        order = self._make_send_write_order()
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 1}}'})
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        self.assertEqual(line.qty, 1)
+
+        events_before = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+
+        # Several edits, no Send between them.
+        order.lines.write({'qty': 3})
+        order.lines.write({'qty': 7})
+        order.lines.write({'qty': 2})
+        new_line = self.env['pos.order.line'].create({
+            'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 1,
+            'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
+        })
+        new_line.unlink()
+
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 1, "Zero intermediate KDS changes before Send.")
+        events_after_edits = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+        self.assertEqual(events_after_edits, events_before,
+                          "No intermediate KDS events from the un-sent edits.")
+
+        # One genuine Send.
+        order.write({'last_order_preparation_change': '{"lines": [], "metadata": {"v": 2}}'})
+
+        kds_order.invalidate_recordset()
+        line.invalidate_recordset()
+        self.assertEqual(
+            line.qty, 2,
+            "Only the FINAL POS state (2) reconciles - the intermediate 3 and 7 are "
+            "never separately replayed.")
+        self.assertEqual(line.qty_delta, 1, "Delta is calculated as final(2) - committed(1) = +1.")
+        self.assertFalse(
+            kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino),
+            "The add-then-remove-before-Send must never have appeared in KDS at all.")
