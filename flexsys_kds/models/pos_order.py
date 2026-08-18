@@ -859,8 +859,16 @@ class PosOrder(models.Model):
             # for the complete explanation; _flexsys_kds_should_treat_as_send()
             # (create()/write(), above) is what actually compares
             # against this value on the NEXT write.
-            if is_send_write:
-                self.kds_last_processed_send_signal = self.last_order_preparation_change
+            # v19.0.7.10.2: DO NOT overwrite kds_last_processed_send_signal here.
+            # sync_from_ui() stores a normalized, content-only signature before
+            # entering _flexsys_kds_sync().  Overwriting it here with Odoo's RAW
+            # last_order_preparation_change JSON (which contains volatile metadata/
+            # serverDate) mixes two incompatible representations.  On the next
+            # ordinary autosave the normalized incoming signature can never equal
+            # that raw JSON, so an unsent edit is falsely treated as a fresh Send.
+            # The authoritative processed marker is therefore owned exclusively by
+            # _flexsys_kds_process_one_sync_from_ui_entry().
+            pass
         if not ready:
             return
         if not self.kds_order_id:
