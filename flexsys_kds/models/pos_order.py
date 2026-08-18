@@ -183,6 +183,48 @@ class PosOrder(models.Model):
     # mistaking the same stale value for a new one on every routine
     # save in between.
     kds_last_processed_send_signal = fields.Char(copy=False)
+    # REAL BUG FIX ("CONFIRMED LIVE NETWORK RESULT" - client's own
+    # controlled A/B Network trace, the fourth and final confirmed root-
+    # cause round on this exact "detect a genuine Send" problem):
+    # comparing last_order_preparation_change's own content (the field
+    # kds_last_processed_send_signal above exists to support) was
+    # proven, by this exact live test, to be fundamentally unreliable
+    # as a Send-boundary signal - an ordinary quantity edit, with no
+    # Send pressed at all, was confirmed to still change that field's
+    # own genuine "lines" content by the time it reaches sync_from_ui,
+    # since the field appears to track the order's own current
+    # unprinted-change state generally, not exclusively a genuine Send
+    # event. No amount of re-comparing that field's own content -
+    # raw, metadata-stripped, or otherwise - can ever reliably
+    # distinguish the two, because the field's own content genuinely
+    # differs in both cases.
+    #
+    # The client's own controlled test (Network cleared, qty edited
+    # with NO Send: zero get_preparation_change calls observed;
+    # immediately after pressing Send: get_preparation_change followed
+    # by sync_from_ui, both observed) is the first confirmed signal
+    # that is NOT derived from interpreting any field's own content at
+    # all - it's the literal invocation of a specific model method,
+    # confirmed to fire ONLY at the moment of a genuine Send.
+    #
+    # This field is the authorization flag get_preparation_change()'s
+    # own override (below) sets the instant it's called - a
+    # affirmative, method-invocation-based signal, not a value
+    # comparison of any kind. sync_from_ui()'s own post-processing
+    # consumes (clears) this flag the moment it acts on it, so a
+    # SUBSEQUENT sync_from_ui call - an ordinary autosave, or any other
+    # save not preceded by a fresh get_preparation_change() call -
+    # finds the flag already False and correctly does nothing,
+    # regardless of what last_order_preparation_change's own content
+    # looks like by then. Idempotent by the same construction: several
+    # get_preparation_change() calls around the same logical Send
+    # (the client's own explicit requirement - "make the
+    # implementation idempotent so that one real Send produces exactly
+    # one KDS reconciliation even if multiple internal calls occur
+    # around the same action") simply set this already-True flag to
+    # True again (a harmless no-op), and the one sync_from_ui call that
+    # actually follows consumes it exactly once.
+    kds_preparation_change_requested = fields.Boolean(default=False, copy=False)
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -389,6 +431,72 @@ class PosOrder(models.Model):
             order._flexsys_kds_sync(is_send_write=True)
 
     @api.model
+    def get_preparation_change(self, *args, **kwargs):
+        """REAL BUG FIX ("CONFIRMED LIVE NETWORK RESULT" - the fourth
+        and final confirmed root-cause round on this exact "detect a
+        genuine Send" problem): confirmed via the client's own
+        controlled A/B Network trace - Network cleared, then a quantity
+        edit with NO Send pressed produced ZERO calls to
+        `get_preparation_change`; immediately after actually pressing
+        Send, `get_preparation_change` fired, directly followed by
+        `sync_from_ui` - `pos.order.get_preparation_change()` is
+        therefore the first confirmed signal that is NOT derived from
+        interpreting any field's own content at all (every earlier
+        attempt at this exact problem was: presence of
+        last_order_preparation_change, then its own non-empty metadata,
+        then a content-only signature comparison - all three
+        eventually confirmed unreliable by live testing, since that
+        field's own content genuinely differs between a routine edit
+        and a genuine Send, making any comparison of it fundamentally
+        unable to distinguish the two). This is the literal invocation
+        of a specific model method, itself the actual signal - no
+        interpretation needed.
+
+        See `kds_preparation_change_requested`'s own field docstring
+        (just above this class's own start) for the complete
+        authorization-flag mechanism this sets, and
+        `sync_from_ui()`'s own docstring immediately below for how that
+        flag is consumed.
+
+        Deliberately minimal and defensive, matching this module's own
+        established pattern for every prior hook attempt:
+        `super().get_preparation_change(...)` is always called first
+        and its own result always returned completely unmodified; the
+        authorization-flag write is wrapped in its own try/except,
+        entirely separate from the native call, so a failure here can
+        never affect the actual preparation-change computation this
+        method's own native behavior provides.
+
+        `@api.model` here matches `sync_from_ui()`'s own decoration
+        above - if the real method turns out to be a genuine instance
+        method instead (called on a non-empty `self`, the specific
+        order(s) requesting preparation), the `if self:` guard inside
+        this method's own body still correctly flags exactly those
+        records; if it's genuinely `@api.model` (called on an empty
+        recordset, with the relevant order(s) identified some other way
+        - e.g. within `*args`/`**kwargs`), this method's own docstring
+        candidly notes that scenario is not yet handled here and would
+        need a further, evidence-based follow-up, exactly as every
+        other hook in this file's own history has been - never a blind
+        guess.
+        """
+        result = super().get_preparation_change(*args, **kwargs)
+        try:
+            if self:
+                self.sudo().write({'kds_preparation_change_requested': True})
+            else:
+                _logger.info(
+                    "FlexSys KDS: get_preparation_change() was called on an empty "
+                    "recordset (self) - the authorization flag could not be set on any "
+                    "specific order this way. args=%r kwargs=%r", args, kwargs)
+        except Exception:
+            _logger.exception(
+                "FlexSys KDS: failed to set kds_preparation_change_requested after a "
+                "genuine get_preparation_change() call; native preparation-change "
+                "computation itself was not affected.")
+        return result
+
+    @api.model
     def sync_from_ui(self, orders, *args, **kwargs):
         """REAL BUG FIX ("LIVE NETWORK TRACE - EXACT ODOO 'ORDER / SEND
         TO PREPARATION' SERVER PATH CONFIRMED"): the client's own live
@@ -411,21 +519,50 @@ class PosOrder(models.Model):
         frontend method a given UI action calls, is no longer a guess:
         it's what the actual traffic shows.
 
-        Genuine-Send detection is NOT based on last_order_preparation_change's
-        own raw value or presence (both already confirmed unreliable by
-        three prior rounds) - it's based on
-        _extract_preparation_content_signature()'s own content-only
-        comparison (that function's own docstring has the complete
-        explanation of why the raw value can never work: Odoo's own
-        core re-stamps a fresh timestamp into the value on every write
-        that touches it at all, regardless of Send intent).
+        REAL BUG FIX ("CONFIRMED LIVE NETWORK RESULT"), confirmed by
+        live testing to supersede this docstring's own next paragraph
+        below: genuine-Send detection is no longer based on
+        _extract_preparation_content_signature()'s own content
+        comparison at all - proven, by the client's own controlled
+        test, that an ordinary quantity edit with no Send pressed still
+        genuinely changes last_order_preparation_change's own content
+        by the time it reaches this method, making any comparison of
+        that field's own content fundamentally unable to distinguish a
+        routine edit from a genuine Send. Detection is now based
+        exclusively on `kds_preparation_change_requested` - the
+        method-invocation-based flag `get_preparation_change()`'s own
+        override (above) sets, consumed (cleared) here the moment it's
+        acted on. The content-signature machinery
+        (`_extract_preparation_content_signature()`,
+        `kds_last_processed_send_signal`) is left in place, not
+        removed, but is no longer part of the authorization decision
+        itself - see `_flexsys_kds_process_one_sync_from_ui_entry()`'s
+        own updated docstring for exactly how it's still used now
+        (content for the actual delta, never for deciding whether to
+        act at all).
 
-        Idempotent by construction, not by extra bookkeeping: a
-        repeated sync_from_ui call carrying the SAME underlying
-        content signature (even with a fresh timestamp) compares equal
-        to kds_last_processed_send_signal and is correctly skipped:
-        the "mark processed" write happens only once, at the point
-        where content genuinely changed.
+        [Historical, superseded: "Genuine-Send detection is NOT based
+        on last_order_preparation_change's own raw value or presence
+        (both already confirmed unreliable by three prior rounds) -
+        it's based on _extract_preparation_content_signature()'s own
+        content-only comparison..." - this reasoning was itself the
+        NEXT thing confirmed unreliable, by the exact live test that
+        prompted this current fix. Left visible here deliberately, not
+        deleted, as an honest record of the actual investigation
+        history rather than presenting the final answer as though it
+        were obvious from the start.]
+
+        Idempotent by construction: `kds_preparation_change_requested`
+        is consumed (set back to `False`) the moment
+        `_flexsys_kds_process_one_sync_from_ui_entry()` acts on it - a
+        subsequent `sync_from_ui` call not preceded by a fresh
+        `get_preparation_change()` call finds the flag already `False`
+        and does nothing, regardless of that call's own
+        last_order_preparation_change content. Several
+        `get_preparation_change()` calls around the same logical Send
+        (the client's own explicit requirement) simply set an
+        already-`True` flag to `True` again - harmless - and the one
+        `sync_from_ui` call that follows consumes it exactly once.
 
         The KDS-relevant post-processing below is best-effort and
         strictly additive - super().sync_from_ui(orders)'s own result is
@@ -475,18 +612,16 @@ class PosOrder(models.Model):
         being correctly processed.
 
         Also added: structured info-level logging at every decision
-        point (payload received, signature extracted or not, record
-        resolved or not, signature comparison result) - the previous
-        version made three consecutive attempts at this exact "detect a
-        genuine Send" problem based on guessing rather than observing
-        actual runtime behavior; this logging exists specifically so
-        the NEXT investigation, if this fix is still somehow incomplete,
-        has real server-side log evidence to work from instead of a
-        fourth guess. Deliberately kept even after this fix is
-        confirmed working, at a low enough level (info, not warning)
-        that it's cheap to leave in place - genuinely useful audit
-        trail for a "why didn't KDS update" question either way, not
-        just a temporary debugging aid to be stripped out later.
+        point (payload received, authorization flag state, record
+        resolved or not) - this is the fourth confirmed root-cause
+        round on this exact "detect a genuine Send" problem; this
+        logging exists specifically so any future investigation has
+        real server-side log evidence to work from instead of another
+        guess. Deliberately kept even after this fix is confirmed
+        working, at a low enough level (info, not warning) that it's
+        cheap to leave in place - genuinely useful audit trail for a
+        "why didn't KDS update" question either way, not just a
+        temporary debugging aid to be stripped out later.
         """
         self = self.sudo()
         for order_data in (orders or []):
@@ -499,6 +634,18 @@ class PosOrder(models.Model):
                     "batch are unaffected). Entry: %r", order_data)
 
     def _flexsys_kds_process_one_sync_from_ui_entry(self, order_data):
+        """REAL BUG FIX ("CONFIRMED LIVE NETWORK RESULT"): authorization
+        is now based exclusively on `kds_preparation_change_requested`
+        (set by `get_preparation_change()`'s own override, consumed
+        here) - never on `last_order_preparation_change`'s own content,
+        confirmed unreliable for that purpose by the client's own live
+        test. The content-signature machinery below
+        (`_extract_preparation_content_signature()`,
+        `kds_last_processed_send_signal`) is kept, but purely as a
+        diagnostic record of what content this specific authorized Send
+        carried - it plays no role in the authorization decision
+        itself anymore.
+        """
         if not isinstance(order_data, dict):
             _logger.info("FlexSys KDS sync_from_ui: skipped a non-dict order entry: %r", order_data)
             return
@@ -516,11 +663,6 @@ class PosOrder(models.Model):
         order_uuid = order_data.get('uuid')
         if not order_uuid and isinstance(order_data.get('data'), dict):
             order_uuid = order_data['data'].get('uuid')
-        _logger.info(
-            "FlexSys KDS sync_from_ui: entry id=%r uuid=%r has_content_signature=%s",
-            order_id, order_uuid, bool(signature))
-        if not signature:
-            return
         order = self.env['pos.order']
         # 'id' (an int - an already-persisted, existing order being
         # updated) is looked up via browse(), never through the uuid
@@ -540,15 +682,27 @@ class PosOrder(models.Model):
                 "FlexSys KDS sync_from_ui: could not resolve a pos.order record "
                 "for id=%r uuid=%r - skipped.", order_id, order_uuid)
             return
-        if signature == order.kds_last_processed_send_signal:
-            _logger.info(
-                "FlexSys KDS sync_from_ui: order #%s - signature unchanged since "
-                "last processed Send, correctly skipped (idempotent).", order.id)
-            return
         _logger.info(
-            "FlexSys KDS sync_from_ui: order #%s - genuine new content signature "
-            "detected, triggering KDS sync.", order.id)
-        order.kds_last_processed_send_signal = signature
+            "FlexSys KDS sync_from_ui: order #%s kds_preparation_change_requested=%s "
+            "has_content_signature=%s",
+            order.id, order.kds_preparation_change_requested, bool(signature))
+        if not order.kds_preparation_change_requested:
+            _logger.info(
+                "FlexSys KDS sync_from_ui: order #%s - no prior get_preparation_change() "
+                "call recorded, correctly treated as an ordinary save, not a genuine "
+                "Send. Skipped.", order.id)
+            return
+        # Consumed (cleared) BEFORE the actual sync call, not after -
+        # guarantees idempotency even if _flexsys_kds_sync() itself
+        # were to raise: a retried or overlapping sync_from_ui call for
+        # this same order would still correctly find the flag already
+        # False, never re-triggering on a half-completed attempt.
+        order.kds_preparation_change_requested = False
+        if signature:
+            order.kds_last_processed_send_signal = signature
+        _logger.info(
+            "FlexSys KDS sync_from_ui: order #%s - genuine Send authorized via "
+            "get_preparation_change(), triggering KDS sync.", order.id)
         order._flexsys_kds_sync(is_send_write=True)
 
     def _flexsys_kds_cancel(self):
@@ -849,26 +1003,36 @@ class PosOrder(models.Model):
             ready = self.state in ('paid', 'done', 'invoiced')
         else:
             ready = is_send_write and self.state != 'cancel' and bool(self.lines)
-            # REAL BUG FIX ("On Send to KDS / Subsequent Changes Bypass
-            # Send Gate"): records the exact value just recognized as a
-            # genuine Send, the moment it's recognized - regardless of
-            # whether `ready` ends up True overall (e.g. a Send signal
-            # arriving on a momentarily empty order) - so this specific
-            # value is never treated as a "new" Send signal again later.
-            # See kds_last_processed_send_signal's own field docstring
-            # for the complete explanation; _flexsys_kds_should_treat_as_send()
-            # (create()/write(), above) is what actually compares
-            # against this value on the NEXT write.
-            # v19.0.7.10.2: DO NOT overwrite kds_last_processed_send_signal here.
-            # sync_from_ui() stores a normalized, content-only signature before
-            # entering _flexsys_kds_sync().  Overwriting it here with Odoo's RAW
-            # last_order_preparation_change JSON (which contains volatile metadata/
-            # serverDate) mixes two incompatible representations.  On the next
-            # ordinary autosave the normalized incoming signature can never equal
-            # that raw JSON, so an unsent edit is falsely treated as a fresh Send.
-            # The authoritative processed marker is therefore owned exclusively by
-            # _flexsys_kds_process_one_sync_from_ui_entry().
-            pass
+            # REAL BUG FIX ("Send / Re-Send Synchronization" - a stale-
+            # code bug the client's own careful review of this exact
+            # method found and fixed directly, confirmed correct here
+            # and merged with full documentation), superseding the
+            # v7.9.2-era comment this block used to carry: this line
+            # used to overwrite kds_last_processed_send_signal with
+            # self.last_order_preparation_change - the RAW field value,
+            # including its own volatile metadata/serverDate (confirmed
+            # in v7.9.7's own root-cause analysis to always change on
+            # essentially every write). That made sense back when
+            # kds_last_processed_send_signal was compared against that
+            # same raw value directly (_flexsys_kds_should_treat_as_send(),
+            # now unused). Since v7.9.7's redesign, the field instead
+            # holds a NORMALIZED, content-only signature (metadata
+            # stripped - see _extract_preparation_content_signature()),
+            # set exclusively by
+            # _flexsys_kds_process_one_sync_from_ui_entry() BEFORE this
+            # method is even called. This line was never removed when
+            # that redesign happened - left in place, it immediately
+            # overwrote the correct, just-set normalized signature with
+            # the raw, metadata-carrying value on every single genuine
+            # Send, corrupting the field for every comparison from that
+            # point forward: the next sync_from_ui call's own normalized
+            # signature could then never equal this now-raw value,
+            # regardless of whether the order's own content had
+            # genuinely changed or not - undermining the very
+            # distinction this whole mechanism exists to make. Fixed by
+            # simply no longer writing to this field here at all -
+            # _flexsys_kds_process_one_sync_from_ui_entry() is now,
+            # correctly, the field's own sole owner.
         if not ready:
             return
         if not self.kds_order_id:

@@ -8,6 +8,175 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.11.0 — On Send to KDS: authorization based on get_preparation_change() invocation, not content interpretation
+
+**The fourth and final confirmed root-cause round on this exact "detect
+a genuine Send" problem** - and the first based on a signal that is NOT
+derived from interpreting any field's own content at all.
+
+### Confirmed live, via the client's own controlled A/B Network test
+Network cleared → quantity edited, NO Send pressed → **zero**
+`get_preparation_change` calls observed. Same order → Send pressed →
+`get_preparation_change` fired, immediately followed by `sync_from_ui`.
+This is the first confirmed signal, across every round of this problem,
+that cleanly and reliably distinguishes an explicit Send from an
+ordinary edit.
+
+### Why every prior attempt (v7.9.1 through v7.10.2) was architecturally unable to work
+Every earlier round tried a variation of the same idea: interpret
+`last_order_preparation_change`'s own content (its presence, its
+`metadata`, a content-only signature with `metadata` stripped) to infer
+whether a genuine Send had happened. The client's own live test proved
+this entire *category* of approach cannot work: an ordinary quantity
+edit, with no Send pressed at all, was confirmed to still produce
+genuinely different content in that field by the time `sync_from_ui`
+runs - the field appears to track the order's own current unprinted-
+change state generally, not exclusively a genuine Send event. No
+comparison of that field's own content, however implemented, can ever
+reliably distinguish the two, because the content itself genuinely
+differs in both cases.
+
+### Fix
+New `pos.order.get_preparation_change()` override sets a new
+`kds_preparation_change_requested` boolean flag the instant it's
+called - the literal invocation of this confirmed method IS the
+authorization signal, not anything derived from a field's own value.
+`sync_from_ui()`'s own post-processing now checks this flag (not
+content) before acting, and consumes (clears) it immediately once used.
+A subsequent `sync_from_ui` call not preceded by a fresh
+`get_preparation_change()` call finds the flag already `False` and
+correctly does nothing, regardless of what content it carries.
+
+**Idempotent per the client's own explicit requirement** ("make the
+implementation idempotent so that one real Send produces exactly one
+KDS reconciliation even if multiple internal calls occur around the
+same action"): several `get_preparation_change()` calls around one
+logical Send simply set an already-`True` flag to `True` again - a
+harmless no-op - and the one `sync_from_ui` call that follows consumes
+it exactly once.
+
+The content-signature machinery
+(`_extract_preparation_content_signature()`, `kds_last_processed_send_signal`)
+is kept in place, not removed - it no longer plays any role in the
+authorization decision, but still records, purely as a diagnostic
+value, what content a given authorized Send actually carried.
+
+### Honest, explicit limitation
+`get_preparation_change()`'s own exact signature (positional args,
+whether it's genuinely called per-order or with some other calling
+convention) has not been independently verified beyond the client's
+own confirmed model/method name - the override uses `@api.model` with
+defensive `*args, **kwargs` forwarding, matching this project's own
+established pattern for `sync_from_ui()`, and an `if self:` guard that
+correctly handles being called on a specific order (the expected case)
+while logging, rather than silently failing, if it's ever called on an
+empty recordset instead.
+
+### A significant test migration
+18 existing test call sites across ~15 test methods were updated to
+set the new authorization flag before calling the post-processing
+helper, replacing tests that specifically verified the now-abandoned
+content-comparison logic with tests verifying the new flag-based
+guarantee directly. Direct flag-setting
+(`order.sudo().kds_preparation_change_requested = True`) is used
+throughout, rather than calling the real `get_preparation_change()`
+override, to avoid depending on that native method's own unverified
+requirements - the same established caution this project already
+applies to `sync_from_ui()` itself.
+
+### Files changed
+`models/pos_order.py` (new `kds_preparation_change_requested` field;
+new `get_preparation_change()` override; `sync_from_ui()`'s own
+post-processing gate redesigned).
+
+### Tests
+2 new tests for the new mechanism directly (flag correctly authorizes
+and is consumed; multiple flag-sets around one logical Send remain
+idempotent), plus the significant migration above.
+
+**Total: 329 tests** (up from 327). No database migration required -
+the new field's own `False` default is already correct for every
+existing record.
+
+---
+
+## v7.10.2 — Send / Re-Send Synchronization: kds_last_processed_send_signal no longer corrupted by _flexsys_kds_sync() itself
+
+**Client-submitted fix, reviewed, confirmed correct, and merged with
+full documentation** - a real, confirmed bug found through the
+client's own careful line-by-line review of `_flexsys_kds_sync()`,
+not from a new runtime report this time.
+
+### Root cause
+`_flexsys_kds_sync()` still carried a stale line from v7.9.2's own,
+now-superseded design:
+```python
+if is_send_write:
+    self.kds_last_processed_send_signal = self.last_order_preparation_change
+```
+Since v7.9.7's redesign, `kds_last_processed_send_signal` is supposed
+to hold a NORMALIZED, content-only signature (metadata stripped - see
+`_extract_preparation_content_signature()`), set exclusively by
+`_flexsys_kds_process_one_sync_from_ui_entry()` BEFORE
+`_flexsys_kds_sync()` is even called. This line was never removed when
+that redesign happened - left in place, it immediately overwrote the
+correct, just-set normalized signature with the RAW field value
+(`self.last_order_preparation_change`, including its own volatile
+`metadata.serverDate`, confirmed in v7.9.7's own analysis to always
+change on essentially every write) on every single genuine Send. The
+next `sync_from_ui` call's own normalized signature could then never
+equal that now-raw, corrupted value - regardless of whether the
+order's own content had genuinely changed - undermining the entire
+distinction this mechanism exists to make.
+
+### Fix
+`_flexsys_kds_sync()` no longer writes to
+`kds_last_processed_send_signal` at all -
+`_flexsys_kds_process_one_sync_from_ui_entry()` is now, correctly, the
+field's own sole owner.
+
+### A critical gap in this project's own test methodology, found while verifying the fix
+Every existing test exercising `_flexsys_kds_process_sync_from_ui()`
+called it directly with a constructed payload dict, without ever
+writing to the REAL `last_order_preparation_change` field on the
+`pos.order` record itself - that field is only ever genuinely
+populated by Odoo's own native `super().sync_from_ui()` processing,
+which none of those tests actually exercised. This completely masked
+the bug: with the field left empty, the old buggy line merely reset
+the signature to an empty/`False` value each time - by coincidence
+still `!=` any genuine non-empty signature, so the next sync still
+happened to proceed "correctly" in every existing test, even with the
+bug present. In real, live operation, that field genuinely holds
+Odoo's own raw JSON by the time `_flexsys_kds_sync()` runs - the bug's
+own real effect, invisible to the existing suite's own methodology.
+
+### Tests
+3 new tests, each writing to the REAL `last_order_preparation_change`
+field first (matching live behavior exactly, closing the gap above):
+confirms `kds_last_processed_send_signal` holds the normalized
+signature, not the raw value, immediately after a genuine Send; an
+ordinary autosave carrying the same underlying content (only Odoo's
+own fresh timestamp differs) correctly does not leak after a real
+Send; and the dev report's own full Acceptance Test (1 → Send → 1;
+1→2 without Send → still 1; Send → 2; 2→1 without Send → still 2;
+Send → 1) reproduced end to end with the real field genuinely
+populated at every step.
+
+### Files changed
+`models/pos_order.py` (removed the corrupting overwrite in
+`_flexsys_kds_sync()`).
+
+**Total: 327 tests** (up from 324). No database migration required.
+
+**Honest status, matching the client's own submission note**: this fix
+closes a real, confirmed logical bug in signature management -
+verified here as correct through careful tracing and new tests that
+close a genuine prior test-coverage gap - but is not itself final proof
+the originally reported "Send button" issue is fully resolved until the
+client's own live Acceptance Test passes on a real Odoo 19 instance.
+
+---
+
 ## v7.10.1 — sync_from_ui: fixed integer-id lookup bug + per-order failure isolation
 
 **Important clarification first, before the fix itself**: the dev

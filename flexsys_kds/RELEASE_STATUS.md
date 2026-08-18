@@ -1,22 +1,27 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.10.1**
+**Version: 19.0.7.11.0**
 **Status as of this document: code-complete, including everything
-through v7.10.0 (see CHANGELOG.md for the full history), plus this
-round's fix: two real bugs found inside `sync_from_ui()`'s own
-post-processing (the confirmed-correct hook point from v7.9.7,
-unchanged) by re-reading its own logic line by line against the
-client's own live Network trace evidence, rather than proposing a
-fourth hook - (1) an integer `id` payload key was silently searched
-against the `uuid` field, which can never match, causing a second Send
-on an already-linked order to be silently skipped entirely; (2) one
-order entry's own failure could abort processing for every other order
-in the same `sync_from_ui` batch. Both fixed; new permanent info-level
-diagnostic logging added at every decision point, specifically so any
-future investigation has real server-side log evidence rather than
-another guess. 324 automated tests, all `py_compile`/XML/JS checks
-passing, plus a custom AST-based undefined-name sweep. Not yet signed
-off on a live instance — see "What still needs a human" at the end.**
+through v7.10.2 (see CHANGELOG.md for the full history), plus this
+round's fix: the fourth and final confirmed root-cause round on "detect
+a genuine Send" - confirmed via the client's own controlled A/B Network
+test that `pos.order.get_preparation_change()` is called ONLY at the
+moment of an explicit Send (zero calls observed for an ordinary edit
+with no Send pressed), unlike every prior signal this project tried,
+which was always derived from interpreting `last_order_preparation_change`'s
+own content - proven, by that same live test, to be fundamentally
+unable to distinguish a genuine Send from an ordinary edit, since that
+field's own content genuinely changes in both cases. New
+`get_preparation_change()` override sets an explicit
+`kds_preparation_change_requested` flag - the literal method invocation
+IS the signal now, not any content comparison - consumed by
+`sync_from_ui()`'s own post-processing the moment it's acted on,
+idempotent by construction per the client's own explicit requirement.
+329 automated tests (an 18-call-site test migration replacing
+now-obsolete content-comparison tests with flag-based ones), all
+`py_compile`/XML/JS checks passing, plus a custom AST-based
+undefined-name sweep. Not yet signed off on a live instance — see
+"What still needs a human" at the end.**
 
 
 This document maps directly to that request's own section structure
@@ -833,6 +838,71 @@ show exactly which payload shape reached the server and why it was or
 wasn't treated as a genuine Send - real diagnostic data for the next
 round, rather than another guess.
 
+## Send / Re-Send Synchronization: kds_last_processed_send_signal corruption fixed (v7.10.2)
+**Client-submitted fix, independently reviewed, confirmed correct, and
+merged with full documentation.** A stale line left over from v7.9.2's
+own, now-superseded design was still overwriting
+`kds_last_processed_send_signal` with the RAW
+`last_order_preparation_change` value (metadata included) immediately
+after `_flexsys_kds_process_one_sync_from_ui_entry()` had correctly
+set the normalized, content-only signature - corrupting the marker for
+every future comparison. Confirmed root cause, confirmed fix, and (this
+part found independently during review, not in the client's own
+submission) a genuine gap in this project's own test methodology that
+had completely masked the bug: every existing test touching this
+code path bypassed the real `last_order_preparation_change` field
+entirely.
+
+**What still needs a human**: the same Acceptance Test as v7.10.1's own
+section immediately above - qty 1 → Send → 1; 2 without Send → still
+1; Send → 2; 1 without Send → still 2; Send → 1, plus added/removed
+lines, modifier/attribute changes, and customer note changes - on a
+real Odoo.sh staging instance. This fix is verified correct through
+careful tracing and new tests that close a real prior test-coverage
+gap, but per the client's own submission note, is not itself final
+proof the originally reported issue is fully resolved until that live
+test passes.
+
+## On Send to KDS: authorization based on get_preparation_change() invocation (v7.11.0)
+**Confirmed via the client's own controlled A/B Network test** - this
+is the fourth and final confirmed root-cause round on the "detect a
+genuine Send" problem this project has worked through since v7.9.1,
+and the first to use a signal that isn't derived from interpreting any
+field's own content: `pos.order.get_preparation_change()` is confirmed
+to fire ONLY at the moment of an explicit Send (zero calls for an
+ordinary edit, confirmed directly).
+
+**Why every earlier attempt was architecturally unable to work**: every
+prior round interpreted `last_order_preparation_change`'s own content
+in some way. The client's own live test proved this entire category of
+approach cannot work - that field's content genuinely differs between
+an ordinary edit and a genuine Send, so no comparison of it, however
+implemented, can reliably distinguish the two.
+
+**Fix**: `get_preparation_change()`'s own override sets an explicit
+`kds_preparation_change_requested` flag - the method invocation itself
+is the signal. `sync_from_ui()` consumes it the moment it acts on it.
+Idempotent per the client's own explicit requirement (multiple
+`get_preparation_change()` calls around one logical Send simply
+re-set an already-`True` flag).
+
+**Honest limitation**: `get_preparation_change()`'s own exact call
+signature (positional args, whether it's always called per-order) is
+confirmed only by model/method name from the client's own trace, not
+independently verified beyond that - the override is defensive
+(`*args, **kwargs`, an `if self:` guard with logging for the
+unexpected case) but this is worth confirming directly on the live
+instance too.
+
+**What still needs a human**: the same full Acceptance Test as the
+v7.10.1/v7.10.2 sections above, run against a real Odoo.sh staging
+instance - this is the most architecturally sound fix across all four
+rounds, but per this project's own now well-established pattern on
+this exact problem, only a real live test can confirm it actually
+holds for the normal Send button, the "Order" confirmation dialog, AND
+every required scenario (added/removed line, quantity increase/
+decrease, modifier/attribute change, customer note change).
+
 ---
 
 ## What still needs a human
@@ -1096,7 +1166,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 324 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 329 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

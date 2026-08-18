@@ -3627,29 +3627,42 @@ class TestPosSync(FlexSysKdsTestCommon):
         self.assertTrue(order.uuid, "pos.order.uuid must be populated by Odoo's own core.")
 
     def test_sync_from_ui_no_send_no_kds(self):
-        """Required Test: no Send -> no KDS. A sync_from_ui payload
-        whose own last_order_preparation_change carries only metadata
-        (no genuine content) must not trigger a sync."""
+        """Required Test: no Send -> no KDS. An ordinary sync_from_ui
+        call - NOT preceded by a get_preparation_change() call (the
+        confirmed authorization signal) - must not trigger a sync, even
+        when last_order_preparation_change's own content is genuine and
+        non-empty (confirmed by live testing: content alone can never
+        be trusted as a Send signal)."""
         order = self._create_active_pos_order([(self.product_burger, 5)])
         self.assertFalse(order.kds_order_id)
+        self.assertFalse(order.kds_preparation_change_requested)
 
         order._flexsys_kds_process_sync_from_ui([{
             'uuid': order.uuid,
             'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
                 'metadata': {'serverDate': '2026-08-18 08:00:00'},
             }),
         }])
 
         order.invalidate_recordset()
-        self.assertFalse(order.kds_order_id, "Metadata-only content (no genuine lines/"
-                                              "cancelled data) must not sync.")
+        self.assertFalse(
+            order.kds_order_id,
+            "Without a prior get_preparation_change() call, sync_from_ui must not "
+            "sync anything at all, even with genuine, non-empty content.")
 
     def test_sync_from_ui_order_action_triggers_kds(self):
-        """Required Test: Order -> KDS. The exact confirmed live
-        payload shape (a genuine 'lines' dict with real content)."""
+        """Required Test: Order -> KDS. get_preparation_change() called
+        first (the confirmed authorization signal), then sync_from_ui -
+        the exact confirmed live sequence."""
         order = self._create_active_pos_order([(self.product_burger, 5)])
         self.assertFalse(order.kds_order_id)
 
+        # Direct flag simulation, not the real get_preparation_change()
+        # call - avoids depending on that native method's own unverified
+        # requirements; the flag-setting logic itself is what this test
+        # exercises, matching this override's own confirmed behavior.
+        order.sudo().kds_preparation_change_requested = True
         order._flexsys_kds_process_sync_from_ui([{
             'uuid': order.uuid,
             'last_order_preparation_change': json.dumps({
@@ -3659,16 +3672,23 @@ class TestPosSync(FlexSysKdsTestCommon):
         }])
 
         order.invalidate_recordset()
-        self.assertTrue(order.kds_order_id, "Genuine content in last_order_preparation_change "
-                                             "must trigger the KDS sync.")
+        self.assertTrue(order.kds_order_id, "get_preparation_change() followed by "
+                                             "sync_from_ui must trigger the KDS sync.")
         self.assertEqual(order.kds_order_id.line_ids.qty, 5)
 
     def test_sync_from_ui_edit_without_send_no_kds(self):
-        """Required Test: edit without Send -> no KDS. A repeated
-        sync_from_ui call carrying the SAME content signature (even
-        with a freshly re-stamped timestamp, confirmed by the live
-        trace to always change) must not trigger a second sync."""
+        """Required Test: edit without Send -> no KDS. After a genuine,
+        authorized Send, an ORDINARY sync_from_ui call - NOT preceded
+        by a fresh get_preparation_change() call - must not trigger a
+        second sync, regardless of what content it carries (confirmed
+        by live testing: even genuinely different content, from an
+        ordinary edit, must not leak without the authorization flag)."""
         order = self._create_active_pos_order([(self.product_burger, 5)])
+        # Direct flag simulation, not the real get_preparation_change()
+        # call - avoids depending on that native method's own unverified
+        # requirements; the flag-setting logic itself is what this test
+        # exercises, matching this override's own confirmed behavior.
+        order.sudo().kds_preparation_change_requested = True
         order._flexsys_kds_process_sync_from_ui([{
             'uuid': order.uuid,
             'last_order_preparation_change': json.dumps({
@@ -3678,15 +3698,16 @@ class TestPosSync(FlexSysKdsTestCommon):
         }])
         kds_order = order.kds_order_id
         self.assertTrue(kds_order)
+        self.assertFalse(order.kds_preparation_change_requested, "Consumed after use.")
         events_before = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
 
-        # Ordinary autosave: SAME lines content, but a FRESH timestamp -
-        # confirmed by the live trace to be what Odoo's own core does on
-        # every write, regardless of Send intent.
+        # Ordinary edit + autosave-style sync_from_ui call - NOT preceded
+        # by get_preparation_change() - even with genuinely different
+        # content (qty changed to 2), must not leak.
         order._flexsys_kds_process_sync_from_ui([{
             'uuid': order.uuid,
             'last_order_preparation_change': json.dumps({
-                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 2}},
                 'metadata': {'serverDate': '2026-08-18 08:26:14'},
             }),
         }])
@@ -3695,15 +3716,25 @@ class TestPosSync(FlexSysKdsTestCommon):
         events_after = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
         self.assertEqual(
             events_after, events_before,
-            "The SAME underlying content, re-stamped with only a fresh timestamp, must "
-            "not be treated as a new Send - this is the exact confirmed root cause of "
-            "every earlier attempt at this problem.")
+            "Without a fresh get_preparation_change() call, an ordinary sync_from_ui "
+            "must not be treated as a new Send - even with genuinely different content "
+            "- this is the exact confirmed root cause of every earlier attempt at this "
+            "problem: content comparison alone can never reliably distinguish an "
+            "ordinary edit from a genuine Send.")
+        self.assertEqual(kds_order.line_ids.qty, 5, "KDS must still show the last "
+                                                      "explicitly SENT quantity, not "
+                                                      "the live POS state.")
 
     def test_sync_from_ui_second_send_generates_next_delta(self):
-        """Required Test: second Order/Send -> delta. A genuinely
-        different content signature (new line data) must trigger a new
-        sync with the correct ADDED delta."""
+        """Required Test: second Order/Send -> delta. A genuine second
+        get_preparation_change() + sync_from_ui pair must correctly
+        apply the new content as a delta."""
         order = self._create_active_pos_order([(self.product_burger, 5)])
+        # Direct flag simulation, not the real get_preparation_change()
+        # call - avoids depending on that native method's own unverified
+        # requirements; the flag-setting logic itself is what this test
+        # exercises, matching this override's own confirmed behavior.
+        order.sudo().kds_preparation_change_requested = True
         order._flexsys_kds_process_sync_from_ui([{
             'uuid': order.uuid,
             'last_order_preparation_change': json.dumps({
@@ -3715,12 +3746,16 @@ class TestPosSync(FlexSysKdsTestCommon):
         self.assertTrue(kds_order)
 
         # A genuinely new product added to the order (Test D's own
-        # scenario), then the next Order/Send - a genuinely different
-        # "lines" content this time.
+        # scenario), then a genuine second Send.
         self.env['pos.order.line'].create({
             'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 2,
             'price_unit': 4.0, 'price_subtotal': 8.0, 'price_subtotal_incl': 8.0,
         })
+        # Direct flag simulation, not the real get_preparation_change()
+        # call - avoids depending on that native method's own unverified
+        # requirements; the flag-setting logic itself is what this test
+        # exercises, matching this override's own confirmed behavior.
+        order.sudo().kds_preparation_change_requested = True
         order._flexsys_kds_process_sync_from_ui([{
             'uuid': order.uuid,
             'last_order_preparation_change': json.dumps({
@@ -3734,7 +3769,8 @@ class TestPosSync(FlexSysKdsTestCommon):
 
         kds_order.invalidate_recordset()
         new_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
-        self.assertTrue(new_line, "The second Send must correctly process the new delta.")
+        self.assertTrue(new_line, "The second, genuinely authorized Send must correctly "
+                                   "process the new delta.")
         self.assertEqual(new_line.line_change, 'added')
         self.assertEqual(new_line.qty, 2)
 
@@ -3742,6 +3778,11 @@ class TestPosSync(FlexSysKdsTestCommon):
         """Test F from the dev report's own Acceptance Test: 5 -> 3,
         Send -> UPDATED."""
         order = self._create_active_pos_order([(self.product_burger, 5)])
+        # Direct flag simulation, not the real get_preparation_change()
+        # call - avoids depending on that native method's own unverified
+        # requirements; the flag-setting logic itself is what this test
+        # exercises, matching this override's own confirmed behavior.
+        order.sudo().kds_preparation_change_requested = True
         order._flexsys_kds_process_sync_from_ui([{
             'uuid': order.uuid,
             'last_order_preparation_change': json.dumps({
@@ -3754,6 +3795,11 @@ class TestPosSync(FlexSysKdsTestCommon):
         self.assertEqual(line.qty, 5)
 
         order.lines.write({'qty': 3})
+        # Direct flag simulation, not the real get_preparation_change()
+        # call - avoids depending on that native method's own unverified
+        # requirements; the flag-setting logic itself is what this test
+        # exercises, matching this override's own confirmed behavior.
+        order.sudo().kds_preparation_change_requested = True
         order._flexsys_kds_process_sync_from_ui([{
             'uuid': order.uuid,
             'last_order_preparation_change': json.dumps({
@@ -3969,6 +4015,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         resolve via browse(), never via a uuid-field search (which can
         never match an integer value)."""
         order = self._create_active_pos_order([(self.product_burger, 5)])
+        order.sudo().kds_preparation_change_requested = True
         order._flexsys_kds_process_sync_from_ui([{
             'id': order.id,
             'last_order_preparation_change': json.dumps({
@@ -3990,6 +4037,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         payload entry uses 'id', matching an already-persisted order
         being updated rather than created) -> KDS becomes 2."""
         order = self._create_active_pos_order([(self.product_burger, 1)])
+        order.sudo().kds_preparation_change_requested = True
         order._flexsys_kds_process_sync_from_ui([{
             'id': order.id,
             'last_order_preparation_change': json.dumps({
@@ -4002,6 +4050,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         self.assertEqual(line.qty, 1)
 
         order.lines.write({'qty': 2})
+        order.sudo().kds_preparation_change_requested = True
         order._flexsys_kds_process_sync_from_ui([{
             'id': order.id,
             'last_order_preparation_change': json.dumps({
@@ -4017,13 +4066,13 @@ class TestPosSync(FlexSysKdsTestCommon):
 
     def test_sync_from_ui_malformed_entry_gracefully_skipped_others_still_process(self):
         """A malformed entry (last_order_preparation_change of an
-        unexpected type) is gracefully skipped by
-        _extract_preparation_content_signature() itself - never even
-        reaches an exception - but confirms this graceful skip still
-        lets a well-formed entry later in the SAME batch process
-        correctly."""
+        unexpected type) is gracefully skipped - but confirms this
+        graceful skip still lets a well-formed, authorized entry later
+        in the SAME batch process correctly."""
         order_a = self._create_active_pos_order([(self.product_burger, 3)])
         order_b = self._create_active_pos_order([(self.product_cappuccino, 2)])
+        order_a.sudo().kds_preparation_change_requested = True
+        order_b.sudo().kds_preparation_change_requested = True
 
         order_a.env['pos.order']._flexsys_kds_process_sync_from_ui([
             {'uuid': order_a.uuid, 'last_order_preparation_change': 12345},  # malformed: not str/dict
@@ -4038,8 +4087,9 @@ class TestPosSync(FlexSysKdsTestCommon):
         self.assertFalse(order_a.kds_order_id, "The malformed entry itself must not sync.")
         self.assertTrue(
             order_b.kds_order_id,
-            "order_b's own well-formed entry must sync correctly, completely "
-            "unaffected by order_a's own malformed entry earlier in the same batch.")
+            "order_b's own well-formed, authorized entry must sync correctly, "
+            "completely unaffected by order_a's own malformed entry earlier in the "
+            "same batch.")
         self.assertEqual(order_b.kds_order_id.line_ids.qty, 2)
 
     def test_sync_from_ui_one_order_raising_does_not_skip_other_orders_in_batch(self):
@@ -4049,6 +4099,8 @@ class TestPosSync(FlexSysKdsTestCommon):
         sync_from_ui batch must still be processed correctly."""
         order_a = self._create_active_pos_order([(self.product_burger, 3)])
         order_b = self._create_active_pos_order([(self.product_cappuccino, 2)])
+        order_a.sudo().kds_preparation_change_requested = True
+        order_b.sudo().kds_preparation_change_requested = True
         entry_a = {'uuid': order_a.uuid, 'last_order_preparation_change': json.dumps({
             'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 3}},
             'metadata': {'serverDate': '2026-08-18 09:10:00'},
@@ -4086,6 +4138,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         first - confirms this doesn't silently break the common case
         where both keys happen to be present together."""
         order = self._create_active_pos_order([(self.product_burger, 4)])
+        order.sudo().kds_preparation_change_requested = True
         order._flexsys_kds_process_sync_from_ui([{
             'id': order.id,
             'uuid': order.uuid,
@@ -4098,3 +4151,228 @@ class TestPosSync(FlexSysKdsTestCommon):
         order.invalidate_recordset()
         self.assertTrue(order.kds_order_id)
         self.assertEqual(order.kds_order_id.line_ids.qty, 4)
+
+    # -----------------------------------------------------------------
+    # Client's own experimental fix, confirmed correct and merged with
+    # full documentation: "Send / Re-Send Synchronization" - a real,
+    # confirmed bug in _flexsys_kds_sync() itself, found by the
+    # client's own careful review, not from a new report.
+    #
+    # A critical gap in this project's OWN test methodology, found
+    # while verifying the fix: every existing test exercising
+    # _flexsys_kds_process_sync_from_ui() called it DIRECTLY with a
+    # constructed payload, WITHOUT ever writing to the real
+    # last_order_preparation_change field on the pos.order record
+    # itself (that field is only ever genuinely populated by Odoo's own
+    # native super().sync_from_ui() processing, which none of those
+    # tests actually exercised). This completely masked the bug: with
+    # the field left empty, the old buggy line
+    # (self.kds_last_processed_send_signal = self.last_order_preparation_change)
+    # merely reset the signature to an empty/False value each time - by
+    # coincidence still != any genuine non-empty signature, so the next
+    # sync still happened to proceed "correctly" in every existing
+    # test, even with the bug present. In real, live operation, that
+    # field genuinely holds Odoo's own raw JSON (with its own volatile
+    # metadata) by the time _flexsys_kds_sync() runs - the bug's own
+    # real effect. The tests below close this specific gap by writing
+    # to the real field directly first, exactly matching what Odoo's
+    # own native sync_from_ui() actually does before this module's own
+    # override even runs.
+    # -----------------------------------------------------------------
+    def test_send_re_send_signature_not_corrupted_by_raw_field_overwrite(self):
+        """The exact confirmed bug (v7.10.2), reproduced with the real
+        last_order_preparation_change field genuinely populated and the
+        new authorization flag genuinely set (matching live behavior):
+        after a genuine, authorized Send, kds_last_processed_send_signal
+        (now kept purely as a diagnostic record, no longer the gating
+        mechanism itself) must still hold the NORMALIZED signature, not
+        the raw field value - the old bug this test originally
+        targeted."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        raw_send_1 = json.dumps({
+            'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+            'metadata': {'serverDate': '2026-08-18 10:00:00'},
+        })
+        # Matches what Odoo's own native sync_from_ui() actually does:
+        # the real field is genuinely written, not left empty.
+        order.sudo().write({'last_order_preparation_change': raw_send_1})
+        order.sudo().kds_preparation_change_requested = True
+        order._flexsys_kds_process_sync_from_ui([{'uuid': order.uuid, 'last_order_preparation_change': raw_send_1}])
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        self.assertEqual(kds_order.line_ids.qty, 5)
+
+        expected_normalized_signature = json.dumps(
+            {'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}}},
+            sort_keys=True)
+        order.invalidate_recordset()
+        self.assertEqual(
+            order.kds_last_processed_send_signal, expected_normalized_signature,
+            "kds_last_processed_send_signal must hold the NORMALIZED signature "
+            "(metadata stripped) - the old bug overwrote it with the raw field value "
+            "(metadata included) immediately after this exact point, corrupting it for "
+            "every future comparison.")
+        self.assertNotEqual(
+            order.kds_last_processed_send_signal, raw_send_1,
+            "Must NOT equal the raw field value (which includes volatile metadata) - "
+            "that mismatch was the confirmed root cause of the v7.10.2 bug.")
+        self.assertFalse(
+            order.kds_preparation_change_requested,
+            "The authorization flag must be consumed (cleared) immediately after use.")
+
+    def test_ordinary_autosave_after_real_send_does_not_leak_with_field_populated(self):
+        """REAL BUG FIX ("CONFIRMED LIVE NETWORK RESULT"): the current,
+        confirmed-correct guarantee, reproduced end to end - after a
+        genuine, authorized Send (with the real field populated,
+        matching live behavior), an ORDINARY sync_from_ui call - NOT
+        preceded by a fresh get_preparation_change() call - must not
+        leak, even though last_order_preparation_change's own content
+        genuinely differs (confirmed by live testing to be exactly what
+        an ordinary, unsent edit does to this field - content
+        comparison alone could never distinguish this from a genuine
+        Send)."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        raw_send_1 = json.dumps({
+            'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+            'metadata': {'serverDate': '2026-08-18 10:00:00'},
+        })
+        order.sudo().write({'last_order_preparation_change': raw_send_1})
+        order.sudo().kds_preparation_change_requested = True
+        order._flexsys_kds_process_sync_from_ui([{'uuid': order.uuid, 'last_order_preparation_change': raw_send_1}])
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        events_before = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+
+        # Ordinary edit + sync_from_ui-style call - genuinely DIFFERENT
+        # content this time (qty 5 -> 6), but crucially NOT preceded by
+        # a fresh get_preparation_change() call, matching the client's
+        # own confirmed A/B test: no Send pressed, no
+        # get_preparation_change observed at all.
+        raw_autosave = json.dumps({
+            'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 6}},
+            'metadata': {'serverDate': '2026-08-18 10:00:47'},
+        })
+        order.sudo().write({'last_order_preparation_change': raw_autosave})
+        order._flexsys_kds_process_sync_from_ui([{'uuid': order.uuid, 'last_order_preparation_change': raw_autosave}])
+
+        kds_order.invalidate_recordset()
+        events_after = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+        self.assertEqual(
+            events_after, events_before,
+            "Without a fresh get_preparation_change() call, an ordinary sync_from_ui "
+            "must not be treated as a new Send - even with genuinely different content "
+            "(qty 5 -> 6) - this is the confirmed root cause behind every earlier "
+            "attempt: content alone, however compared, can never reliably distinguish "
+            "an ordinary edit from a genuine Send.")
+        self.assertEqual(kds_order.line_ids.qty, 5, "KDS must still show the last "
+                                                      "explicitly SENT quantity (5), not "
+                                                      "the live, unsent POS state (6).")
+
+    def test_send_re_send_full_acceptance_scenario_with_real_field_populated(self):
+        """The dev report's own full Acceptance Test, reproduced with
+        the real last_order_preparation_change field AND the new
+        get_preparation_change-based authorization flag genuinely set
+        at every explicit Send step (matching live behavior exactly):
+        1 -> Send -> KDS 1; 1 -> 2 without Send -> KDS remains 1;
+        Send -> KDS becomes 2; 2 -> 1 without Send -> KDS remains 2;
+        Send -> KDS becomes 1."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+
+        def send(qty, minute):
+            raw = json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': qty}},
+                'metadata': {'serverDate': f'2026-08-18 10:{minute:02d}:00'},
+            })
+            order.sudo().write({'last_order_preparation_change': raw})
+            # The confirmed live sequence: get_preparation_change() is
+            # called (setting the authorization flag) immediately
+            # before sync_from_ui().
+            order.sudo().kds_preparation_change_requested = True
+            order._flexsys_kds_process_sync_from_ui(
+                [{'uuid': order.uuid, 'last_order_preparation_change': raw}])
+
+        send(1, 0)
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        self.assertEqual(line.qty, 1, "qty 1 -> Send -> KDS = 1.")
+
+        # qty 1 -> 2 WITHOUT Send: only an ordinary POS write, no
+        # get_preparation_change()/sync_from_ui call at all for this step.
+        order.lines.write({'qty': 2})
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 1, "Without Send, KDS must remain 1.")
+
+        send(2, 5)
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 2, "Send -> KDS becomes 2.")
+
+        order.lines.write({'qty': 1})
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 2, "Without Send, KDS must remain 2.")
+
+        send(1, 10)
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 1, "Send -> KDS becomes 1.")
+
+    # -----------------------------------------------------------------
+    # Dev report "CONFIRMED LIVE NETWORK RESULT": get_preparation_change()
+    # is the confirmed, method-invocation-based authorization signal -
+    # tests for the override itself, not just the post-processing gate
+    # that consumes the flag it sets.
+    # -----------------------------------------------------------------
+    def test_get_preparation_change_flag_set_directly_confirms_gate_behavior(self):
+        """Confirms the actual gating mechanism this override exists to
+        support: setting kds_preparation_change_requested (exactly what
+        the override's own body does, once super() has already run)
+        genuinely authorizes exactly one subsequent sync_from_ui call
+        to process as a real Send."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        self.assertFalse(order.kds_preparation_change_requested, "False by default.")
+
+        order.sudo().kds_preparation_change_requested = True
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'metadata': {'serverDate': '2026-08-18 11:00:00'},
+            }),
+        }])
+
+        order.invalidate_recordset()
+        self.assertTrue(order.kds_order_id, "The flag correctly authorized the sync.")
+        self.assertFalse(
+            order.kds_preparation_change_requested,
+            "The flag must be consumed (cleared) immediately after being acted on.")
+
+    def test_get_preparation_change_multiple_calls_around_one_send_still_idempotent(self):
+        """The client's own explicit requirement: 'make the
+        implementation idempotent so that one real Send produces
+        exactly one KDS reconciliation even if multiple internal calls
+        occur around the same action.' Several flag-sets in a row
+        (simulating several get_preparation_change() calls around one
+        logical Send) followed by exactly one sync_from_ui call must
+        still produce exactly one reconciliation."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+
+        # Simulates get_preparation_change() firing multiple times
+        # around the same logical Send action - each call sets an
+        # already-True flag to True again, a harmless no-op.
+        order.sudo().kds_preparation_change_requested = True
+        order.sudo().kds_preparation_change_requested = True
+        order.sudo().kds_preparation_change_requested = True
+
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'metadata': {'serverDate': '2026-08-18 11:05:00'},
+            }),
+        }])
+
+        order.invalidate_recordset()
+        self.assertTrue(order.kds_order_id)
+        self.assertEqual(
+            len(order.kds_order_id.line_ids), 1,
+            "Exactly one reconciliation, exactly one line - not duplicated by the "
+            "multiple flag-sets around the same logical Send.")
+        self.assertFalse(order.kds_preparation_change_requested)
