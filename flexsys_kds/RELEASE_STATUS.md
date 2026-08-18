@@ -1,25 +1,29 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.11.2**
+**Version: 19.0.7.11.3**
 **Status as of this document: code-complete, including everything
-through v7.11.1 (see CHANGELOG.md for the full history), plus this
-round's fix: the client's own direct citation of Odoo 19's actual core
-source corrected a mistaken interpretation in the two immediately
-preceding rounds - `get_preparation_change(self)` is an ordinary
-instance method (`self.ensure_one()`, NOT `@api.model`), operating on a
-single concrete record via `self` directly. The live Network trace's
-own `args: [278696]` was the JSON-RPC wire-level representation of
-`call_kw`'s own dispatch mechanism, not evidence about the Python
-method's own decorator or signature - conflating the two was the root
-mistake. `get_preparation_change()`'s own override is restored to the
-exact native signature; the now-unnecessary args-resolver method from
-v7.11.1 is removed entirely, not left unused. 333 automated tests -
-including, for the first time in this exact "detect a genuine Send"
-investigation, tests that call the REAL native method directly, safe
-to do now that its exact signature and return shape are confirmed by
-direct source citation - all `py_compile`/XML/JS checks passing, plus
-a custom AST-based undefined-name sweep. Not yet signed off on a live
-instance — see "What still needs a human" at the end.**
+through v7.11.2 (see CHANGELOG.md for the full history), plus this
+round's fix: confirmed via the client's own live Network evidence that
+the incoming `sync_from_ui` payload itself carries
+`kds_preparation_change_requested: false` and
+`kds_last_processed_send_signal: false` - both fields defined directly
+on `pos.order` with no exclusion from whatever the POS frontend loads
+and tracks locally - overwriting the server-side `True`
+`get_preparation_change()` had just set, before this module's own
+post-processing ever consumed it. New
+`_flexsys_kds_sanitize_orders_payload()` strips both server-owned KDS
+control fields from the incoming payload *before* `super().sync_from_ui()`
+is ever called, guaranteeing the native method can never persist a
+stale, frontend-supplied value for either field - the POS client is
+never authoritative for internal KDS state again. A root-cause-level
+fix (excluding these fields from what the frontend loads in the first
+place) was investigated but deliberately not pursued this round, given
+conflicting evidence about whether that specific mechanism safely
+applies to `pos.order` at all - see this document's own dedicated
+section below for the full reasoning. 339 automated tests, all
+`py_compile`/XML/JS checks passing, plus a custom AST-based
+undefined-name sweep. Not yet signed off on a live instance — see
+"What still needs a human" at the end.**
 
 
 This document maps directly to that request's own section structure
@@ -964,6 +968,40 @@ project's own now well-established pattern on this specific problem,
 only a real live test on the actual Odoo 19 instance can confirm it
 holds end to end.
 
+## sync_from_ui: server-owned KDS control fields stripped from incoming POS payload (v7.11.3)
+**Confirmed via the client's own live Network evidence**: the incoming
+`sync_from_ui` payload itself carries `kds_preparation_change_requested:
+false` and `kds_last_processed_send_signal: false` - internal,
+server-owned fields the POS frontend evidently loads and tracks
+locally, re-sending its own stale value on every save. The response
+confirmed both had reverted to `false` server-side, overwriting the
+`True` `get_preparation_change()` had just set.
+
+**Fix**: `_flexsys_kds_sanitize_orders_payload()` strips both fields
+from the incoming payload *before* `super().sync_from_ui()` is called
+at all - the native method can never persist a stale frontend value for
+either field, regardless of its own internal write logic. Returns
+shallow copies; the caller's own original payload is never mutated.
+
+**Deliberately not pursued this round**: a root-cause-level fix
+excluding these fields from whatever the POS frontend loads in the
+first place (`_load_pos_data_fields()`-style). Investigation found
+conflicting evidence about whether this specific mechanism safely
+applies to `pos.order` itself - one source confirms it for
+`pos.order.line`, another explicitly warns it crashes the frontend
+entirely for `pos.order`. Given the severe risk of breaking POS session
+loading on an unconfirmed method, and given the payload-sanitization
+fix above is already complete and guaranteed-correct on its own, this
+round stops at the safe, fully-controlled fix.
+
+**What still needs a human**: the same full Acceptance Test as every
+section above - this round specifically targets the confirmed
+flag-overwrite mechanism directly, so re-running the client's own exact
+reproduction (`get_preparation_change()` → `sync_from_ui` →
+confirm `kds_preparation_change_requested` stays `true` through to the
+point FlexSys itself consumes it) is the most direct way to confirm
+this specific fix on the live instance.
+
 ---
 
 ## What still needs a human
@@ -1227,7 +1265,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 333 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 339 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

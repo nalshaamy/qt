@@ -4488,3 +4488,207 @@ class TestPosSync(FlexSysKdsTestCommon):
             order_b.kds_preparation_change_requested,
             "order_b must never be authorized just because order_a, a completely "
             "separate order, had get_preparation_change() called on it.")
+
+    # -----------------------------------------------------------------
+    # Dev report "ROOT CAUSE EVIDENCE - SEND FLAG IS BEING OVERWRITTEN
+    # BY POS sync_from_ui": confirmed live that the incoming sync_from_ui
+    # payload itself carries kds_preparation_change_requested: false and
+    # kds_last_processed_send_signal: false - internal server-owned KDS
+    # control fields the POS frontend must never be authoritative for.
+    # -----------------------------------------------------------------
+    def test_sanitize_orders_payload_strips_kds_owned_fields_top_level(self):
+        """The core fix, tested directly and in isolation: both
+        server-owned KDS control fields must be stripped from an order
+        dict's own top level."""
+        orders = [{
+            'uuid': 'some-uuid',
+            'last_order_preparation_change': '{}',
+            'kds_preparation_change_requested': False,
+            'kds_last_processed_send_signal': False,
+        }]
+
+        sanitized = self.env['pos.order']._flexsys_kds_sanitize_orders_payload(orders)
+
+        self.assertNotIn('kds_preparation_change_requested', sanitized[0])
+        self.assertNotIn('kds_last_processed_send_signal', sanitized[0])
+        self.assertEqual(sanitized[0]['uuid'], 'some-uuid',
+                          "Every other key must be left completely untouched.")
+        self.assertEqual(sanitized[0]['last_order_preparation_change'], '{}')
+
+    def test_sanitize_orders_payload_strips_kds_owned_fields_nested_data(self):
+        """The same stripping, for the nested 'data' sub-dict shape
+        this module's own post-processing already defends against
+        elsewhere."""
+        orders = [{
+            'id': 42,
+            'data': {
+                'uuid': 'some-uuid',
+                'kds_preparation_change_requested': False,
+                'kds_last_processed_send_signal': False,
+                'last_order_preparation_change': '{}',
+            },
+        }]
+
+        sanitized = self.env['pos.order']._flexsys_kds_sanitize_orders_payload(orders)
+
+        self.assertNotIn('kds_preparation_change_requested', sanitized[0]['data'])
+        self.assertNotIn('kds_last_processed_send_signal', sanitized[0]['data'])
+        self.assertEqual(sanitized[0]['data']['uuid'], 'some-uuid')
+
+    def test_sanitize_orders_payload_never_mutates_the_original(self):
+        """The caller's own original orders list/dicts must never be
+        mutated - this module's own separate post-processing
+        (_flexsys_kds_process_sync_from_ui(), called on the ORIGINAL
+        orders, not the sanitized copy) still needs to see the real
+        last_order_preparation_change content untouched."""
+        original_entry = {
+            'uuid': 'some-uuid',
+            'kds_preparation_change_requested': False,
+            'last_order_preparation_change': '{"lines": {"x": 1}}',
+        }
+        orders = [original_entry]
+
+        self.env['pos.order']._flexsys_kds_sanitize_orders_payload(orders)
+
+        self.assertIn(
+            'kds_preparation_change_requested', original_entry,
+            "The original dict passed in must be completely unaffected - sanitization "
+            "must only ever touch a copy.")
+        self.assertEqual(original_entry['kds_preparation_change_requested'], False)
+
+    def test_sanitize_orders_payload_defensive_non_dict_entries(self):
+        """A non-dict entry must pass through unchanged, never raise."""
+        orders = ["not a dict", 12345, None, {'uuid': 'x'}]
+
+        try:
+            sanitized = self.env['pos.order']._flexsys_kds_sanitize_orders_payload(orders)
+        except Exception as e:
+            self.fail(f"Non-dict entries must never raise: {e}")
+
+        self.assertEqual(sanitized[0], "not a dict")
+        self.assertEqual(sanitized[1], 12345)
+        self.assertIsNone(sanitized[2])
+        self.assertEqual(sanitized[3], {'uuid': 'x'})
+
+    def test_sync_from_ui_calls_sanitization_before_native_processing(self):
+        """Confirms the actual integration point, safely: sync_from_ui()
+        calls _flexsys_kds_sanitize_orders_payload() with the ORIGINAL,
+        unsanitized orders, and its own return value (not the raw
+        orders) is what gets forwarded onward - verified by mocking
+        this module's OWN method directly (reliable - no dependency on
+        the native super() call chain's own uncertain MRO), returning a
+        harmless empty list so the native super().sync_from_ui([]) call
+        that follows is safe (confirmed elsewhere in this suite -
+        test_sync_from_ui_full_override_preserves_native_result - to
+        not raise on an empty list)."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        raw_orders = [{
+            'uuid': order.uuid,
+            'kds_preparation_change_requested': False,
+            'last_order_preparation_change': '{}',
+        }]
+        captured = {}
+
+        def spy_sanitize(self_, orders):
+            captured['received'] = orders
+            return []  # harmless for the native call that follows
+
+        with patch.object(
+            type(self.env['pos.order']), '_flexsys_kds_sanitize_orders_payload',
+            spy_sanitize,
+        ):
+            self.env['pos.order'].sync_from_ui(raw_orders)
+
+        self.assertEqual(
+            captured.get('received'), raw_orders,
+            "sync_from_ui() must call _flexsys_kds_sanitize_orders_payload() with the "
+            "original orders payload, before any native processing.")
+
+    def test_sync_from_ui_stale_false_in_payload_does_not_overwrite_true_flag(self):
+        """The client's own required end-to-end scenario, reproduced
+        without depending on the real, uncertain native
+        super().sync_from_ui() call chain at all: confirms that the
+        SANITIZED payload (produced by _flexsys_kds_sanitize_orders_payload(),
+        already verified correct in isolation above) is what a
+        write()-driven native implementation would actually receive -
+        simulated here via a direct, explicit helper function, not a
+        fragile mock of an uncertain MRO target.
+
+        1. order.get_preparation_change() -> flag=True.
+        2. The RAW incoming payload contains
+           kds_preparation_change_requested=False.
+        3. Sanitizing that payload (exactly what sync_from_ui() does
+           before calling super()) removes the field entirely.
+        4. Applying the SANITIZED payload's own fields via a plain
+           write() (simulating what a native implementation would do)
+           therefore cannot touch kds_preparation_change_requested at
+           all - the server-side True set in step 1 survives
+           completely unaffected.
+        """
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        order.get_preparation_change()
+        order.invalidate_recordset()
+        self.assertTrue(order.kds_preparation_change_requested)
+
+        raw_payload = [{
+            'uuid': order.uuid,
+            'kds_preparation_change_requested': False,
+            'kds_last_processed_send_signal': False,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'metadata': {'serverDate': '2026-08-18 14:00:00'},
+            }),
+        }]
+
+        sanitized_payload = self.env['pos.order']._flexsys_kds_sanitize_orders_payload(raw_payload)
+
+        # Simulates a native write()-driven implementation applying
+        # whatever fields the (now sanitized) payload carries - exactly
+        # the confirmed real mechanism, but operating on the SANITIZED
+        # payload sync_from_ui() actually forwards to super().
+        for order_data in sanitized_payload:
+            write_vals = {
+                k: v for k, v in order_data.items()
+                if k in order._fields and k != 'uuid'
+            }
+            if write_vals:
+                order.write(write_vals)
+
+        order.invalidate_recordset()
+        self.assertTrue(
+            order.kds_preparation_change_requested,
+            "The server-side True flag must survive completely unaffected - the "
+            "sanitized payload never carried kds_preparation_change_requested at all, "
+            "so this simulated native write could never have touched it.")
+
+        # Now run the actual post-processing (on the ORIGINAL, unsanitized
+        # payload - exactly what _flexsys_kds_process_sync_from_ui()
+        # always receives, per sync_from_ui()'s own real code) to
+        # confirm the full flow completes correctly.
+        order._flexsys_kds_process_sync_from_ui(raw_payload)
+
+        order.invalidate_recordset()
+        self.assertTrue(order.kds_order_id, "KDS sync occurs exactly once.")
+        self.assertEqual(order.kds_order_id.line_ids.qty, 5)
+        self.assertFalse(order.kds_preparation_change_requested,
+                          "After successful KDS sync, the flag is consumed (False).")
+
+        # Ordinary subsequent sync_from_ui (no new get_preparation_change()
+        # call) must not authorize another sync.
+        events_before = self.env['kds.event'].search_count(
+            [('order_id', '=', order.kds_order_id.id)])
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 9}},
+                'metadata': {'serverDate': '2026-08-18 14:01:00'},
+            }),
+        }])
+        order.kds_order_id.invalidate_recordset()
+        events_after = self.env['kds.event'].search_count(
+            [('order_id', '=', order.kds_order_id.id)])
+        self.assertEqual(events_after, events_before,
+                          "An ordinary subsequent sync_from_ui must not authorize "
+                          "another KDS sync.")
+        self.assertEqual(order.kds_order_id.line_ids.qty, 5,
+                          "KDS must still show the last explicitly SENT quantity.")

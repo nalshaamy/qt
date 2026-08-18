@@ -8,6 +8,88 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.11.3 — sync_from_ui: strip server-owned KDS control fields from incoming POS payload before native processing
+
+**Confirmed via the client's own live Network evidence**: after a
+genuine `get_preparation_change()` call, the immediately-following
+`sync_from_ui` call's own incoming payload itself carried
+`kds_preparation_change_requested: false` and
+`kds_last_processed_send_signal: false` - and the response afterward
+confirmed both fields had reverted to `false` server-side, even though
+`get_preparation_change()` had just set the first one to `true`.
+
+### Root cause
+Both fields are defined directly on `pos.order` with no exclusion from
+whatever mechanism Odoo's own POS frontend uses to decide which fields
+to track locally and write back on save - so the frontend evidently
+loads its own stale, locally-cached value of these two fields and
+re-sends it on every `sync_from_ui` call. `super().sync_from_ui()`'s
+own native processing then writes whatever fields the incoming payload
+carries - overwriting the server-side `True` this module's own
+`get_preparation_change()` override had just set, *before*
+`sync_from_ui()`'s own post-processing (which reads the field from the
+database) ever gets a chance to consume it.
+
+### Architectural principle
+These two fields are internal, server-owned KDS control state - the
+POS frontend must never be authoritative for them, and native
+`sync_from_ui()` processing must never even see them in the incoming
+payload, independent of however its own internal write logic works.
+
+### Fix
+New `_flexsys_kds_sanitize_orders_payload()` strips both fields from
+every order dict's own top level and from any nested `data` sub-dict,
+called at the very start of `sync_from_ui()`'s own override - *before*
+`super().sync_from_ui()` is ever invoked, guaranteeing the native
+method can never persist a stale, frontend-supplied value for either
+field. Returns a new list of shallow-copied dicts; the caller's own
+original `orders` argument is never mutated, so this module's own
+separate post-processing (`_flexsys_kds_process_sync_from_ui()`,
+called on the *original*, unsanitized `orders`) still sees the real
+`last_order_preparation_change` content untouched - only the two
+KDS-owned keys are ever removed, nothing else.
+
+### Considered and deliberately not pursued this round
+A root-cause-level fix - excluding both fields from whatever mechanism
+decides which fields the POS frontend loads in the first place (a
+`_load_pos_data_fields()`-style override, a known Odoo 17+ convention
+for *some* POS models) - was investigated but found to carry
+conflicting evidence about whether this specific mechanism applies to
+`pos.order` itself (one source confirms it works for `pos.order.line`;
+another explicitly warns it "is not correct for POS orders" and
+crashes the frontend entirely). Given the severe risk of breaking POS
+session loading outright on an unconfirmed method, and given the
+payload-sanitization fix above is already a complete, guaranteed-
+correct solution to the confirmed problem on its own (independent of
+whether the frontend keeps sending these fields), this round does not
+add that second, riskier layer. Worth revisiting with direct live
+confirmation.
+
+### Files changed
+`models/pos_order.py` (`_flexsys_kds_sanitize_orders_payload()`;
+`sync_from_ui()`'s own override now sanitizes before calling `super()`).
+
+### Tests
+6 new tests: sanitization correctly strips both fields from an order
+dict's own top level and from a nested `data` sub-dict; sanitization
+never mutates the caller's own original dicts/list; non-dict entries
+pass through unchanged without raising; confirms `sync_from_ui()`
+actually calls the sanitization step with the original payload before
+any native processing (verified by mocking this module's own method
+directly - reliable, unlike mocking the native `super()` call chain's
+own uncertain MRO); and the client's own required end-to-end scenario,
+reproduced without depending on the real, unverified native
+`super().sync_from_ui()` at all - applying the *sanitized* payload's
+own fields via a plain `write()` (simulating the confirmed real native
+mechanism) proves `kds_preparation_change_requested` cannot be touched,
+followed by the actual post-processing confirming the full flow (sync
+occurs exactly once, flag consumed, later ordinary sync authorizes
+nothing).
+
+**Total: 339 tests** (up from 333). No database migration required.
+
+---
+
 ## v7.11.2 — get_preparation_change: restored the native instance-method contract (no @api.model, no arg resolver)
 
 **Client's own direct citation of Odoo 19's actual core source

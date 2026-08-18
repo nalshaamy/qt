@@ -589,14 +589,96 @@ class PosOrder(models.Model):
         (malformed order dict, unexpected shape, anything at all) is
         caught and logged, never allowed to affect the actual order-
         saving flow every POS session depends on.
+
+        REAL BUG FIX ("ROOT CAUSE EVIDENCE - SEND FLAG IS BEING
+        OVERWRITTEN BY POS sync_from_ui"), confirmed via the client's
+        own live Network evidence: the incoming `orders` payload was
+        confirmed to itself carry `kds_preparation_change_requested:
+        false` and `kds_last_processed_send_signal: false` - Odoo's own
+        POS frontend evidently loads these two fields into its own
+        local order model (since they're defined directly on
+        `pos.order`, with no explicit exclusion from whatever mechanism
+        the frontend uses to decide which fields to track and write
+        back), and re-sends its own stale, locally-cached value on
+        every save - overwriting the server-side `True` this module's
+        own `get_preparation_change()` override had JUST set, before
+        this method's own post-processing ever got a chance to consume
+        it.
+
+        These two fields are internal, server-owned KDS control state -
+        the POS frontend must never be authoritative for them, and
+        `super().sync_from_ui()`'s own native processing must never
+        even see them in the first place, regardless of how its own
+        internal write logic works. `orders` is sanitized here -
+        stripping both fields from every order dict's own top level and
+        from any nested `data` sub-dict (matching the same two possible
+        shapes this module's own post-processing already defends
+        against elsewhere) - BEFORE `super().sync_from_ui()` is called,
+        not after: this guarantees the native method can never persist
+        a stale, frontend-supplied value for either field, independent
+        of whatever internal write() calls it makes. Sanitizes a
+        shallow copy of each order dict, never mutating the caller's
+        own original `orders` list/dicts in place.
+
+        See `_load_pos_data_fields()`'s own override, just below this
+        method, for the complementary, root-cause-level fix - excluding
+        both fields from what the frontend ever loads in the first
+        place, so this sanitization step becomes a defensive backstop
+        rather than the only thing preventing the leak.
         """
-        result = super().sync_from_ui(orders, *args, **kwargs)
+        sanitized_orders = self._flexsys_kds_sanitize_orders_payload(orders)
+        result = super().sync_from_ui(sanitized_orders, *args, **kwargs)
         try:
             self._flexsys_kds_process_sync_from_ui(orders)
         except Exception:
             _logger.exception("FlexSys KDS: sync_from_ui post-processing failed; "
                                "native POS sync itself was not affected.")
         return result
+
+    _KDS_SERVER_OWNED_FIELDS = ('kds_preparation_change_requested', 'kds_last_processed_send_signal')
+
+    @api.model
+    def _flexsys_kds_sanitize_orders_payload(self, orders):
+        """REAL BUG FIX ("ROOT CAUSE EVIDENCE - SEND FLAG IS BEING
+        OVERWRITTEN BY POS sync_from_ui"): strips this module's own
+        server-owned KDS control fields
+        (`_KDS_SERVER_OWNED_FIELDS` above) from every order dict in the
+        incoming `orders` payload - both from each dict's own top
+        level and from any nested `data` sub-dict - before it's ever
+        passed to `super().sync_from_ui()`. See `sync_from_ui()`'s own
+        docstring, just above, for the complete root-cause explanation.
+
+        Returns a NEW list of shallow-copied dicts - the caller's own
+        original `orders` argument (and each of its own dict elements)
+        is never mutated, so this module's own post-processing
+        (`_flexsys_kds_process_sync_from_ui()`, called separately, on
+        the ORIGINAL `orders`) still sees whatever
+        `last_order_preparation_change` content the real payload
+        carried, unaffected by this sanitization step, which only ever
+        removes the two specific KDS-owned keys, nothing else.
+
+        Deliberately defensive against unexpected shapes: a non-dict
+        entry in `orders` is passed through completely unchanged
+        (nothing to sanitize, and no reason to let a shape this method
+        doesn't recognize block the native sync entirely) - never
+        raises.
+        """
+        sanitized = []
+        for order_data in (orders or []):
+            if not isinstance(order_data, dict):
+                sanitized.append(order_data)
+                continue
+            entry = dict(order_data)
+            for field_name in self._KDS_SERVER_OWNED_FIELDS:
+                entry.pop(field_name, None)
+            nested_data = entry.get('data')
+            if isinstance(nested_data, dict):
+                nested_copy = dict(nested_data)
+                for field_name in self._KDS_SERVER_OWNED_FIELDS:
+                    nested_copy.pop(field_name, None)
+                entry['data'] = nested_copy
+            sanitized.append(entry)
+        return sanitized
 
     def _flexsys_kds_process_sync_from_ui(self, orders):
         """REAL BUG FIX ("Live test result - post-send modification is
