@@ -8,6 +8,83 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.9.3 — On Send to KDS: abandoned backend-only signal inference, added an explicit frontend signal instead
+
+**Confirmed still reproducing live** on v7.9.2, with a real ticket
+(`2629-3-000019`): a product added to an already-committed order,
+without pressing Send again, still appeared in KDS immediately as
+ADDED. This is the third confirmed failure of a purely backend-side
+approach that tried to infer "was this a genuine Send" from
+`last_order_preparation_change`'s own content or change in value.
+
+### Why the backend-only approach was abandoned
+Two prior attempts (v7.9.1's non-empty-`metadata` check, v7.9.2's
+value-changed-since-last-processed check) were each individually
+reasoned from Odoo 19's own core source and each still failed in live
+testing. Continuing to guess at exactly how Odoo's own frontend
+populates this specific field on every possible kind of save - a
+detail this delivery process cannot directly observe or test - stopped
+being a defensible strategy after the second failure. The dev report's
+own instruction ("do not only inspect last_order_preparation_change /
+send signal deduplication... identify the actual bypass path") was
+taken as license to change strategy entirely rather than add a third
+condition to the same mechanism.
+
+### Fix: an explicit signal this module controls directly
+New `flexsys_kds_register_send()` method (`pos_order.py`) - a public RPC
+entry point that immediately triggers the authoritative sync
+(`_flexsys_kds_sync(is_send_write=True)`) the moment it's called. New
+frontend patch (`static/src/js/flexsys_kds_pos_send_signal.js`,
+confirmed added to the correct `point_of_sale._assets_pos` bundle -
+distinct from this module's own `web.assets_backend` KDS-screen
+bundle) patches `PosStore.prototype.sendOrderInPreparation` - confirmed
+directly from Odoo 19's own core frontend source
+(`addons/point_of_sale/static/src/app/services/pos_store.js`) to be the
+exact method the native "Send" action calls - to call this new RPC
+method immediately after Odoo's own native Send logic completes. The
+mere fact that this method was called IS the signal; no further
+interpretation of any Odoo-internal field is needed.
+
+**Deliberately conservative design**, given the real risk of patching
+Odoo's own core POS frontend: the patch never replaces or modifies
+native Send behavior - `super.sendOrderInPreparation()` is always
+called first and its result always returned unchanged; the added RPC
+call is wrapped in its own try/catch entirely separate from the native
+call, so a failure here (network issue, unexpected id shape, anything)
+cannot affect the cashier's own native Send/print flow - the only
+consequence is falling back to the existing backend-side detection for
+that specific Send.
+
+**Honest, explicit limitation**: this patches the Preparation-Display
+"Send" action specifically (Scenario 1), confirmed from Odoo's own
+source. The native "New Order" action's own equivalent frontend method
+name has NOT been confirmed in the same way and is not patched here -
+Scenario 2 (Preparation Display disabled) continues to rely on the
+existing backend-side `kds_last_processed_send_signal` fallback, with
+the same live-verification caveat already documented for it.
+
+### Tests
+3 new tests reproducing the exact confirmed runtime scenario at the
+model level (an already-committed order, a new product added via
+ordinary `create()` with no explicit signal - confirmed invisible -
+then the explicit signal - confirmed the pending change becomes
+visible), confirming the signal is a harmless no-op under `'payment'`
+mode, and confirming the refund-order exclusion (BUG-06) still applies
+even through this new path. The frontend patch itself cannot be tested
+by this delivery process without a live Odoo 19 browser session -
+stated plainly, not glossed over.
+
+**Total: 294 tests** (up from 291). No database migration required -
+no new fields added this round.
+
+**⚠️ This is the highest-risk change in this module's entire delivery
+history** - it patches Odoo's own core POS register frontend, something
+no earlier round of this project has done. Requires careful, deliberate
+live verification before rollout - see RELEASE_STATUS.md's own
+dedicated section for exactly what to check and in what order.
+
+---
+
 ## v7.9.2 — On Send to KDS / Subsequent Changes Bypass Send Gate
 
 **Confirmed live**: the initial Send-gate fix (v7.9.1) worked correctly

@@ -1,6 +1,6 @@
 {
     'name': 'FlexSys KDS',
-    'version': '19.0.7.9.2',
+    'version': '19.0.7.9.3',
     'category': 'Point of Sale',
     'summary': 'Multi-station Kitchen Display System for Odoo POS',
     'description': """
@@ -67,6 +67,21 @@ Technical module name: flexsys_kds
             'flexsys_kds/static/src/js/kds_order_card.js',
             'flexsys_kds/static/src/js/kds_app.js',
             'flexsys_kds/static/src/xml/kds_templates.xml',
+        ],
+        # REAL BUG FIX ("On Send to KDS / Subsequent Changes Bypass Send
+        # Gate"), confirmed still reproducing after two backend-only
+        # attempts - see flexsys_kds_pos_send_signal.js's own top-of-file
+        # comment, and pos_order.py::flexsys_kds_register_send()'s own
+        # docstring, for the complete explanation. This is the actual
+        # POS register frontend's own bundle (confirmed from Odoo 19's
+        # own documentation/community sources to be
+        # 'point_of_sale._assets_pos', not 'point_of_sale.assets' - a
+        # naming change from earlier Odoo versions) - distinct from
+        # 'web.assets_backend' above, which is this module's own KDS
+        # SCREEN, a completely separate application from the POS
+        # register itself.
+        'point_of_sale._assets_pos': [
+            'flexsys_kds/static/src/js/flexsys_kds_pos_send_signal.js',
         ],
     },
     'installable': True,

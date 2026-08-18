@@ -241,6 +241,54 @@ class PosOrder(models.Model):
         raw = vals.get('last_order_preparation_change')
         return raw != self.kds_last_processed_send_signal
 
+    def flexsys_kds_register_send(self):
+        """REAL BUG FIX ("On Send to KDS / Subsequent Changes Bypass Send
+        Gate"), confirmed STILL reproducing live even after two rounds of
+        purely backend-side attempts to infer a genuine Send from
+        last_order_preparation_change's own content
+        (_is_genuine_send_signal's non-empty-metadata check, then
+        kds_last_processed_send_signal's own value-changed check) - a
+        real product was still added and appeared in KDS as ADDED with
+        neither Send nor New pressed on an already-committed ticket.
+
+        Both earlier attempts shared one root assumption: that
+        last_order_preparation_change's own value, or its own change in
+        value, reliably distinguishes a genuine Send from an ordinary
+        save. Confirmed directly from Odoo 19's own core frontend source
+        that order.updateLastOrderChange() - the call that writes this
+        field - is only invoked from within sendOrderInPreparation()
+        itself, meaning the field IS Send-specific in origin - but
+        nothing in that source confirms Odoo's own frontend order model
+        doesn't ALSO re-serialize that same field's own current value as
+        part of its own routine, full-order save payload on every
+        subsequent write, independent of whether a genuine Send actually
+        triggered THIS SPECIFIC write. Continuing to guess at this
+        field's own backend-visible behavior, a third time, is no longer
+        a defensible strategy.
+
+        This method is therefore the deliberately different approach:
+        an explicit, unambiguous signal this module controls directly,
+        set by its own frontend patch
+        (static/src/js/flexsys_kds_pos_send_signal.js) immediately after
+        Odoo's own native sendOrderInPreparation() completes - not
+        inferred from interpreting any Odoo-internal field's own content
+        or change-in-value at all. The mere fact that this method was
+        called IS the signal; no further interpretation is needed here.
+
+        Public RPC entry point (called via the ORM from the frontend
+        patch) - deliberately no bypass_check/permission gate beyond
+        Odoo's own standard write-access check on pos.order (any POS
+        user actively working an order already has that), matching the
+        same "the cashier's own explicit action is the authorization"
+        principle this entire feature exists to enforce; sudo() is used
+        internally only so the automated KDS sync itself isn't
+        separately gated by a station assignment that has nothing to do
+        with the person ringing up the sale (same reasoning as every
+        other sudo() call in this module).
+        """
+        for order in self.sudo():
+            order._flexsys_kds_sync(is_send_write=True)
+
 
     def _flexsys_kds_cancel(self):
         """AUDIT FIX / NEW REQUIREMENT ("POS Cancellation Propagation",

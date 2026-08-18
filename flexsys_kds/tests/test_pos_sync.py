@@ -3218,3 +3218,84 @@ class TestPosSync(FlexSysKdsTestCommon):
         self.assertFalse(
             kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino),
             "The add-then-remove-before-Send must never have appeared in KDS at all.")
+
+    # -----------------------------------------------------------------
+    # Dev report "RUNTIME TEST RESULT - FIX STILL FAILS" (19.0.7.9.2):
+    # confirmed the backend-only, last_order_preparation_change-
+    # interpreting approach still leaked a subsequent edit through after
+    # the first Send. New flexsys_kds_register_send() - an explicit RPC
+    # entry point called by this module's own frontend patch
+    # immediately after Odoo's own native sendOrderInPreparation()
+    # completes, rather than inferring intent from any Odoo-internal
+    # field's own content.
+    # -----------------------------------------------------------------
+    def test_explicit_send_signal_reconciles_pending_changes(self):
+        """The exact confirmed runtime scenario: an existing, already-
+        committed ticket (5 x HOT COFFEE DAY), a new product (2 x ICE
+        TEA) added without pressing Send, then the explicit signal
+        arrives (simulating the frontend patch firing after a genuine
+        Send) - only THEN must the new line become visible."""
+        order = self._make_send_write_order()
+        order.lines.write({'qty': 5})
+        order.flexsys_kds_register_send()
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        line = kds_order.line_ids
+        self.assertEqual(line.qty, 5)
+
+        # Add a new product WITHOUT ever calling flexsys_kds_register_send
+        # again - simulating a routine POS save (create()/write() hooks
+        # only, no explicit Send signal).
+        self.env['pos.order.line'].create({
+            'order_id': order.id, 'product_id': self.product_cappuccino.id, 'qty': 2,
+            'price_unit': 4.0, 'price_subtotal': 8.0, 'price_subtotal_incl': 8.0,
+        })
+
+        kds_order.invalidate_recordset()
+        self.assertFalse(
+            kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino),
+            "Without the explicit Send signal, the new product must remain completely "
+            "invisible to KDS - regardless of any ordinary create()/write() activity on "
+            "the order in between.")
+
+        # Now the explicit signal arrives (the frontend patch firing
+        # after a genuine second Send).
+        order.flexsys_kds_register_send()
+
+        kds_order.invalidate_recordset()
+        new_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        self.assertTrue(new_line, "After the explicit Send signal, the new product must "
+                                   "now correctly appear as ADDED.")
+        self.assertEqual(new_line.line_change, 'added')
+        self.assertEqual(new_line.qty, 2)
+
+    def test_explicit_send_signal_is_a_noop_for_payment_trigger(self):
+        """The explicit signal must be harmless under 'payment' mode,
+        which never depends on is_send_write for its own gate."""
+        order = self._create_pos_order([(self.product_burger, 1)])  # 'payment' trigger, defaults to paid
+        kds_order_before = order.kds_order_id
+        self.assertTrue(kds_order_before)
+
+        order.flexsys_kds_register_send()  # must not raise, must not duplicate
+
+        self.assertEqual(order.kds_order_id, kds_order_before,
+                          "Calling the explicit signal under 'payment' mode must not "
+                          "create a duplicate or otherwise misbehave.")
+
+    def test_explicit_send_signal_does_not_leak_refund_orders(self):
+        """The refund-order exclusion (BUG-06) must still apply even
+        when this new explicit signal is called."""
+        if 'refunded_orderline_id' not in self.env['pos.order.line']._fields:
+            self.skipTest("refunded_orderline_id not present on this build.")
+        order = self._make_send_write_order()
+        order.flexsys_kds_register_send()
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+
+        refund_order = self._create_refund_order({order.lines: 1})
+        refund_order.flexsys_kds_register_send()
+
+        self.assertFalse(
+            refund_order.kds_order_id,
+            "A refund order must never get its own KDS ticket, even via the explicit "
+            "Send signal.")

@@ -1,21 +1,22 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.9.2**
+**Version: 19.0.7.9.3**
 **Status as of this document: code-complete, including everything
-through v7.9.1 (see CHANGELOG.md for the full history), plus this
-round's fix: "On Send to KDS / Subsequent Changes Bypass Send Gate" -
-v7.9.1's own metadata-presence check correctly gated the FIRST Send,
-but once an order had been sent once, Odoo's own frontend kept
-re-serializing that same, already-populated field value on every
-subsequent routine save (adding a product, changing a quantity - not
-exclusively a genuine second Send), which looked identical to a new
-Send under the old check. New `kds_last_processed_send_signal` field
-now tracks the exact value already recognized as a processed Send - a
-write only counts as NEW if its value both has non-empty metadata AND
-differs from that tracked value. 291 automated tests, all
-`py_compile`/XML/JS checks passing, plus a custom AST-based
-undefined-name sweep. Not yet signed off on a live instance — see "What
-still needs a human" at the end.**
+through v7.9.2 (see CHANGELOG.md for the full history), plus this
+round's fix: abandoning the purely backend-side approach to detecting a
+genuine "Send" (two prior rounds each individually reasoned from Odoo
+19's own core source, each still failed in live testing) in favor of an
+explicit signal this module controls directly - a frontend patch on
+`PosStore.prototype.sendOrderInPreparation` (confirmed from Odoo 19's
+own core source to be the actual native "Send" method) calls a new,
+dedicated RPC method the moment Odoo's own native Send completes. 294
+automated tests, all `py_compile`/XML/JS checks passing, plus a custom
+AST-based undefined-name sweep. **This round patches Odoo's own core
+POS register frontend for the first time in this module's history -
+see this document's own dedicated section below for the risk profile
+and required verification steps before this specific piece is not yet
+signed off on a live instance — see "What still needs a human" at the
+end.**
 
 
 This document maps directly to that request's own section structure
@@ -623,6 +624,73 @@ still correctly produces a fresh, distinct
 one part of this fix's own reasoning that rests on Odoo's own frontend
 behavior rather than something this delivery could verify directly.
 
+## On Send to KDS: explicit frontend signal (v7.9.3) — ⚠️ HIGHEST RISK CHANGE IN THIS MODULE'S HISTORY
+**Confirmed still reproducing on v7.9.2**, with a real ticket
+(`2629-3-000019`): a product added to an already-committed order,
+without pressing Send again, still appeared in KDS immediately. Two
+consecutive rounds of purely backend-side detection - each individually
+reasoned from Odoo 19's own core source, each still failing in live
+testing - led to a change of strategy: rather than continue guessing at
+exactly how Odoo's own frontend populates `last_order_preparation_change`
+on every possible kind of save (a detail this delivery process cannot
+directly observe or test), this round adds an **explicit signal this
+module controls directly**.
+
+### What changed
+- New `pos.order.flexsys_kds_register_send()` - a public RPC method
+  that immediately triggers the authoritative sync.
+- New `static/src/js/flexsys_kds_pos_send_signal.js` - patches
+  `PosStore.prototype.sendOrderInPreparation` (confirmed from Odoo 19's
+  own core source to be the native "Send" action's own method) to call
+  the RPC method above immediately after Odoo's own native Send logic
+  completes.
+- New `point_of_sale._assets_pos` bundle entry in `__manifest__.py`
+  (the actual POS register's own frontend bundle - distinct from this
+  module's existing `web.assets_backend` KDS-screen bundle).
+
+### Why this is genuinely higher risk than anything shipped before
+Every prior round of this project's own work has been confined to this
+module's own models, controllers, and its own KDS-screen frontend. This
+is the first change that **patches a core Odoo POS register frontend
+service** - if the patch's own import paths or method signature don't
+match the target Odoo 19 build exactly, the risk is not "FlexSys KDS
+doesn't work" but potentially **the POS register's own JS module fails
+to load entirely**.
+
+### How the risk was mitigated, given no live Odoo instance is available to this delivery process
+- The patched method name and its own file path were confirmed via a
+  **direct citation of Odoo 19's own core GitHub source**, not guessed
+  or inferred from documentation alone.
+- The patch **never modifies or wraps** the native Send behavior -
+  `super.sendOrderInPreparation()` is always called first, unconditionally,
+  and its own result is always returned unchanged.
+- The added RPC call is wrapped in its **own, separate** try/catch - a
+  failure there cannot propagate back into the native Send/print flow
+  the cashier depends on.
+- `node --check` confirms the file's own JavaScript syntax is valid -
+  but this **cannot** verify the ES module import paths resolve
+  correctly inside a real Odoo asset bundle, which is a live-runtime
+  concern this delivery process has no way to check.
+
+### Required rollout verification, in this specific order
+1. **Before enabling for real cashiers**: open the POS register on a
+   staging instance after this upgrade and confirm the register loads
+   normally at all - open the browser console and confirm no red
+   "module not defined" or import errors appear, specifically anything
+   mentioning `flexsys_kds_pos_send_signal` or `pos_store`.
+2. Confirm a completely ordinary sale (add a product, pay, print
+   receipt) still works exactly as before - this patch must have zero
+   observable effect on a POS not using "On Send to KDS" mode at all.
+3. Only then, run the dev report's own exact reproduction: an existing,
+   already-committed KDS ticket, add a new product without pressing
+   Send, confirm KDS is unchanged, press Send, confirm the new product
+   now appears correctly as ADDED.
+4. If step 1 shows any error, **do not proceed** - this specific asset
+   entry should be reverted (removing the `point_of_sale._assets_pos`
+   key from the manifest) while the exact Odoo 19 build's own
+   `pos_store.js` structure is re-confirmed against the live instance
+   directly, rather than via the citation this delivery relied on.
+
 ---
 
 ## What still needs a human
@@ -886,7 +954,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 291 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 294 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |
