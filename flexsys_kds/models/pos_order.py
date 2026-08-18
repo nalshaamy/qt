@@ -430,15 +430,14 @@ class PosOrder(models.Model):
         for order in self.sudo():
             order._flexsys_kds_sync(is_send_write=True)
 
-    @api.model
-    def get_preparation_change(self, *args, **kwargs):
+    def get_preparation_change(self):
         """REAL BUG FIX ("CONFIRMED LIVE NETWORK RESULT" - the fourth
-        and final confirmed root-cause round on this exact "detect a
-        genuine Send" problem): confirmed via the client's own
-        controlled A/B Network trace - Network cleared, then a quantity
-        edit with NO Send pressed produced ZERO calls to
-        `get_preparation_change`; immediately after actually pressing
-        Send, `get_preparation_change` fired, directly followed by
+        confirmed root-cause round on this exact "detect a genuine
+        Send" problem): confirmed via the client's own controlled A/B
+        Network trace - Network cleared, then a quantity edit with NO
+        Send pressed produced ZERO calls to `get_preparation_change`;
+        immediately after actually pressing Send,
+        `get_preparation_change` fired, directly followed by
         `sync_from_ui` - `pos.order.get_preparation_change()` is
         therefore the first confirmed signal that is NOT derived from
         interpreting any field's own content at all (every earlier
@@ -452,6 +451,33 @@ class PosOrder(models.Model):
         of a specific model method, itself the actual signal - no
         interpretation needed.
 
+        REAL BUG FIX ("CRITICAL REVIEW - 19.0.7.11.1"), corrected here:
+        the two immediately preceding rounds (v7.11.0, v7.11.1) wrongly
+        decorated this override `@api.model` and added an `args[0]`
+        record-id resolver, reasoning from the live Network trace's own
+        `args: [278696]` representation. The client's own direct
+        citation of Odoo 19's actual core source proves that
+        interpretation wrong: the native method is
+        `def get_preparation_change(self): self.ensure_one(); return
+        {...}` - an ordinary instance method with NO `@api.model`,
+        operating on a single concrete record via `self`, exactly as
+        Odoo's own standard convention for a record-level method works.
+        The Network trace's own `args: [278696]` is the JSON-RPC wire
+        representation of `call_kw`'s own dispatch mechanism (record
+        ids passed as part of how the RPC layer resolves and calls the
+        method on a concrete recordset), not evidence about the actual
+        Python method's own decorator or signature - correctly
+        distinguishing "what the wire protocol shows" from "what the
+        Python method contract actually is" was the mistake the prior
+        two rounds made. `self` is therefore ALWAYS the correct order
+        directly here - no resolver, no args parsing, no `@api.model`
+        needed at all. The now-unnecessary
+        `_flexsys_kds_resolve_order_from_preparation_change_args()`
+        helper (and its own args/list-shape guessing) has been removed
+        entirely, not left in place unused - it existed specifically to
+        compensate for a self-inflicted signature mismatch that no
+        longer exists.
+
         See `kds_preparation_change_requested`'s own field docstring
         (just above this class's own start) for the complete
         authorization-flag mechanism this sets, and
@@ -460,35 +486,27 @@ class PosOrder(models.Model):
 
         Deliberately minimal and defensive, matching this module's own
         established pattern for every prior hook attempt:
-        `super().get_preparation_change(...)` is always called first
-        and its own result always returned completely unmodified; the
+        `super().get_preparation_change()` is always called first, with
+        the exact native signature (no arguments beyond `self`) - and
+        its own result always returned completely unmodified; the
         authorization-flag write is wrapped in its own try/except,
         entirely separate from the native call, so a failure here can
         never affect the actual preparation-change computation this
         method's own native behavior provides.
-
-        `@api.model` here matches `sync_from_ui()`'s own decoration
-        above - if the real method turns out to be a genuine instance
-        method instead (called on a non-empty `self`, the specific
-        order(s) requesting preparation), the `if self:` guard inside
-        this method's own body still correctly flags exactly those
-        records; if it's genuinely `@api.model` (called on an empty
-        recordset, with the relevant order(s) identified some other way
-        - e.g. within `*args`/`**kwargs`), this method's own docstring
-        candidly notes that scenario is not yet handled here and would
-        need a further, evidence-based follow-up, exactly as every
-        other hook in this file's own history has been - never a blind
-        guess.
         """
-        result = super().get_preparation_change(*args, **kwargs)
+        result = super().get_preparation_change()
         try:
             if self:
                 self.sudo().write({'kds_preparation_change_requested': True})
+                _logger.info(
+                    "FlexSys KDS: get_preparation_change() authorized order #%s",
+                    self.id)
             else:
                 _logger.info(
-                    "FlexSys KDS: get_preparation_change() was called on an empty "
-                    "recordset (self) - the authorization flag could not be set on any "
-                    "specific order this way. args=%r kwargs=%r", args, kwargs)
+                    "FlexSys KDS: get_preparation_change() called on an empty "
+                    "recordset - unexpected, given the native method's own "
+                    "self.ensure_one() call should make this impossible; no order "
+                    "to authorize.")
         except Exception:
             _logger.exception(
                 "FlexSys KDS: failed to set kds_preparation_change_requested after a "

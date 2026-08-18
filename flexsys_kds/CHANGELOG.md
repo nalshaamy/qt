@@ -8,6 +8,137 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.11.2 — get_preparation_change: restored the native instance-method contract (no @api.model, no arg resolver)
+
+**Client's own direct citation of Odoo 19's actual core source
+corrected a mistaken interpretation from the two immediately preceding
+rounds.** The real, official implementation:
+```python
+def get_preparation_change(self):
+    self.ensure_one()
+    return {'last_order_preparation_change': self.last_order_preparation_change}
+```
+An ordinary instance method - NOT `@api.model` - operating on a single
+concrete record via `self`, exactly Odoo's own standard convention for
+a record-level method.
+
+### Root cause of v7.11.0/v7.11.1's own mistake
+Both rounds reasoned from the live Network trace's own wire-level
+representation (`args: [278696]`) as if it described the actual Python
+method's own signature - concluding `self` must be empty and the
+target order's id must arrive as a positional argument instead. This
+conflated two different things: what `call_kw`'s own JSON-RPC dispatch
+mechanism shows in a Network trace (which passes record ids as part of
+how the RPC layer resolves and calls a method on a concrete recordset)
+versus what the underlying Python method's own decorator and signature
+actually are. The client's own direct source citation resolves this
+definitively: `self` is always the correct order.
+
+### Fix
+`get_preparation_change()`'s own override is restored to the exact
+native signature - `def get_preparation_change(self):`, no
+`@api.model`, no `*args`/`**kwargs`. `super().get_preparation_change()`
+called with no arguments, matching the native call exactly.
+`self.sudo().write({'kds_preparation_change_requested': True})` sets
+the flag directly on `self` - no resolver, no argument parsing needed
+at all.
+
+**Removed entirely, not left unused**: the now-unnecessary
+`_flexsys_kds_resolve_order_from_preparation_change_args()` helper
+(introduced in v7.11.1) and all of its own args/list-shape guessing -
+it existed specifically to compensate for a self-inflicted signature
+mismatch that no longer exists.
+
+### Files changed
+`models/pos_order.py` (`get_preparation_change()` restored to the
+native signature; the now-unnecessary resolver method removed
+entirely).
+
+### Tests
+6 tests rewritten to call the REAL `order.get_preparation_change()`
+directly - safe to do so now that the exact native signature and
+return shape are confirmed by direct source citation (unlike
+`sync_from_ui()`'s own payload shape, which remains appropriately
+uncertain and untested-via-the-real-method elsewhere in this suite):
+the flag is set on the calling order directly; the override returns
+exactly the native result
+(`{'last_order_preparation_change': ...}`); the full required
+end-to-end proof (real call sets flag -> `sync_from_ui` consumes it,
+syncs exactly once, flag becomes `False` -> a LATER ordinary
+`sync_from_ui`, not preceded by another real
+`get_preparation_change()` call, causes zero KDS change); a genuine
+second real call correctly authorizes the next Send; multiple real
+calls around one logical Send remain idempotent (exactly one
+reconciliation); and calling the real method on order_a never
+authorizes order_b. The now-obsolete resolver-specific tests from
+v7.11.1 (args-shape guessing, list-shaped fallback, etc.) were removed
+entirely along with the method they tested, not left behind
+unexecuted.
+
+**Total: 333 tests** (down from 336, net of 9 obsolete tests removed
+and 6 new ones added). No database migration required.
+
+---
+
+## v7.11.1 — get_preparation_change: resolve target order from confirmed live argument shape (args[0])
+
+**Confirmed via the client's own captured live RPC call**:
+`model: "pos.order", method: "get_preparation_change", args: [278696]`
+- proving the empty-`self` case v7.11.0's own docstring described as
+"not yet handled" is not hypothetical: it's the CONFIRMED actual call
+shape. `@api.model`, called on an empty recordset, with the target
+order's own integer database id as the first positional argument.
+
+### Root cause
+v7.11.0's own override only set the authorization flag when `self` was
+genuinely non-empty (`if self: self.sudo().write(...)`) - under the
+confirmed live shape, `self` is always empty, so the flag was never
+being set at all, silently defeating the entire mechanism for the
+actual call pattern in production.
+
+### Fix
+New `_flexsys_kds_resolve_order_from_preparation_change_args(args)`
+method resolves the target order: `self` first if genuinely non-empty
+(the most authoritative source when present), otherwise `args[0]` as a
+bare integer id via `browse().exists()` (the confirmed live shape),
+with defensive support for `args[0]` itself being a list/tuple
+containing the id as its own first element (a plausible alternative
+shape, not confirmed live but cheap to also support). `exists()`
+specifically so an invalid/stale id resolves to an empty recordset,
+never a broken record reference. `bool` is explicitly excluded from the
+integer check (Python's `bool` is an `int` subclass) so a stray
+`True`/`False` in `args` is never mistaken for a record id.
+
+**Deliberately factored into its own, separate method** - entirely
+independent of `super().get_preparation_change()`'s own native call -
+specifically so this resolution logic can be tested directly and
+safely, per the client's own explicit requirement ("Do NOT only
+simulate `order.kds_preparation_change_requested = True` because that
+bypasses the part currently at risk").
+
+### Files changed
+`models/pos_order.py`
+(`_flexsys_kds_resolve_order_from_preparation_change_args()`;
+`get_preparation_change()`'s own override updated to use it).
+
+### Tests
+7 new tests, all exercising the real resolution logic directly (never
+direct flag simulation) on a genuinely empty recordset, matching the
+confirmed live call shape exactly: the exact confirmed scenario
+(empty self + `args=[order.id]` -> correct order resolves); the full
+required end-to-end proof (resolution -> flag set -> `sync_from_ui`
+consumes it -> exactly one KDS sync); confirms `get_preparation_change(order_A.id)`
+never authorizes `order_B`; an invalid/nonexistent id is a safe no-op;
+a battery of defensive edge cases (empty args, `None`, a non-numeric
+string, an empty list, a float, `True`/`False`) all safely resolve to
+an empty recordset without raising; the list-shaped `args[0]` fallback;
+and confirming a genuinely non-empty `self` still takes precedence over
+`args` when actually present.
+
+**Total: 336 tests** (up from 329). No database migration required.
+
+---
+
 ## v7.11.0 — On Send to KDS: authorization based on get_preparation_change() invocation, not content interpretation
 
 **The fourth and final confirmed root-cause round on this exact "detect

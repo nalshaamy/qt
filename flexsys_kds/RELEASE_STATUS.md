@@ -1,27 +1,25 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.11.0**
+**Version: 19.0.7.11.2**
 **Status as of this document: code-complete, including everything
-through v7.10.2 (see CHANGELOG.md for the full history), plus this
-round's fix: the fourth and final confirmed root-cause round on "detect
-a genuine Send" - confirmed via the client's own controlled A/B Network
-test that `pos.order.get_preparation_change()` is called ONLY at the
-moment of an explicit Send (zero calls observed for an ordinary edit
-with no Send pressed), unlike every prior signal this project tried,
-which was always derived from interpreting `last_order_preparation_change`'s
-own content - proven, by that same live test, to be fundamentally
-unable to distinguish a genuine Send from an ordinary edit, since that
-field's own content genuinely changes in both cases. New
-`get_preparation_change()` override sets an explicit
-`kds_preparation_change_requested` flag - the literal method invocation
-IS the signal now, not any content comparison - consumed by
-`sync_from_ui()`'s own post-processing the moment it's acted on,
-idempotent by construction per the client's own explicit requirement.
-329 automated tests (an 18-call-site test migration replacing
-now-obsolete content-comparison tests with flag-based ones), all
-`py_compile`/XML/JS checks passing, plus a custom AST-based
-undefined-name sweep. Not yet signed off on a live instance — see
-"What still needs a human" at the end.**
+through v7.11.1 (see CHANGELOG.md for the full history), plus this
+round's fix: the client's own direct citation of Odoo 19's actual core
+source corrected a mistaken interpretation in the two immediately
+preceding rounds - `get_preparation_change(self)` is an ordinary
+instance method (`self.ensure_one()`, NOT `@api.model`), operating on a
+single concrete record via `self` directly. The live Network trace's
+own `args: [278696]` was the JSON-RPC wire-level representation of
+`call_kw`'s own dispatch mechanism, not evidence about the Python
+method's own decorator or signature - conflating the two was the root
+mistake. `get_preparation_change()`'s own override is restored to the
+exact native signature; the now-unnecessary args-resolver method from
+v7.11.1 is removed entirely, not left unused. 333 automated tests -
+including, for the first time in this exact "detect a genuine Send"
+investigation, tests that call the REAL native method directly, safe
+to do now that its exact signature and return shape are confirmed by
+direct source citation - all `py_compile`/XML/JS checks passing, plus
+a custom AST-based undefined-name sweep. Not yet signed off on a live
+instance — see "What still needs a human" at the end.**
 
 
 This document maps directly to that request's own section structure
@@ -903,6 +901,69 @@ holds for the normal Send button, the "Order" confirmation dialog, AND
 every required scenario (added/removed line, quantity increase/
 decrease, modifier/attribute change, customer note change).
 
+## get_preparation_change: resolve target order from confirmed live argument shape (v7.11.1) — ⚠️ SUPERSEDED BY v7.11.2, LEFT AS A RECORD OF THE ACTUAL INVESTIGATION
+**Confirmed via the client's own captured live RPC call**: `model:
+"pos.order", method: "get_preparation_change", args: [278696]` -
+proving v7.11.0's own docstring-flagged "not yet handled" empty-`self`
+case is the CONFIRMED actual production call shape, not a hypothetical
+edge case. v7.11.0's own override only set the flag when `self` was
+non-empty - under the real shape, it never fired at all.
+
+**Fix (superseded)**: `_flexsys_kds_resolve_order_from_preparation_change_args()`
+resolves the target order from `args[0]` (a bare integer id, the
+confirmed live shape) via `browse().exists()`, with `self` still
+checked first (taking precedence if genuinely non-empty). Factored
+into its own independently-testable method, per the client's own
+explicit requirement not to test via flag simulation alone.
+
+**⚠️ This entire fix was itself corrected in v7.11.2**: the client's
+own direct citation of Odoo 19's actual core source proved
+`get_preparation_change(self)` is an ordinary instance method (NOT
+`@api.model`) - the Network trace's own `args: [278696]` was
+`call_kw`'s own wire-level dispatch representation, not evidence about
+the Python method's own signature. See v7.11.2's own section below for
+the corrected fix. Left here, not deleted, as an honest record of the
+actual investigation - the same convention this document already
+applies to the superseded v7.9.3/v7.9.6 frontend-patch sections above.
+
+**What still needs a human**: the same full Acceptance Test as the
+sections above - but this round specifically closes a gap where the
+mechanism would have silently done nothing at all in production
+(rather than misidentifying the wrong order), so re-confirming the
+basic "Send -> KDS receives the ticket" case first is especially
+worthwhile before moving to the fuller scenario matrix.
+
+## get_preparation_change: native instance-method contract restored (v7.11.2)
+**Client's own direct citation of Odoo 19's actual core source**
+corrected the mistaken interpretation in v7.11.0/v7.11.1:
+`get_preparation_change(self)` is `self.ensure_one(); return
+{'last_order_preparation_change': self.last_order_preparation_change}`
+- an ordinary instance method, NOT `@api.model`. The two prior rounds
+had conflated the Network trace's own wire-level `call_kw` dispatch
+representation (`args: [278696]`) with the actual Python method's own
+signature.
+
+**Fix**: `get_preparation_change()`'s own override restored to the
+exact native signature (`def get_preparation_change(self):`, no
+`@api.model`, no `*args`/`**kwargs`); `self` is directly and always the
+correct order. The now-unnecessary `_flexsys_kds_resolve_order_from_preparation_change_args()`
+helper is removed entirely.
+
+**For the first time in this exact investigation, tests call the real
+native method directly** (`order.get_preparation_change()`) rather than
+simulating its own effect - safe to do now that the exact signature
+and return shape are confirmed by direct source citation, unlike
+`sync_from_ui()`'s own payload shape, which this project remains
+appropriately cautious about testing via the real method elsewhere.
+
+**What still needs a human**: the same full Acceptance Test as every
+section above. This round corrects the override's own calling
+convention to exactly match Odoo's native contract - the most direct,
+least speculative fix in this entire investigation - but per this
+project's own now well-established pattern on this specific problem,
+only a real live test on the actual Odoo 19 instance can confirm it
+holds end to end.
+
 ---
 
 ## What still needs a human
@@ -1166,7 +1227,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 329 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 333 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |
