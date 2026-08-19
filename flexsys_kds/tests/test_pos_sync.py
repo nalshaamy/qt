@@ -4989,58 +4989,77 @@ class TestPosSync(FlexSysKdsTestCommon):
                           "This one IS purely server-owned bookkeeping and must still be stripped.")
 
     # -----------------------------------------------------------------
-    # Dev report "FINAL IMPLEMENTATION REQUEST - Frontend Durable Send
-    # Generation": requirement 6 (kds_send_generation must be loaded
-    # into the POS order model; kds_last_processed_send_generation must
-    # remain server-owned and never loaded to the frontend at all).
+    # Dev report "BLOCKER - 19.0.7.13.0 BREAKS POS STARTUP": the
+    # _load_pos_data_fields() override (and the paired JS increment
+    # patch) confirmed live to crash POS startup entirely were reverted
+    # immediately. These tests confirm the revert is complete and
+    # guard against accidentally reintroducing it without independent
+    # live verification.
     # -----------------------------------------------------------------
-    def test_load_pos_data_fields_exposes_kds_send_generation(self):
-        """kds_send_generation must be included in the field list the
-        POS session loads at startup - the confirmed, documented Odoo
-        19 pos.load.mixin mechanism, requiring no frontend JS change
-        for the loading/persistence/offline-restore/sync_from_ui-
-        inclusion side of this requirement."""
-        fields_list = self.env['pos.order']._load_pos_data_fields(self.pos_config.id)
-        self.assertIn(
-            'kds_send_generation', fields_list,
-            "kds_send_generation must be loaded into the POS order model - the POS "
-            "client is specifically meant to write and carry this field.")
+    def test_kds_send_generation_field_still_exists_and_is_correct_type(self):
+        """The DATABASE-level field itself (unrelated to the reverted
+        frontend-exposure mechanism) must remain completely intact -
+        the client's own explicit instruction: 'Do NOT remove the
+        durable generation architecture... The immediate task is ONLY
+        to fix how kds_send_generation is exposed to the POS frontend.'
+        This confirms the backend half of that architecture is
+        unaffected by the revert."""
+        field = self.env['pos.order']._fields.get('kds_send_generation')
+        self.assertIsNotNone(field, "kds_send_generation must still exist as a field.")
+        self.assertEqual(field.type, 'integer')
 
-    def test_load_pos_data_fields_never_exposes_server_owned_generation_field(self):
-        """Required: 'the POS frontend must NEVER increment, decrement,
-        reset, or authoritatively write kds_last_processed_send_generation.'
-        Confirms it is not even loaded into the POS session at all -
-        there is no local copy for the client to read, cache, or write
-        back, regardless of any other protection."""
-        fields_list = self.env['pos.order']._load_pos_data_fields(self.pos_config.id)
-        self.assertNotIn(
-            'kds_last_processed_send_generation', fields_list,
-            "This field must never be loaded into the POS frontend's own local order "
-            "model at all - purely internal server bookkeeping.")
+    def test_kds_last_processed_send_generation_field_still_exists(self):
+        field = self.env['pos.order']._fields.get('kds_last_processed_send_generation')
+        self.assertIsNotNone(field)
+        self.assertEqual(field.type, 'integer')
 
-    def test_load_pos_data_fields_never_exposes_other_internal_kds_fields(self):
-        """Required: 'Do not reintroduce frontend ownership of
-        kds_preparation_change_requested, kds_last_processed_send_signal,
-        kds_last_processed_send_generation. Only kds_send_generation is
-        intentionally client-carried.'"""
-        fields_list = self.env['pos.order']._load_pos_data_fields(self.pos_config.id)
-        self.assertNotIn('kds_preparation_change_requested', fields_list)
-        self.assertNotIn('kds_last_processed_send_signal', fields_list)
-        self.assertNotIn('kds_last_processed_send_generation', fields_list)
-        self.assertIn('kds_send_generation', fields_list,
-                       "Only this one field is the intentional exception.")
+    def test_pos_order_does_not_override_load_pos_data_fields(self):
+        """Guard rail: confirms this module does NOT currently define
+        its own _load_pos_data_fields() on pos.order - the exact
+        mechanism confirmed live to crash POS startup. If this
+        assertion ever fails in the future, it means that override was
+        reintroduced - which must only happen after independent, direct
+        live verification against a real Odoo 19 instance, not based on
+        conflicting secondary sources the way the reverted v7.13.0
+        attempt was.
 
-    def test_load_pos_data_fields_preserves_native_fields(self):
-        """Confirms this override is purely additive - every field the
-        native super() call already returns must still be present,
-        unmodified."""
-        fields_list = self.env['pos.order']._load_pos_data_fields(self.pos_config.id)
-        # A representative sample of fields that must always be present
-        # regardless of this module's own addition - confirms this is
-        # additive, not a replacement of the native list.
-        for expected in ('id', 'name', 'state', 'lines', 'uuid'):
-            self.assertIn(
-                expected, fields_list,
-                f"'{expected}' is a core native field the POS frontend already relies "
-                f"on - this override must never remove or replace the native list, "
-                f"only append to it.")
+        Checked via each class's own __module__ attribute across the
+        model's own MRO, rather than a direct module import - avoids
+        any dependency on the exact addon import path, which can vary
+        across installations."""
+        pos_order_model_class = type(self.env['pos.order'])
+        flexsys_contributed_load_fields = [
+            klass for klass in pos_order_model_class.__mro__
+            if '_load_pos_data_fields' in klass.__dict__
+            and 'flexsys_kds' in (klass.__module__ or '')
+        ]
+        self.assertFalse(
+            flexsys_contributed_load_fields,
+            f"flexsys_kds must not contribute its own _load_pos_data_fields() to "
+            f"pos.order's own MRO - confirmed live to crash POS startup; found in: "
+            f"{flexsys_contributed_load_fields!r}. Removed in the same round this was "
+            f"discovered, not to be reintroduced without independent, direct live "
+            f"verification.")
+
+    def test_backend_generation_comparison_logic_still_fully_functional(self):
+        """Confirms the backend half of the architecture - unaffected
+        by the frontend-exposure revert - still works exactly as
+        v7.12.1 designed it, using direct payload construction (not
+        depending on any frontend field-loading mechanism at all)."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'kds_send_generation': 1,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'metadata': {'serverDate': '2026-08-19 09:00:00'},
+            }),
+        }])
+
+        order.invalidate_recordset()
+        self.assertTrue(
+            order.kds_order_id,
+            "The backend's own generation-based authorization logic must remain fully "
+            "functional and testable independent of how the field eventually gets "
+            "populated by a future, safely-verified frontend mechanism.")
+        self.assertEqual(order.kds_last_processed_send_generation, 1)

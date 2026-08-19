@@ -1,6 +1,6 @@
 {
     'name': 'FlexSys KDS',
-    'version': '19.0.7.13.0',
+    'version': '19.0.7.13.1',
     'category': 'Point of Sale',
     'summary': 'Multi-station Kitchen Display System for Odoo POS',
     'description': """
@@ -81,21 +81,21 @@ Technical module name: flexsys_kds
         # save goes through, overridden directly in models/pos_order.py
         # instead.
         #
-        # REAL BUG FIX ("FINAL IMPLEMENTATION REQUEST - Frontend
-        # Durable Send Generation"): this bundle is reintroduced here,
-        # deliberately minimal - exactly ONE file, doing exactly ONE
-        # thing (a local, synchronous, offline-safe field increment,
-        # with no RPC call of its own at all - see that file's own
-        # top-of-file comment for the complete explanation of why this
-        # is architecturally different from, and does not repeat the
-        # failure mode of, the two removed patches above). This is the
-        # confirmed, narrowly-scoped fix for the one remaining gap in
-        # v7.12.1's own backend architecture, which the client's own
-        # review explicitly accepted as correct and asked not to be
-        # redesigned.
-        'point_of_sale._assets_pos': [
-            'flexsys_kds/static/src/js/flexsys_kds_send_generation.js',
-        ],
+        # REAL BUG FIX ("BLOCKER - 19.0.7.13.0 BREAKS POS STARTUP"):
+        # v7.13.0's own attempt to reintroduce this bundle (a single
+        # file incrementing kds_send_generation, paired with a
+        # models/pos_order.py::_load_pos_data_fields() override meant
+        # to expose that field to the POS session) is confirmed live to
+        # have broken POS startup entirely
+        # ("TypeError: Cannot read properties of undefined (reading
+        # 'currency_id')" inside Odoo's own PosStore.processServerData()).
+        # Both pieces are removed here - see models/pos_order.py's own
+        # matching comment (kds_send_generation's field docstring) for
+        # the complete root-cause discussion and the currently-honest
+        # status of this still-open requirement. This module is once
+        # again entirely backend-only, touching no POS register
+        # frontend code at all - the same confirmed-safe state as
+        # v7.12.1.
     },
     'installable': True,
     'application': True,

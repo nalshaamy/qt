@@ -8,6 +8,84 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.13.1 — EMERGENCY REVERT: v7.13.0 broke POS startup entirely
+
+**Release blocker, confirmed live, fixed immediately, ahead of any
+other work.** `19.0.7.13.0` was confirmed to prevent the POS register
+from opening at all - `TypeError: Cannot read properties of undefined
+(reading 'currency_id')` inside Odoo's own
+`PosStore.processServerData()`, occurring during POS initialization,
+before any Offline Send testing could even begin.
+
+### Immediate action taken
+Both v7.13.0 frontend pieces are reverted completely: the
+`_load_pos_data_fields()` override on `pos.order` (the confirmed
+primary suspect) and the paired JS increment patch
+(`static/src/js/flexsys_kds_send_generation.js`), along with the
+`point_of_sale._assets_pos` manifest bundle entry that loaded it. This
+module is once again entirely backend-only, touching no POS register
+frontend code at all - the same confirmed-safe state as v7.12.1.
+
+### Root cause - honestly not yet fully confirmed
+Two sources consulted while designing v7.13.0 directly conflicted:
+one presented `_load_pos_data_fields()` on any POS-loaded model,
+including `pos.order` directly, as the standard, safe, documented Odoo
+19 mechanism; a separate, independent source explicitly warned "your
+approach using `_load_pos_data_fields()` is not correct for POS
+orders... the POS frontend crashes" for the closely related Odoo 18.
+The live crash now confirms the second source was correct for this
+exact case - but the deeper reason why (whether `pos.order`'s own
+native field-loading path has additional, undocumented constraints
+this override violated, an ordering dependency, a naming collision, or
+something else this delivery has not yet isolated) has not been
+independently re-verified against Odoo 19's own actual runtime. This
+is stated plainly rather than guessed at a third time.
+
+### What is explicitly unchanged - the backend architecture
+Per the client's own explicit instruction ("Do NOT remove the durable
+generation architecture... The immediate task is ONLY to fix how
+`kds_send_generation` is exposed"): `kds_send_generation` and
+`kds_last_processed_send_generation` (the database fields themselves),
+`_flexsys_kds_process_one_sync_from_ui_entry()`'s own generation-based
+authorization and idempotency logic, and every other part of v7.12.1's
+own architecture are completely untouched and remain fully functional
+- confirmed by new, direct tests that construct the `sync_from_ui`
+payload manually, with no dependency on any frontend field-loading
+mechanism at all.
+
+### Currently open again
+The one remaining gap - a verified, safe way to expose
+`kds_send_generation` to the POS frontend and increment it on a
+genuine Send - needs a different, independently-verified approach
+before being reattempted. Not guessed a third time between the two
+conflicting sources this round's own failed attempt was based on.
+
+### Files changed
+`models/pos_order.py` (the breaking override removed;
+`kds_send_generation`'s own field docstring updated with the honest,
+current status), removed `static/src/js/flexsys_kds_send_generation.js`,
+`__manifest__.py` (`point_of_sale._assets_pos` bundle entry removed).
+
+### Tests
+4 tests replacing the 4 removed obsolete ones (which tested the
+now-reverted override directly): confirm both generation fields
+themselves remain fully intact at the database level; a guard-rail
+test confirming `flexsys_kds` does not currently contribute its own
+`_load_pos_data_fields()` anywhere in `pos.order`'s own MRO (protects
+against silently reintroducing this exact crash without independent
+live verification); and confirming the backend's own generation-based
+authorization logic remains fully functional using a manually-
+constructed payload, independent of any frontend mechanism.
+
+**Total: 353 tests** (net unchanged - 4 removed, 4 added). No database
+migration required - no field or schema changes this round.
+
+**This is the single highest-priority item for the next live test
+cycle**: confirm POS opens normally on a real Odoo 19 instance before
+any further Offline Send Recovery work is attempted.
+
+---
+
 ## v7.13.0 — Frontend Durable Send Generation: the missing increment, added narrowly and defensively
 
 **The final piece of the offline-safe KDS Send architecture** - the

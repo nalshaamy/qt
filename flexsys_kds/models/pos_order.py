@@ -143,34 +143,6 @@ def _extract_preparation_content_signature(raw):
 class PosOrder(models.Model):
     _inherit = 'pos.order'
 
-    @api.model
-    def _load_pos_data_fields(self, config_id):
-        """REAL BUG FIX ("FINAL IMPLEMENTATION REQUEST - Frontend
-        Durable Send Generation"), requirement 6 ("kds_send_generation
-        must be: loaded into the POS order model, initialized
-        correctly, locally writable, serialized with the POS order,
-        restored after browser/local POS persistence, included in the
-        normal sync_from_ui payload"): confirmed as the correct,
-        documented Odoo 19 mechanism for exposing a field to the POS
-        frontend's own local order model WITHOUT any frontend JS
-        change at all - `pos.order` already inherits Odoo core's own
-        `pos.load.mixin` (it is already a POS-loaded model); this
-        override simply adds `kds_send_generation` to the list of its
-        own fields the POS session loads at startup. Once loaded this
-        way, Odoo's own offline-first POS architecture automatically
-        handles every other part of requirement 6 - local storage,
-        offline persistence and restore across a browser/local reload,
-        and inclusion in the order's own serialized `sync_from_ui`
-        payload - exactly the same way it already does for
-        `last_order_preparation_change` and every other native
-        `pos.order` field. `kds_last_processed_send_generation` is
-        deliberately NOT included here - see that field's own docstring
-        (below) for why it must never be loaded into or writable by the
-        POS client at all.
-        """
-        fields_list = super()._load_pos_data_fields(config_id)
-        return fields_list + ['kds_send_generation']
-
     kds_order_id = fields.Many2one('kds.order', string='FlexSys KDS Order', copy=False)
     # REAL BUG FIX ("On Send to KDS / Subsequent Changes Bypass Send
     # Gate"), confirmed live: adding a product to an order that had
@@ -285,38 +257,55 @@ class PosOrder(models.Model):
     # that reads it, were shipped as the correct, then-inert backend
     # half of this design, pending a verified frontend increment point.
     #
-    # REAL BUG FIX ("FINAL IMPLEMENTATION REQUEST - Frontend Durable
-    # Send Generation"), this round: the frontend half is now added.
-    # This field is loaded into the POS session via
-    # `_load_pos_data_fields()` (see that override just above this
-    # class's own start) - Odoo 19's own confirmed, documented
-    # `pos.load.mixin` mechanism, requiring no frontend JS change at
-    # all for the loading/persistence/offline-restore/sync_from_ui-
-    # inclusion side of requirement 6 (Odoo's own offline-first POS
-    # architecture already handles all of that automatically for any
-    # field loaded this way, exactly as it already does for
-    # last_order_preparation_change). The actual increment - "at the
-    # moment of a genuine Send" - is a frontend JS patch
-    # (static/src/js/flexsys_kds_send_generation.js) on
-    # PosStore.prototype.sendOrderInPreparation, confirmed directly
-    # from Odoo 19's own core source
-    # (addons/point_of_sale/static/src/app/services/pos_store.js) to be
-    # the method the native Send action calls, incrementing
-    # order.kds_send_generation on the LOCAL order object BEFORE any of
-    # that method's own native logic (including any network activity)
-    # runs - satisfying "the increment MUST happen locally... it MUST
-    # NOT depend on a separate RPC succeeding" exactly.
+    # REAL BUG FIX ("BLOCKER - 19.0.7.13.0 BREAKS POS STARTUP"), current
+    # status: v7.13.0's own attempt to add the frontend half -
+    # `_load_pos_data_fields()` exposing this field to the POS session,
+    # paired with a JS patch on `sendOrderInPreparation()` to increment
+    # it - was confirmed live to crash POS startup entirely
+    # ("TypeError: Cannot read properties of undefined (reading
+    # 'currency_id')" inside Odoo's own PosStore.processServerData()),
+    # before any Offline Send testing could even begin. Both pieces
+    # were reverted immediately, in the same round this was confirmed,
+    # restoring POS startup - this was treated as the release blocker
+    # it is, ahead of any other work.
+    #
+    # Root cause not yet fully confirmed: the two sources consulted
+    # while designing v7.13.0 directly conflicted on whether overriding
+    # `_load_pos_data_fields()` on `pos.order` specifically (as opposed
+    # to a purpose-built custom model) is safe in Odoo 19 at all - one
+    # source's own documented example presented it as the standard,
+    # supported mechanism; a separate, independent source explicitly
+    # warned "your approach using _load_pos_data_fields() is not
+    # correct for POS orders... the POS frontend crashes" for the
+    # closely related Odoo 18. The live crash now confirms the second
+    # source was right for this exact case, but the deeper reason why -
+    # whether pos.order's own native field-loading path has additional,
+    # undocumented constraints this override violated, whether the
+    # crash stems from something else this delivery hasn't yet isolated
+    # (a different field name collision, an ordering dependency, or a
+    # separate issue entirely) - has not been independently re-verified
+    # against Odoo 19's own actual runtime.
+    #
+    # This field itself (the database column, and the backend
+    # comparison logic that reads an incoming payload's own
+    # `kds_send_generation` key - see
+    # `_flexsys_kds_process_one_sync_from_ui_entry()`) is UNCHANGED and
+    # remains correct, per the client's own explicit instruction not to
+    # redesign the backend architecture. Only the FRONTEND EXPOSURE
+    # mechanism is currently missing again, and needs a different,
+    # independently-verified approach before it can be safely
+    # reattempted - not another guess between the two conflicting
+    # sources this round's own failed attempt was based on.
     kds_send_generation = fields.Integer(default=0, copy=False)
     # REAL BUG FIX ("FINAL IMPLEMENTATION REQUEST"), requirement 6:
     # "kds_last_processed_send_generation must remain SERVER-OWNED. The
     # POS frontend must NEVER increment, decrement, reset, or
-    # authoritatively write [it]." Deliberately NOT added to
-    # `_load_pos_data_fields()` above - unlike kds_send_generation, this
-    # field must never be loaded into the POS frontend's own local
-    # order model at all, so there is no local copy for the client to
-    # read, cache, or (even accidentally) write back. Already protected
-    # from being written even if a stale/malicious payload somehow
-    # carried it anyway, via `_KDS_SERVER_OWNED_FIELDS`
+    # authoritatively write [it]." This field has never been, and must
+    # never be, loaded into the POS frontend's own local order model at
+    # all - unaffected by the v7.13.0 revert above, since it was never
+    # part of that (or any) field-loading attempt in the first place.
+    # Already protected from being written even if a stale/malicious
+    # payload somehow carried it anyway, via `_KDS_SERVER_OWNED_FIELDS`
     # (`sync_from_ui()`'s own sanitization, unchanged from v7.11.3).
     kds_last_processed_send_generation = fields.Integer(default=0, copy=False)
 
@@ -714,11 +703,21 @@ class PosOrder(models.Model):
         shallow copy of each order dict, never mutating the caller's
         own original `orders` list/dicts in place.
 
-        See `_load_pos_data_fields()`'s own override, just below this
-        method, for the complementary, root-cause-level fix - excluding
-        both fields from what the frontend ever loads in the first
-        place, so this sanitization step becomes a defensive backstop
-        rather than the only thing preventing the leak.
+        See `_flexsys_kds_sanitize_orders_payload()`'s own docstring
+        for the full explanation of why this sanitization step is
+        currently the primary protection - a root-cause-level fix
+        (excluding these fields from what the POS frontend ever loads
+        in the first place, via `_load_pos_data_fields()`) was
+        considered in an earlier round but not pursued, and a separate,
+        unrelated attempt to use that same override for a different
+        field (`kds_send_generation`) was confirmed live to crash POS
+        startup entirely - see that field's own docstring
+        (`models/pos_order.py`, near this class's own start) for the
+        complete account. This sanitization step therefore remains the
+        sole protection for `kds_preparation_change_requested` and
+        `kds_last_processed_send_signal`/`kds_last_processed_send_generation`,
+        not merely a defensive backstop alongside a field-loading
+        exclusion that does not currently exist.
         """
         sanitized_orders = self._flexsys_kds_sanitize_orders_payload(orders)
         result = super().sync_from_ui(sanitized_orders, *args, **kwargs)
