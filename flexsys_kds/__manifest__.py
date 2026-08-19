@@ -1,6 +1,6 @@
 {
     'name': 'FlexSys KDS',
-    'version': '19.0.7.11.3',
+    'version': '19.0.7.13.0',
     'category': 'Point of Sale',
     'summary': 'Multi-station Kitchen Display System for Odoo POS',
     'description': """
@@ -73,21 +73,29 @@ Technical module name: flexsys_kds
         # patches that previously lived in this bundle
         # (flexsys_kds_pos_send_signal.js,
         # flexsys_kds_pos_send_signal_order_model.js - v7.9.3/v7.9.6)
-        # were REMOVED here, confirmed no longer needed: a live browser
-        # Network trace showed zero effect from either patch for the
-        # "Order" confirmation-dialog action (which the KDS Audit Log
-        # confirmed never fired flexsys_kds_register_send() at all for
-        # that action), while the SAME trace confirmed the actual RPC
-        # call for that action is pos.order.sync_from_ui - a
-        # server-side entry point every POS save goes through
-        # (confirmed universal, not specific to Send), now overridden
-        # directly in models/pos_order.py instead. Removing this now-
-        # unnecessary frontend bundle entirely (rather than leaving it
-        # in place alongside the new backend mechanism) eliminates this
-        # module's own two highest-risk pieces - patches to Odoo's own
-        # core POS register frontend, with unverified import paths -
-        # now that a confirmed-correct, evidence-based backend-only
-        # mechanism covers the same ground more reliably.
+        # were REMOVED (in v7.11.0), confirmed no longer needed: a live
+        # browser Network trace showed zero effect from either patch for
+        # the "Order" confirmation-dialog action, while the SAME trace
+        # confirmed the actual RPC call for that action is
+        # pos.order.sync_from_ui - a server-side entry point every POS
+        # save goes through, overridden directly in models/pos_order.py
+        # instead.
+        #
+        # REAL BUG FIX ("FINAL IMPLEMENTATION REQUEST - Frontend
+        # Durable Send Generation"): this bundle is reintroduced here,
+        # deliberately minimal - exactly ONE file, doing exactly ONE
+        # thing (a local, synchronous, offline-safe field increment,
+        # with no RPC call of its own at all - see that file's own
+        # top-of-file comment for the complete explanation of why this
+        # is architecturally different from, and does not repeat the
+        # failure mode of, the two removed patches above). This is the
+        # confirmed, narrowly-scoped fix for the one remaining gap in
+        # v7.12.1's own backend architecture, which the client's own
+        # review explicitly accepted as correct and asked not to be
+        # redesigned.
+        'point_of_sale._assets_pos': [
+            'flexsys_kds/static/src/js/flexsys_kds_send_generation.js',
+        ],
     },
     'installable': True,
     'application': True,

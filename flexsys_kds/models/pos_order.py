@@ -143,6 +143,34 @@ def _extract_preparation_content_signature(raw):
 class PosOrder(models.Model):
     _inherit = 'pos.order'
 
+    @api.model
+    def _load_pos_data_fields(self, config_id):
+        """REAL BUG FIX ("FINAL IMPLEMENTATION REQUEST - Frontend
+        Durable Send Generation"), requirement 6 ("kds_send_generation
+        must be: loaded into the POS order model, initialized
+        correctly, locally writable, serialized with the POS order,
+        restored after browser/local POS persistence, included in the
+        normal sync_from_ui payload"): confirmed as the correct,
+        documented Odoo 19 mechanism for exposing a field to the POS
+        frontend's own local order model WITHOUT any frontend JS
+        change at all - `pos.order` already inherits Odoo core's own
+        `pos.load.mixin` (it is already a POS-loaded model); this
+        override simply adds `kds_send_generation` to the list of its
+        own fields the POS session loads at startup. Once loaded this
+        way, Odoo's own offline-first POS architecture automatically
+        handles every other part of requirement 6 - local storage,
+        offline persistence and restore across a browser/local reload,
+        and inclusion in the order's own serialized `sync_from_ui`
+        payload - exactly the same way it already does for
+        `last_order_preparation_change` and every other native
+        `pos.order` field. `kds_last_processed_send_generation` is
+        deliberately NOT included here - see that field's own docstring
+        (below) for why it must never be loaded into or writable by the
+        POS client at all.
+        """
+        fields_list = super()._load_pos_data_fields(config_id)
+        return fields_list + ['kds_send_generation']
+
     kds_order_id = fields.Many2one('kds.order', string='FlexSys KDS Order', copy=False)
     # REAL BUG FIX ("On Send to KDS / Subsequent Changes Bypass Send
     # Gate"), confirmed live: adding a product to an order that had
@@ -225,6 +253,72 @@ class PosOrder(models.Model):
     # True again (a harmless no-op), and the one sync_from_ui call that
     # actually follows consumes it exactly once.
     kds_preparation_change_requested = fields.Boolean(default=False, copy=False)
+    # REAL BUG FIX ("CRITICAL REVIEW - 19.0.7.12.0 OFFLINE FALLBACK IS
+    # NOT SAFE TO DEPLOY"): the client's own review proved a content-
+    # signature-based fallback (this module's own earlier, now-removed
+    # attempt at solving offline-Send recovery) is architecturally
+    # unsound - "content changed != cashier pressed Send" - an ordinary
+    # unsent edit and a genuine offline Send both eventually reach the
+    # server with content that differs from the last committed KDS
+    # snapshot, and nothing about the content alone can distinguish the
+    # two. The client's own recommended fix, adopted here: "a durable
+    # Send Intent / Send Generation... under this module's own
+    # exclusive control... ordinary edits do NOT increment/send
+    # generation, therefore cannot trigger KDS."
+    #
+    # kds_send_generation is that counter - a plain integer field on
+    # pos.order itself, so it rides along on the SAME reliably-retried
+    # sync_from_ui payload the order's own business data already uses
+    # (confirmed live to survive offline recovery), exactly satisfying
+    # "the intent must survive offline mode using the same local
+    # persistence/retry mechanism as the POS order." Deliberately NOT
+    # in `_KDS_SERVER_OWNED_FIELDS` (sync_from_ui()'s own sanitization
+    # list) - unlike kds_preparation_change_requested and
+    # kds_last_processed_send_signal/kds_last_processed_send_generation,
+    # which are purely internal server bookkeeping the POS client must
+    # never write, THIS field is specifically meant to be written BY
+    # the POS client - the whole design is a durable client-supplied
+    # intent marker, not a server-computed one.
+    #
+    # Honest, explicit status as of v7.12.1: this field, and the
+    # comparison logic in _flexsys_kds_process_one_sync_from_ui_entry()
+    # that reads it, were shipped as the correct, then-inert backend
+    # half of this design, pending a verified frontend increment point.
+    #
+    # REAL BUG FIX ("FINAL IMPLEMENTATION REQUEST - Frontend Durable
+    # Send Generation"), this round: the frontend half is now added.
+    # This field is loaded into the POS session via
+    # `_load_pos_data_fields()` (see that override just above this
+    # class's own start) - Odoo 19's own confirmed, documented
+    # `pos.load.mixin` mechanism, requiring no frontend JS change at
+    # all for the loading/persistence/offline-restore/sync_from_ui-
+    # inclusion side of requirement 6 (Odoo's own offline-first POS
+    # architecture already handles all of that automatically for any
+    # field loaded this way, exactly as it already does for
+    # last_order_preparation_change). The actual increment - "at the
+    # moment of a genuine Send" - is a frontend JS patch
+    # (static/src/js/flexsys_kds_send_generation.js) on
+    # PosStore.prototype.sendOrderInPreparation, confirmed directly
+    # from Odoo 19's own core source
+    # (addons/point_of_sale/static/src/app/services/pos_store.js) to be
+    # the method the native Send action calls, incrementing
+    # order.kds_send_generation on the LOCAL order object BEFORE any of
+    # that method's own native logic (including any network activity)
+    # runs - satisfying "the increment MUST happen locally... it MUST
+    # NOT depend on a separate RPC succeeding" exactly.
+    kds_send_generation = fields.Integer(default=0, copy=False)
+    # REAL BUG FIX ("FINAL IMPLEMENTATION REQUEST"), requirement 6:
+    # "kds_last_processed_send_generation must remain SERVER-OWNED. The
+    # POS frontend must NEVER increment, decrement, reset, or
+    # authoritatively write [it]." Deliberately NOT added to
+    # `_load_pos_data_fields()` above - unlike kds_send_generation, this
+    # field must never be loaded into the POS frontend's own local
+    # order model at all, so there is no local copy for the client to
+    # read, cache, or (even accidentally) write back. Already protected
+    # from being written even if a stale/malicious payload somehow
+    # carried it anyway, via `_KDS_SERVER_OWNED_FIELDS`
+    # (`sync_from_ui()`'s own sanitization, unchanged from v7.11.3).
+    kds_last_processed_send_generation = fields.Integer(default=0, copy=False)
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -635,7 +729,19 @@ class PosOrder(models.Model):
                                "native POS sync itself was not affected.")
         return result
 
-    _KDS_SERVER_OWNED_FIELDS = ('kds_preparation_change_requested', 'kds_last_processed_send_signal')
+    # REAL BUG FIX ("CRITICAL REVIEW - 19.0.7.12.0 OFFLINE FALLBACK IS
+    # NOT SAFE TO DEPLOY"): kds_last_processed_send_generation added -
+    # purely internal server bookkeeping tracking what this module has
+    # already processed, exactly like kds_last_processed_send_signal;
+    # the POS client must never be authoritative for it. Deliberately
+    # does NOT include kds_send_generation itself here - see that
+    # field's own docstring (just above the class's own start) for why
+    # it's the one field in this whole scheme specifically meant to be
+    # writable by the POS client.
+    _KDS_SERVER_OWNED_FIELDS = (
+        'kds_preparation_change_requested', 'kds_last_processed_send_signal',
+        'kds_last_processed_send_generation',
+    )
 
     @api.model
     def _flexsys_kds_sanitize_orders_payload(self, orders):
@@ -735,16 +841,66 @@ class PosOrder(models.Model):
 
     def _flexsys_kds_process_one_sync_from_ui_entry(self, order_data):
         """REAL BUG FIX ("CONFIRMED LIVE NETWORK RESULT"): authorization
-        is now based exclusively on `kds_preparation_change_requested`
-        (set by `get_preparation_change()`'s own override, consumed
-        here) - never on `last_order_preparation_change`'s own content,
+        is based exclusively on `kds_preparation_change_requested` (set
+        by `get_preparation_change()`'s own override, consumed here) -
+        never on `last_order_preparation_change`'s own content,
         confirmed unreliable for that purpose by the client's own live
         test. The content-signature machinery below
         (`_extract_preparation_content_signature()`,
         `kds_last_processed_send_signal`) is kept, but purely as a
-        diagnostic record of what content this specific authorized Send
+        diagnostic record of what content a given authorized Send
         carried - it plays no role in the authorization decision
-        itself anymore.
+        itself.
+
+        REAL BUG FIX ("CRITICAL REVIEW - 19.0.7.12.0 OFFLINE FALLBACK
+        IS NOT SAFE TO DEPLOY"), a genuine architectural correction the
+        client's own review caught before this module ever shipped the
+        unsafe version to a live instance: v7.12.0's own content-
+        signature fallback (added to address the confirmed offline-Send
+        data-loss bug - see kds_send_generation's own field docstring
+        below for the currently-correct fix for that specific problem)
+        was itself REMOVED here, not merely adjusted, because the
+        client's own review proved it architecturally unsound, not just
+        imperfect: "content changed != cashier pressed Send" - an
+        ordinary, unsent quantity edit and a genuine offline Send both
+        eventually reach the server through sync_from_ui with content
+        that differs from the last committed KDS snapshot, and nothing
+        about the content itself can distinguish the two. Continuing to
+        rely on any comparison of last_order_preparation_change's own
+        content - which is exactly what this specific fallback still
+        was, despite the "offline-recovery" framing - reintroduced the
+        exact "ordinary edit leaks to KDS" bug this project spent
+        several earlier rounds (v7.9.1 through v7.11.3) confirming and
+        fixing. A backend-only fallback based on content difference
+        alone can never safely provide both "no KDS sync for ordinary
+        unsent edits" and "guaranteed recovery of an offline Send" at
+        the same time - the client's own stated conclusion, and this
+        module's own correction agrees with it completely.
+
+        The durable fix for offline-Send recovery is
+        `kds_send_generation` instead (see that field's own docstring)
+        - a counter under this module's own exclusive control, never
+        touched by an ordinary edit, that rides along on the SAME
+        reliably-retried sync_from_ui payload the order's own business
+        data already uses. Authorization here now checks that field's
+        own genuine change, not last_order_preparation_change's.
+
+        REAL BUG FIX ("SECOND CRITICAL ISSUE - AUTHORIZATION IS
+        CONSUMED BEFORE DELIVERY"), also from the same review: the
+        authorization marker(s) used to be cleared/updated BEFORE
+        `_flexsys_kds_sync()` was called - if that call then failed for
+        any reason, the Send would have already been marked processed,
+        permanently losing it with no possibility of retry. Corrected
+        here: `_flexsys_kds_sync()` is now called FIRST; the
+        authorization marker(s) are only cleared/updated AFTER it
+        completes successfully (i.e. without raising) - "successful
+        processing must be the point at which the send generation is
+        acknowledged/consumed... if sync fails, keep generation
+        pending/retryable," exactly the client's own required
+        principle. A retried sync_from_ui call for a Send whose own
+        KDS-side processing previously failed will now correctly
+        re-attempt it, rather than silently treating it as already
+        handled.
         """
         if not isinstance(order_data, dict):
             _logger.info("FlexSys KDS sync_from_ui: skipped a non-dict order entry: %r", order_data)
@@ -782,28 +938,60 @@ class PosOrder(models.Model):
                 "FlexSys KDS sync_from_ui: could not resolve a pos.order record "
                 "for id=%r uuid=%r - skipped.", order_id, order_uuid)
             return
+        # kds_send_generation (see that field's own docstring): the
+        # currently-correct, durable signal for a genuine Send that
+        # survives offline recovery, exclusively under this module's
+        # own control - never touched by an ordinary edit. Read from
+        # the incoming payload defensively (top-level or nested 'data',
+        # matching every other field this method already reads this
+        # way); compared against the order's own last-processed value.
+        # Currently inert in practice until a verified frontend
+        # increment exists (see that field's own docstring for why it
+        # is intentionally shipped this way) - the comparison itself is
+        # always safe: with no frontend yet incrementing it, incoming
+        # and last-processed both stay at their shared default and
+        # never authorize anything on their own.
+        incoming_generation = order_data.get('kds_send_generation')
+        if incoming_generation is None and isinstance(order_data.get('data'), dict):
+            incoming_generation = order_data['data'].get('kds_send_generation')
+        authorized_via_flag = bool(order.kds_preparation_change_requested)
+        authorized_via_generation = (
+            isinstance(incoming_generation, int)
+            and incoming_generation > order.kds_last_processed_send_generation
+        )
         _logger.info(
             "FlexSys KDS sync_from_ui: order #%s kds_preparation_change_requested=%s "
-            "has_content_signature=%s",
-            order.id, order.kds_preparation_change_requested, bool(signature))
-        if not order.kds_preparation_change_requested:
+            "incoming_generation=%r last_processed_generation=%s has_content_signature=%s",
+            order.id, order.kds_preparation_change_requested, incoming_generation,
+            order.kds_last_processed_send_generation, bool(signature))
+        if not authorized_via_flag and not authorized_via_generation:
             _logger.info(
                 "FlexSys KDS sync_from_ui: order #%s - no prior get_preparation_change() "
-                "call recorded, correctly treated as an ordinary save, not a genuine "
-                "Send. Skipped.", order.id)
+                "call recorded and no new kds_send_generation either, correctly treated "
+                "as an ordinary save, not a genuine Send. Skipped.", order.id)
             return
-        # Consumed (cleared) BEFORE the actual sync call, not after -
-        # guarantees idempotency even if _flexsys_kds_sync() itself
-        # were to raise: a retried or overlapping sync_from_ui call for
-        # this same order would still correctly find the flag already
-        # False, never re-triggering on a half-completed attempt.
+        _logger.info(
+            "FlexSys KDS sync_from_ui: order #%s - genuine Send authorized via %s, "
+            "triggering KDS sync.", order.id,
+            'get_preparation_change()' if authorized_via_flag else 'kds_send_generation')
+        # REAL BUG FIX ("SECOND CRITICAL ISSUE"): sync happens FIRST;
+        # authorization marker(s) are only consumed/advanced AFTER it
+        # completes without raising - see this method's own docstring
+        # for the complete explanation. If _flexsys_kds_sync() itself
+        # raises, this exception propagates up to
+        # _flexsys_kds_process_sync_from_ui()'s own per-entry try/except
+        # (isolating it from other orders in the same batch, unchanged
+        # from the earlier fix for that), and - critically - neither
+        # marker below is touched, so the NEXT sync_from_ui call for
+        # this same order (whether an Odoo-level retry or the next
+        # ordinary save) will correctly find this Send still pending
+        # and retry it, rather than having silently lost it.
+        order._flexsys_kds_sync(is_send_write=True)
         order.kds_preparation_change_requested = False
         if signature:
             order.kds_last_processed_send_signal = signature
-        _logger.info(
-            "FlexSys KDS sync_from_ui: order #%s - genuine Send authorized via "
-            "get_preparation_change(), triggering KDS sync.", order.id)
-        order._flexsys_kds_sync(is_send_write=True)
+        if authorized_via_generation:
+            order.kds_last_processed_send_generation = incoming_generation
 
     def _flexsys_kds_cancel(self):
         """AUDIT FIX / NEW REQUIREMENT ("POS Cancellation Propagation",

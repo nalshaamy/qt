@@ -4692,3 +4692,355 @@ class TestPosSync(FlexSysKdsTestCommon):
                           "another KDS sync.")
         self.assertEqual(order.kds_order_id.line_ids.qty, 5,
                           "KDS must still show the last explicitly SENT quantity.")
+
+    # -----------------------------------------------------------------
+    # Dev report "CRITICAL REVIEW - 19.0.7.12.0 OFFLINE FALLBACK IS NOT
+    # SAFE TO DEPLOY": the client's own review correctly proved the
+    # v7.12.0 content-signature fallback was architecturally unsound
+    # ("content changed != cashier pressed Send") and removed it
+    # entirely here, replacing it with kds_send_generation - a durable,
+    # client-controlled counter never touched by an ordinary edit - and
+    # fixed the separate "authorization consumed before delivery"
+    # issue (sync now happens before markers are cleared/advanced, not
+    # after).
+    # -----------------------------------------------------------------
+    def test_ordinary_edit_still_never_authorizes_after_fallback_removal(self):
+        """The core invariant, re-confirmed directly against the exact
+        removed mechanism: an ordinary sync_from_ui call whose own
+        content genuinely differs from the last processed signature -
+        but carries no kds_preparation_change_requested flag and no
+        incremented kds_send_generation - must NOT authorize a sync.
+        This is the exact scenario the client's own review proved the
+        v7.12.0 fallback would have incorrectly authorized."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        order.sudo().kds_preparation_change_requested = True
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'metadata': {'serverDate': '2026-08-18 16:00:00'},
+            }),
+        }])
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        events_before = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+
+        # An ordinary edit: content genuinely differs (qty 5 -> 9), but
+        # NEITHER authorization signal is present - exactly what the
+        # removed fallback would have wrongly authorized via content
+        # comparison alone.
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 9}},
+                'metadata': {'serverDate': '2026-08-18 16:01:00'},
+            }),
+        }])
+
+        kds_order.invalidate_recordset()
+        events_after = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+        self.assertEqual(
+            events_after, events_before,
+            "Content genuinely differing must NOT authorize a sync without an explicit "
+            "signal (flag or generation increment) - the exact invariant the removed "
+            "v7.12.0 fallback violated.")
+        self.assertEqual(kds_order.line_ids.qty, 5,
+                          "KDS must still show the last explicitly SENT quantity, "
+                          "completely unaffected by the ordinary edit's own live content.")
+
+    def test_authorization_not_consumed_if_kds_sync_raises(self):
+        """Required fix: successful KDS processing must be the point at
+        which the Send is acknowledged/consumed - if _flexsys_kds_sync()
+        itself fails, the authorization marker(s) must remain intact so
+        a subsequent retry can still process the Send, rather than
+        having already been marked processed and permanently lost."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        order.sudo().kds_preparation_change_requested = True
+
+        with patch.object(
+            type(order), '_flexsys_kds_sync',
+            side_effect=RuntimeError("simulated KDS sync failure"),
+        ):
+            with self.assertRaises(RuntimeError):
+                order._flexsys_kds_process_one_sync_from_ui_entry({
+                    'uuid': order.uuid,
+                    'last_order_preparation_change': json.dumps({
+                        'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                        'metadata': {'serverDate': '2026-08-18 16:05:00'},
+                    }),
+                })
+
+        order.invalidate_recordset()
+        self.assertTrue(
+            order.kds_preparation_change_requested,
+            "The authorization flag must remain True after a failed sync attempt - "
+            "'if sync fails, keep generation pending/retryable' - not silently "
+            "consumed before the KDS side actually succeeded.")
+
+    def test_authorization_consumed_only_after_successful_sync(self):
+        """The positive case, confirming the fix doesn't just avoid
+        consuming on failure - it still correctly consumes on genuine
+        success, exactly as before."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        order.sudo().kds_preparation_change_requested = True
+
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'metadata': {'serverDate': '2026-08-18 16:10:00'},
+            }),
+        }])
+
+        order.invalidate_recordset()
+        self.assertTrue(order.kds_order_id, "The sync itself still succeeds normally.")
+        self.assertFalse(order.kds_preparation_change_requested,
+                          "Consumed correctly after genuine success.")
+
+    def test_failed_sync_can_be_retried_and_succeeds(self):
+        """The full required principle, end to end: a Send that fails
+        mid-processing remains pending and retryable - a later,
+        successful retry of the SAME entry must still correctly apply
+        it, exactly once."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        order.sudo().kds_preparation_change_requested = True
+        entry = {
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'metadata': {'serverDate': '2026-08-18 16:15:00'},
+            }),
+        }
+
+        with patch.object(
+            type(order), '_flexsys_kds_sync',
+            side_effect=RuntimeError("simulated transient failure"),
+        ):
+            with self.assertRaises(RuntimeError):
+                order._flexsys_kds_process_one_sync_from_ui_entry(entry)
+        order.invalidate_recordset()
+        self.assertFalse(order.kds_order_id, "No ticket yet - the failed attempt created nothing.")
+        self.assertTrue(order.kds_preparation_change_requested, "Still pending.")
+
+        # A later retry of the SAME entry, without the simulated failure.
+        order._flexsys_kds_process_one_sync_from_ui_entry(entry)
+
+        order.invalidate_recordset()
+        self.assertTrue(order.kds_order_id, "The retried Send must now succeed.")
+        self.assertEqual(order.kds_order_id.line_ids.qty, 5)
+        self.assertFalse(order.kds_preparation_change_requested, "Consumed after the successful retry.")
+
+    # -----------------------------------------------------------------
+    # kds_send_generation: the durable, client-controlled counter this
+    # round introduces as the correct fix for offline-Send recovery -
+    # currently shipped as a correct but intentionally inert backend
+    # half (see that field's own docstring for why), tested here for
+    # its own comparison logic directly.
+    # -----------------------------------------------------------------
+    def test_send_generation_default_state_authorizes_nothing(self):
+        """With no frontend yet writing a genuine increment, incoming
+        and last-processed generation both stay at their shared
+        default (0) - confirms this currently-inert design authorizes
+        nothing on its own."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        self.assertEqual(order.kds_send_generation, 0)
+        self.assertEqual(order.kds_last_processed_send_generation, 0)
+
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'metadata': {'serverDate': '2026-08-18 16:20:00'},
+            }),
+        }])
+
+        order.invalidate_recordset()
+        self.assertFalse(order.kds_order_id,
+                          "Generation 0 vs last-processed 0 authorizes nothing.")
+
+    def test_send_generation_increment_authorizes_sync(self):
+        """The intended mechanism, once a genuine increment is present
+        in the incoming payload (simulating what a verified frontend
+        hook would eventually write): a higher generation than last
+        processed authorizes a sync, entirely independent of the
+        kds_preparation_change_requested flag."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        self.assertFalse(order.kds_preparation_change_requested)
+
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'kds_send_generation': 1,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'metadata': {'serverDate': '2026-08-18 16:25:00'},
+            }),
+        }])
+
+        order.invalidate_recordset()
+        self.assertTrue(order.kds_order_id, "generation 1 > last-processed 0 authorizes.")
+        self.assertEqual(order.kds_last_processed_send_generation, 1, "Advanced after success.")
+
+    def test_send_generation_repeated_same_value_is_idempotent(self):
+        """Idempotency for the generation-based path: repeated retries
+        carrying the SAME generation value must not re-trigger."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        payload = [{
+            'uuid': order.uuid,
+            'kds_send_generation': 1,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'metadata': {'serverDate': '2026-08-18 16:30:00'},
+            }),
+        }]
+
+        order._flexsys_kds_process_sync_from_ui(payload)
+        order._flexsys_kds_process_sync_from_ui(payload)
+        order._flexsys_kds_process_sync_from_ui(payload)
+
+        order.invalidate_recordset()
+        self.assertTrue(order.kds_order_id)
+        self.assertEqual(len(order.kds_order_id.line_ids), 1,
+                          "Exactly one line despite three retries of the same generation.")
+
+    def test_send_generation_second_increment_authorizes_delta(self):
+        """A genuine second Send (generation 1 -> 2) correctly applies
+        the next delta, exactly once."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'kds_send_generation': 1,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'metadata': {'serverDate': '2026-08-18 16:35:00'},
+            }),
+        }])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        self.assertEqual(line.qty, 5)
+
+        order.lines.write({'qty': 8})
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'kds_send_generation': 2,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 8}},
+                'metadata': {'serverDate': '2026-08-18 16:36:00'},
+            }),
+        }])
+
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 8)
+        self.assertEqual(line.qty_delta, 3)
+        order.invalidate_recordset()
+        self.assertEqual(order.kds_last_processed_send_generation, 2)
+
+    def test_send_generation_lower_or_equal_value_does_not_authorize(self):
+        """A stale/lower generation value (e.g. an out-of-order retry
+        arriving after a later one already processed) must not
+        re-trigger or regress anything."""
+        order = self._create_active_pos_order([(self.product_burger, 5)])
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'kds_send_generation': 3,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                'metadata': {'serverDate': '2026-08-18 16:40:00'},
+            }),
+        }])
+        kds_order = order.kds_order_id
+        events_before = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+
+        # A stale generation (2 < 3, the last processed) arriving late.
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'kds_send_generation': 2,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 99}},
+                'metadata': {'serverDate': '2026-08-18 16:39:00'},
+            }),
+        }])
+
+        kds_order.invalidate_recordset()
+        events_after = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+        self.assertEqual(events_after, events_before, "A stale generation must not authorize anything.")
+        self.assertEqual(kds_order.line_ids.qty, 5, "Must not regress to the stale payload's own content.")
+
+    def test_send_generation_field_not_stripped_by_sanitization(self):
+        """kds_send_generation is deliberately NOT a server-owned field
+        for sanitization purposes - the POS client is specifically
+        meant to write it. Confirms it survives sanitization while the
+        two genuinely server-owned fields are still stripped."""
+        orders = [{
+            'uuid': 'some-uuid',
+            'kds_send_generation': 5,
+            'kds_preparation_change_requested': False,
+            'kds_last_processed_send_signal': 'stale',
+            'kds_last_processed_send_generation': 999,
+        }]
+
+        sanitized = self.env['pos.order']._flexsys_kds_sanitize_orders_payload(orders)
+
+        self.assertEqual(sanitized[0].get('kds_send_generation'), 5,
+                          "kds_send_generation must survive sanitization - the client is "
+                          "meant to write it.")
+        self.assertNotIn('kds_preparation_change_requested', sanitized[0])
+        self.assertNotIn('kds_last_processed_send_signal', sanitized[0])
+        self.assertNotIn('kds_last_processed_send_generation', sanitized[0],
+                          "This one IS purely server-owned bookkeeping and must still be stripped.")
+
+    # -----------------------------------------------------------------
+    # Dev report "FINAL IMPLEMENTATION REQUEST - Frontend Durable Send
+    # Generation": requirement 6 (kds_send_generation must be loaded
+    # into the POS order model; kds_last_processed_send_generation must
+    # remain server-owned and never loaded to the frontend at all).
+    # -----------------------------------------------------------------
+    def test_load_pos_data_fields_exposes_kds_send_generation(self):
+        """kds_send_generation must be included in the field list the
+        POS session loads at startup - the confirmed, documented Odoo
+        19 pos.load.mixin mechanism, requiring no frontend JS change
+        for the loading/persistence/offline-restore/sync_from_ui-
+        inclusion side of this requirement."""
+        fields_list = self.env['pos.order']._load_pos_data_fields(self.pos_config.id)
+        self.assertIn(
+            'kds_send_generation', fields_list,
+            "kds_send_generation must be loaded into the POS order model - the POS "
+            "client is specifically meant to write and carry this field.")
+
+    def test_load_pos_data_fields_never_exposes_server_owned_generation_field(self):
+        """Required: 'the POS frontend must NEVER increment, decrement,
+        reset, or authoritatively write kds_last_processed_send_generation.'
+        Confirms it is not even loaded into the POS session at all -
+        there is no local copy for the client to read, cache, or write
+        back, regardless of any other protection."""
+        fields_list = self.env['pos.order']._load_pos_data_fields(self.pos_config.id)
+        self.assertNotIn(
+            'kds_last_processed_send_generation', fields_list,
+            "This field must never be loaded into the POS frontend's own local order "
+            "model at all - purely internal server bookkeeping.")
+
+    def test_load_pos_data_fields_never_exposes_other_internal_kds_fields(self):
+        """Required: 'Do not reintroduce frontend ownership of
+        kds_preparation_change_requested, kds_last_processed_send_signal,
+        kds_last_processed_send_generation. Only kds_send_generation is
+        intentionally client-carried.'"""
+        fields_list = self.env['pos.order']._load_pos_data_fields(self.pos_config.id)
+        self.assertNotIn('kds_preparation_change_requested', fields_list)
+        self.assertNotIn('kds_last_processed_send_signal', fields_list)
+        self.assertNotIn('kds_last_processed_send_generation', fields_list)
+        self.assertIn('kds_send_generation', fields_list,
+                       "Only this one field is the intentional exception.")
+
+    def test_load_pos_data_fields_preserves_native_fields(self):
+        """Confirms this override is purely additive - every field the
+        native super() call already returns must still be present,
+        unmodified."""
+        fields_list = self.env['pos.order']._load_pos_data_fields(self.pos_config.id)
+        # A representative sample of fields that must always be present
+        # regardless of this module's own addition - confirms this is
+        # additive, not a replacement of the native list.
+        for expected in ('id', 'name', 'state', 'lines', 'uuid'):
+            self.assertIn(
+                expected, fields_list,
+                f"'{expected}' is a core native field the POS frontend already relies "
+                f"on - this override must never remove or replace the native list, "
+                f"only append to it.")

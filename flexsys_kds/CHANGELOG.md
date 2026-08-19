@@ -8,6 +8,287 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.13.0 — Frontend Durable Send Generation: the missing increment, added narrowly and defensively
+
+**The final piece of the offline-safe KDS Send architecture** - the
+backend half (v7.12.1, explicitly accepted by the client as correct
+and not to be redesigned) is now paired with the one remaining gap: an
+actual increment of `kds_send_generation` at the moment of a genuine
+cashier Send.
+
+### 1. Exact hook
+`PosStore.prototype.sendOrderInPreparation(order, opts)` -
+`static/src/js/flexsys_kds_send_generation.js`. Confirmed directly from
+Odoo 19's own core source
+(`addons/point_of_sale/static/src/app/services/pos_store.js`) to be the
+method the native "Send" action calls, and confirmed by the client's
+own live Network A/B test to be the exact boundary between an ordinary
+edit (zero related calls) and a genuine Send
+(`get_preparation_change` -> `sync_from_ui`).
+
+### 2. Why this point represents a genuine Send
+It is the same method the client's own confirmed evidence already
+identifies as Send-exclusive (the A/B test that led to v7.11.0's own
+`get_preparation_change()`-based design). This patch does not
+introduce a new signal or a new theory about the call chain - it
+increments a field on the exact object (`order`, the method's own first
+parameter - Odoo's own local, offline-first POS order model) already
+proven to be present at the moment of a genuine Send.
+
+### 3. Duplicate-increment prevention
+Not prevented at the frontend layer - deliberately. The backend's own
+authorization comparison (`incoming_generation > kds_last_processed_send_generation`,
+strictly-greater-than, not exact equality) already tolerates a
+multi-step advance without any risk of duplicate processing (v7.12.1's
+own design, unchanged). If this hook is ever invoked more than once for
+a single logical cashier Send (not confirmed either way without direct
+live access), the practical result is, at most, a harmless "skipped"
+generation number - never a duplicate `kds.order`, line, or event, since
+the backend's own idempotency key (`uuid` + `generation`) already
+guarantees each distinct generation value is processed exactly once
+regardless of how many times it happens to arrive.
+
+### 4. Persisted while offline
+The increment is a synchronous, in-memory mutation of the local `order`
+object's own field - no RPC call of its own at all, unlike both
+earlier, now-removed frontend patches (v7.9.3, v7.9.6), which is
+precisely why those failed for the offline case this fix targets.
+Because `kds_send_generation` is loaded into the POS session via
+`_load_pos_data_fields()` (see item 6), Odoo's own offline-first POS
+architecture already handles persisting and restoring this value across
+a disconnect/reconnect or a local browser reload automatically -
+exactly the same way it already does for every other native
+`pos.order` field, `last_order_preparation_change` included.
+
+### 5. How it enters sync_from_ui after reconnect
+Automatically, as part of the SAME order-save payload Odoo's own
+offline queue already reliably retries - no additional code needed;
+this is the entire point of choosing a plain order field over a
+separate RPC call.
+
+### 6. Ordinary edits confirmed never incrementing it
+The increment lives exclusively inside this one patched method. No
+other code path in this delivery touches `kds_send_generation` on the
+frontend side at all - an ordinary edit (quantity change, line
+add/remove, note, modifier) never calls `sendOrderInPreparation()`
+(confirmed by the client's own live A/B test: zero `get_preparation_change`
+calls for an ordinary edit), so it can never reach this increment
+either.
+
+### 7. Server-owned fields confirmed protected
+`kds_last_processed_send_generation` is deliberately NOT added to
+`_load_pos_data_fields()` - it is never loaded into the POS frontend's
+own local order model at all, so there is no local copy for the client
+to read, cache, or write back, in addition to the existing
+`_KDS_SERVER_OWNED_FIELDS` sanitization (v7.11.3, unchanged) that would
+strip it from an incoming payload regardless. `kds_send_generation`
+itself is the one, intentional exception - loaded specifically because
+the POS client is meant to write it.
+
+### New: `_load_pos_data_fields()` override
+Confirmed as Odoo 19's own documented mechanism (`pos.load.mixin`) for
+exposing a field to the POS frontend's own local order model without
+any further frontend JS change - `pos.order` already inherits this
+mixin as a core POS model; this override simply appends
+`kds_send_generation` to the list of its own fields the POS session
+loads at startup, and Odoo's own architecture handles the rest
+(loading, offline persistence, serialization) automatically.
+
+### Files changed
+`models/pos_order.py` (`_load_pos_data_fields()` override; both new
+fields' own docstrings updated to reflect the completed design), new
+`static/src/js/flexsys_kds_send_generation.js`, `__manifest__.py`
+(`point_of_sale._assets_pos` bundle reintroduced, deliberately minimal
+- exactly one file).
+
+### Tests
+4 new tests confirming `_load_pos_data_fields()`'s own exact
+contract: `kds_send_generation` is included; `kds_last_processed_send_generation`
+and the other two purely-internal fields are never included; the
+native field list itself is preserved, not replaced. The frontend
+increment logic itself cannot be tested by this delivery process
+without a live Odoo 19 browser session - stated plainly, not glossed
+over; every part of the backend comparison and idempotency logic it
+feeds into was already covered by v7.12.1's own test suite.
+
+**Total: 353 tests** (up from 349). No database migration required.
+
+**Per the dev report's own explicit final instruction**: this delivery
+does not claim Offline Send Recovery is complete based on these unit
+tests alone. Final acceptance requires the client's own live test:
+disconnect POS internet -> press Send -> reconnect -> `kds.order` must
+appear automatically, exactly once.
+
+---
+
+## v7.12.1 — Removed unsafe offline fallback; added durable kds_send_generation; fixed consume-before-delivery
+
+**Critical correction, from the client's own architectural review of
+v7.12.0, before it was ever deployed to a live instance.** Two
+separate, serious issues, both fixed here.
+
+### Issue 1 - the v7.12.0 content-signature fallback was architecturally unsound
+The client's own review proved it directly: "content changed != cashier
+pressed Send." An ordinary, unsent quantity edit and a genuine Send
+performed while offline both eventually reach the server through
+`sync_from_ui` with content that differs from the last committed KDS
+snapshot - nothing about the content alone can distinguish the two.
+Continuing to compare `last_order_preparation_change`'s own content in
+any form reintroduces the exact "ordinary edit leaks to KDS" bug this
+project spent several earlier rounds (v7.9.1 through v7.11.3)
+confirming and fixing. **The v7.12.0 fallback is removed entirely, not
+adjusted** - the client's own explicit instruction ("do NOT release
+another backend signature fallback") is honored precisely: this round
+does not patch the removed mechanism, it replaces the underlying
+strategy.
+
+### Issue 2 - authorization was consumed before delivery succeeded
+`kds_preparation_change_requested` used to be cleared (and
+`kds_last_processed_send_signal` updated) BEFORE `_flexsys_kds_sync()`
+was called - if that call then failed, the Send would already be
+marked processed, permanently lost with no possibility of retry. Fixed
+by reordering: `_flexsys_kds_sync()` now runs first; the authorization
+marker(s) are only cleared/advanced AFTER it completes without raising.
+A failed attempt leaves the marker(s) untouched, so a subsequent retry
+(Odoo's own or an ordinary re-save) correctly re-attempts it.
+
+### The correct fix for offline-Send recovery: kds_send_generation
+Per the client's own recommended architecture: a durable counter,
+exclusively under this module's own control, that an ordinary edit
+never touches - only a genuine Send would increment it. Being a plain
+field on `pos.order` itself, it rides along on the SAME reliably-
+retried `sync_from_ui` payload the order's own business data already
+uses (confirmed live to survive offline recovery), rather than
+depending on a separate RPC call (`get_preparation_change()`) that
+Odoo's own offline-first architecture doesn't guarantee retrying.
+`kds_last_processed_send_generation` (the server's own bookkeeping of
+what's already been processed) is added alongside it, protected by the
+existing sanitization mechanism (`_KDS_SERVER_OWNED_FIELDS`) -
+`kds_send_generation` itself is deliberately NOT protected, since it's
+specifically meant to be written by the POS client.
+
+**Honest, explicit status - the backend half is correct, the frontend
+half does not exist yet.** No frontend mechanism currently increments
+`kds_send_generation` on Send - the exact missing piece the client's
+own questions 1-4 concern. Shipping the backend comparison logic alone
+is safe regardless: with nothing yet writing a genuinely incrementing
+value, incoming and last-processed generation both stay at their
+shared default (0) and this path authorizes nothing on its own - ready
+to be exercised the moment a verified frontend increment exists,
+without a further backend change at that point. Adding that frontend
+piece without first verifying the correct hook point live would repeat
+this project's own hard-learned lesson from the two frontend patches
+(v7.9.3, v7.9.6) added without that verification and later removed
+entirely in v7.11.0 - not repeated here.
+
+### Files changed
+`models/pos_order.py` (`kds_send_generation`,
+`kds_last_processed_send_generation` fields;
+`_KDS_SERVER_OWNED_FIELDS` updated;
+`_flexsys_kds_process_one_sync_from_ui_entry()`'s own authorization and
+ordering rewritten).
+
+### Tests
+10 new tests, replacing the 5 removed obsolete ones: re-confirms the
+core invariant directly against the exact scenario the removed
+fallback would have violated; the consume-after-success fix (a failed
+sync leaves the marker untouched; a successful one still consumes
+correctly; a failed-then-retried Send succeeds exactly once on retry);
+and the full `kds_send_generation` comparison logic (inert at default
+state; a genuine increment authorizes; repeated retries of the same
+generation are idempotent; a second increment applies the next delta;
+a stale/lower generation never authorizes or regresses; the field
+itself correctly survives payload sanitization while the purely
+server-owned generation-tracking field is still stripped).
+
+**Total: 349 tests** (up from 344, net of 5 removed and 10 added). No
+database migration required - both new fields default to 0, correct
+for every existing record.
+
+---
+
+## v7.12.0 — Offline POS Send recovery: content-signature fallback authorization
+
+**Confirmed live**: create order → disconnect internet → press Send
+while offline → stay offline ~2 minutes → reconnect without refreshing.
+The POS order's own business data reliably recovers, but no
+`kds.order` is ever created - the explicit Send-to-KDS intent is lost
+even though the cashier believes it was sent.
+
+### Root cause
+`get_preparation_change()` is, from Odoo's own core perspective, a
+side-effect-free call that fetches data for the print/preparation flow
+- not a durable write Odoo's own offline-first POS architecture treats
+as needing guaranteed retry, unlike the order's own persisted data
+(delivered through `sync_from_ui`'s own payload), which IS reliably
+queued locally and retried on reconnect (confirmed live: "the POS
+order itself eventually synchronizes back to the server"). If the
+device is offline at the exact moment `get_preparation_change()` is
+called, that specific RPC simply never reaches the server and, unlike
+the order's own save, is never retried - so
+`kds_preparation_change_requested` never gets set, even though the
+cashier's own intent to Send was genuine. The failure occurs before any
+KDS ingestion logic runs at all, exactly as the dev report's own
+diagram describes.
+
+### Fix - a fallback riding on Odoo's own confirmed offline guarantee
+If `kds_preparation_change_requested` is not set, but a `sync_from_ui`
+call's own content signature genuinely differs from
+`kds_last_processed_send_signal` (the last content actually processed
+as an authorized Send), this is now ALSO treated as authorization -
+using the one piece of data confirmed to survive an offline period
+reliably: the order's own persisted `last_order_preparation_change`
+content, delivered through the same `sync_from_ui` retry mechanism
+already proven to recover the order's own business data. No new
+frontend queue is needed - the retried `sync_from_ui` call itself IS
+the retry.
+
+Idempotent by the same construction already in place: the fallback
+updates `kds_last_processed_send_signal` upon triggering, so repeated
+retries of the same content are correctly skipped on subsequent
+attempts - satisfying the required exactly-once guarantee without a
+separate idempotency key, since the content signature itself already
+serves that role.
+
+### Honest, explicitly-documented limitations
+- This is a **backend-only** fix. It directly closes the confirmed
+  symptom (missing `kds.order`), satisfying the dev report's own core
+  requirement ("the fix belongs in POS Send delivery / retry /
+  acknowledgement logic," not the KDS display layer) - but does **not**
+  implement the dev report's own Option B (a durable, explicit
+  "Pending Kitchen Send / Not Sent" UI indicator on the POS register
+  itself) or a full local retry queue (Option A) - both would require
+  frontend JS work this project's own history has repeatedly shown to
+  be high-risk and difficult to verify without direct live access (see
+  the now-entirely-removed v7.9.3/v7.9.6 frontend patches).
+- This fallback's own correctness rests on the assumption that an
+  *ordinary* edit's content does not coincidentally trigger it - not
+  independently re-verified under the current, corrected signature-
+  management code (v7.10.2/v7.11.3's own fixes). Logged at **WARNING**
+  level specifically (contrasting with this method's otherwise
+  INFO-level logging) so this fallback's own real production frequency
+  is directly observable - if it fires unexpectedly often outside
+  genuine offline-recovery scenarios, that's itself actionable evidence
+  for a live investigation, not something assumed away here.
+
+### Files changed
+`models/pos_order.py`
+(`_flexsys_kds_process_one_sync_from_ui_entry()`'s own authorization
+logic extended with the fallback path).
+
+### Tests
+5 new tests: the dev report's own Required Acceptance Tests 1-3
+(offline initial Send recovers without the flag; repeated retries
+produce no duplicates; an offline second Send/delta after an online
+first Send applies exactly once), confirming the fallback correctly
+does nothing when content is genuinely unchanged (not a blanket
+"always sync" fallback), and confirming the fallback path logs at
+WARNING level with a recognizable marker for production monitoring.
+
+**Total: 344 tests** (up from 339). No database migration required.
+
+---
+
 ## v7.11.3 — sync_from_ui: strip server-owned KDS control fields from incoming POS payload before native processing
 
 **Confirmed via the client's own live Network evidence**: after a
