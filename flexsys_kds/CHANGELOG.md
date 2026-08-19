@@ -8,6 +8,76 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.14.2 — Table Send authorization: conservative single-order batch fallback
+
+**Confirmed live**: a genuine Table Send (`context.preparation`
+present, matching the Direct Sale-confirmed signal exactly) was still
+skipped - `direct_sale_uuid_match=False` - because
+`context.current_order_uuid` (`dcc344a3-...`) did NOT match the order
+actually carried in the `sync_from_ui` payload (`ce7e4642-...`).
+`current_order_uuid` appears to reflect some other notion of
+"currently active order in the cashier's own UI" rather than reliably
+identifying which specific order in a given payload is being sent -
+at least for the Table flow.
+
+### Design approved with an explicit, conservative constraint
+`len(orders) == 1` cannot be assumed universally true for every Table
+Send - only confirmed for the one live trace captured. Accepted
+constraint: the fallback authorizes only when the entire `sync_from_ui`
+batch contains **exactly one order** - never wider. A multi-order batch
+under this same condition (`preparation` present, no uuid match) is
+left completely unauthorized via this path, with no attempt to guess
+which order was intended.
+
+### Fix
+`_flexsys_kds_process_sync_from_ui()` now computes `len(orders)` once
+and passes it through as `batch_size` to
+`_flexsys_kds_process_one_sync_from_ui_entry()`. New authorization path,
+evaluated only after the existing uuid-match check (completely
+untouched) fails: `context.preparation` present + `batch_size == 1`
+authorizes the one order in that batch. The same signature-based
+de-duplication rule applies identically to this new path - never an
+independent reason to authorize on its own, only a check against an
+already-established authorization.
+
+### Explicitly not touched, per the client's own strict scope
+No blind UUID-check removal, no content-difference-as-authorization, no
+new JS hook, no `kds_send_generation` change, no routing change, no
+independent KDS-creation-logic change (none found necessary - the
+Table flow entry never reached that logic before this fix, since
+authorization itself was never granted), no change to the now-working
+Direct Sale uuid-match path.
+
+### Files changed
+`models/pos_order.py` only
+(`_flexsys_kds_process_sync_from_ui()` passes `batch_size`;
+`_flexsys_kds_process_one_sync_from_ui_entry()`'s own authorization
+logic gains the conservative single-order fallback).
+
+### Tests
+6 new/updated tests, covering exactly the client's own required 5
+scenarios plus one more: preparation + uuid match still authorizes (the
+unchanged existing path); preparation + uuid mismatch + single order
+authorizes (the exact confirmed live Table Send scenario); preparation
++ uuid mismatch + multiple orders skips safely, authorizing neither;
+no preparation + single order still skips; a repeated authorized sync
+with the same signature produces no duplicate; and Direct Sale itself
+confirmed completely unaffected. One earlier test
+(`test_direct_sale_context_uuid_mismatch_does_not_authorize`) was
+corrected - it exercised exactly the single-order-batch scenario that
+is now, correctly, authorized per the client's own accepted design; it
+is updated to test the one case that remains correctly unauthorized (a
+genuinely multi-order batch under the same condition).
+
+**Total: 374 tests** (up from 368). No database migration required.
+
+**Next**: per the client's own stated plan, live re-test in this exact
+order - Table Online Send (confirm one `kds.order`, correct station),
+then Direct Sale Online (confirm still unaffected), then proceed
+directly to Offline/Retry testing if both pass.
+
+---
+
 ## v7.14.1 — Direct Sale context extraction fixed: self.env.context, not a context= kwarg
 
 **Confirmed live via the client's own Network payload + server log

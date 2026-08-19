@@ -1,33 +1,32 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.14.1**
+**Version: 19.0.7.14.2**
 **Status as of this document: code-complete, including everything
-through v7.14.0 (see CHANGELOG.md for the full history), plus a
-one-line correction found via the client's own confirmed live Network
-payload + server log evidence: v7.14.0's own live test still failed -
-a Direct Sale order with confirmed-matching `context.preparation` and
-`context.current_order_uuid` in the actual wire payload still logged
-`direct_sale_context_present=False`. Root cause: `context` on an Odoo
-RPC call is Odoo's own standard, call-wide context mechanism (the same
-one carrying `lang`/`tz`/`active_id` on every call) - consumed by
-Odoo's own `call_kw` dispatch layer and applied to `self.env.context`
-via `with_context(...)` **before** the model method runs, never
-delivered as an explicit `context=` keyword argument inside `**kwargs`
-at all. `kwargs.get('context')` was therefore guaranteed to find
-nothing regardless of the real payload. Fixed by reading
-`self.env.context` instead - the correct, standard mechanism. Minimally
-scoped exactly as requested: no new hook, no architecture change, no
-content-signature-as-authorization, no `kds_send_generation` change, no
-routing or KDS-creation-logic change (none independently needed - the
-entry never reached that logic at all, since authorization was never
-granted). 368 automated tests, all `py_compile`/XML/JS checks passing,
-plus a custom AST-based undefined-name sweep. **Required before this
-can be closed**: the client's own repeat of the live test, confirming
-`direct_sale_context_present=True` and `direct_sale_uuid_match=True`
-in the server log, and exactly one `kds.order` created and appearing
-correctly at the right station. Not yet signed off on a live instance
-— see "What still needs a human" at the
-end.**
+through v7.14.1 (see CHANGELOG.md for the full history), plus a
+conservative fix for the Table Send flow, confirmed live to still fail
+even after v7.14.1's own extraction fix - `context.preparation` was
+genuinely present, but `context.current_order_uuid` did not match the
+order actually carried in the `sync_from_ui` payload for a genuine
+Table Send (`current_order_uuid` appears to reflect some other notion
+of "currently active order in the cashier's UI" rather than reliably
+identifying the specific order in a given payload, at least for this
+flow). New authorization path, added with an explicit, client-accepted
+conservative constraint: `context.preparation` present + the entire
+`sync_from_ui` batch containing **exactly one order** authorizes that
+one order - a multi-order batch under the same condition is left
+completely unauthorized, with no attempt to guess which order was
+intended. The existing, working uuid-match check (Direct Sale) is
+completely untouched. Minimally scoped exactly as requested: no blind
+UUID-check removal, no content-difference-as-independent-authorization,
+no new JS hook, no `kds_send_generation` change, no routing or
+KDS-creation-logic change. 374 automated tests, all
+`py_compile`/XML/JS checks passing, plus a custom AST-based
+undefined-name sweep. **Next planned live test sequence, per the
+client's own stated plan**: Table Online Send (confirm one `kds.order`,
+correct station) → Direct Sale Online (confirm unaffected) → if both
+pass, proceed directly to Offline/Retry testing to close the file. Not
+yet signed off on a live instance — see "What still needs a human" at
+the end.**
 
 
 This document maps directly to that request's own section structure
@@ -1261,6 +1260,39 @@ separately unconfirmed either way (per v7.14.0's own honest status,
 unchanged) - the `kds_send_generation` fallback architecture remains
 fully intact for that scenario if needed.
 
+## Table Send authorization: conservative single-order batch fallback (v7.14.2)
+**Confirmed live**: even after v7.14.1's own extraction fix, a genuine
+Table Send still failed - `context.preparation` genuinely present, but
+`context.current_order_uuid` did not match the order in the actual
+`sync_from_ui` payload. `current_order_uuid` appears to reflect some
+other notion of "currently active order in the cashier's UI" rather
+than reliably identifying which order in a given payload is being sent
+- at least for this flow.
+
+**Design approved with an explicit, client-accepted conservative
+constraint**: `len(orders) == 1` cannot be assumed universally true for
+every Table Send - only confirmed for the one live trace captured. The
+fallback therefore authorizes only when the entire batch contains
+exactly one order; a multi-order batch under the same condition is left
+completely unauthorized, never guessing which order was intended.
+
+**Fix**: `_flexsys_kds_process_sync_from_ui()` computes `len(orders)`
+once and passes it through as `batch_size`. New authorization path,
+evaluated only after the existing (unchanged) uuid-match check fails:
+`preparation` present + `batch_size == 1` authorizes that one order.
+Signature-based de-duplication applies identically - never an
+independent authorization reason.
+
+**Explicitly not touched**: no blind UUID-check removal, no
+content-difference-as-independent-authorization, no new JS hook, no
+`kds_send_generation` change, no routing change, no independent
+KDS-creation-logic change, no change to the Direct Sale path.
+
+**What still needs a human - the client's own stated next sequence**:
+Table Online Send (confirm one `kds.order`, correct station) → Direct
+Sale Online (confirm unaffected) → if both pass, proceed directly to
+Offline/Retry testing to close this file.
+
 ---
 
 ## What still needs a human
@@ -1524,7 +1556,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 368 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 374 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

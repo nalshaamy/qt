@@ -5247,20 +5247,38 @@ class TestPosSync(FlexSysKdsTestCommon):
                           "all present, must never trigger a sync.")
         self.assertEqual(kds_order.line_ids.qty, 3)
 
-    def test_direct_sale_context_uuid_mismatch_does_not_authorize(self):
+    def test_direct_sale_context_uuid_mismatch_multiple_orders_does_not_authorize(self):
         """A context.preparation present but current_order_uuid pointing
-        at a DIFFERENT uuid than this specific order's own must not
-        authorize this order."""
+        at a DIFFERENT uuid, WITH more than one order in the batch,
+        must not authorize this order - superseded from an earlier,
+        now-incorrect assumption: a single-order batch under this exact
+        condition IS now correctly authorized via the conservative
+        Table Send fallback (see
+        test_table_send_preparation_uuid_mismatch_single_order_authorizes),
+        confirmed live and explicitly accepted by the client. This test
+        is updated to the one case that remains correctly unauthorized:
+        a genuinely multi-order batch, where guessing which order was
+        intended is never safe."""
         order = self._create_active_pos_order([(self.product_burger, 3)])
+        other_order = self._create_active_pos_order([(self.product_cappuccino, 1)])
 
-        order._flexsys_kds_process_sync_from_ui(
-            [{
-                'uuid': order.uuid,
-                'last_order_preparation_change': json.dumps({
-                    'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 3}},
-                    'metadata': {'serverDate': '2026-08-19 10:20:00'},
-                }),
-            }],
+        order.env['pos.order']._flexsys_kds_process_sync_from_ui(
+            [
+                {
+                    'uuid': order.uuid,
+                    'last_order_preparation_change': json.dumps({
+                        'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 3}},
+                        'metadata': {'serverDate': '2026-08-19 10:20:00'},
+                    }),
+                },
+                {
+                    'uuid': other_order.uuid,
+                    'last_order_preparation_change': json.dumps({
+                        'lines': {'line-b': {'product_id': self.product_cappuccino.id, 'quantity': 1}},
+                        'metadata': {'serverDate': '2026-08-19 10:20:00'},
+                    }),
+                },
+            ],
             context={'preparation': {'process_order_options': {}}, 'current_order_uuid': 'some-other-uuid'},
         )
 
@@ -5507,3 +5525,177 @@ class TestPosSync(FlexSysKdsTestCommon):
                          "The table/restaurant flag-based authorization path must remain "
                          "completely unaffected by this round's Direct Sale-specific fix.")
         self.assertEqual(order.kds_order_id.line_ids.qty, 2)
+
+    # -----------------------------------------------------------------
+    # Dev report "نتيجة الاختبار الحي - Table Send": confirmed live that
+    # for a genuine Table Send, context.preparation was present but
+    # context.current_order_uuid did NOT match the order actually
+    # carried in the payload. Conservative fallback, accepted with an
+    # explicit constraint: preparation present + uuid mismatch +
+    # batch_size == 1 -> authorize the one order; batch_size > 1 ->
+    # never guess, skip safely. The existing uuid-match path (Direct
+    # Sale) is completely untouched.
+    # -----------------------------------------------------------------
+    def test_table_send_preparation_uuid_match_still_authorizes(self):
+        """Required Test 1: preparation + UUID match -> authorize
+        (the existing, unchanged Direct Sale path)."""
+        order = self._create_active_pos_order([(self.product_burger, 2)])
+
+        order._flexsys_kds_process_sync_from_ui(
+            [{
+                'uuid': order.uuid,
+                'last_order_preparation_change': json.dumps({
+                    'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 2}},
+                    'metadata': {'serverDate': '2026-08-19 12:00:00'},
+                }),
+            }],
+            context={'preparation': {'process_order_options': {}}, 'current_order_uuid': order.uuid},
+        )
+
+        order.invalidate_recordset()
+        self.assertTrue(order.kds_order_id)
+        self.assertEqual(order.kds_order_id.line_ids.qty, 2)
+
+    def test_table_send_preparation_uuid_mismatch_single_order_authorizes(self):
+        """Required Test 2 (the exact confirmed live Table Send
+        scenario): preparation present + UUID mismatch + single order
+        in the batch -> authorize the one order via the conservative
+        fallback."""
+        order = self._create_active_pos_order([(self.product_burger, 2)])
+
+        order._flexsys_kds_process_sync_from_ui(
+            [{
+                'uuid': order.uuid,
+                'last_order_preparation_change': json.dumps({
+                    'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 2}},
+                    'metadata': {'serverDate': '2026-08-19 12:05:00'},
+                }),
+            }],
+            # Exactly the client's own confirmed live values: two
+            # genuinely different uuids.
+            context={
+                'preparation': {'process_order_options': {}},
+                'current_order_uuid': 'dcc344a3-a3a0-45e5-b430-19ff48a458bc',
+            },
+        )
+
+        order.invalidate_recordset()
+        self.assertTrue(
+            order.kds_order_id,
+            "preparation present + uuid mismatch + batch_size==1 must authorize the one "
+            "order in the batch via the conservative fallback - the exact confirmed live "
+            "Table Send scenario.")
+        self.assertEqual(order.kds_order_id.line_ids.qty, 2)
+
+    def test_table_send_preparation_uuid_mismatch_multiple_orders_skips_safely(self):
+        """Required Test 3: preparation present + UUID mismatch +
+        MULTIPLE orders in the batch -> skip safely, never guess which
+        order was intended."""
+        order_a = self._create_active_pos_order([(self.product_burger, 1)])
+        order_b = self._create_active_pos_order([(self.product_cappuccino, 1)])
+
+        order_a.env['pos.order']._flexsys_kds_process_sync_from_ui(
+            [
+                {
+                    'uuid': order_a.uuid,
+                    'last_order_preparation_change': json.dumps({
+                        'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 1}},
+                        'metadata': {'serverDate': '2026-08-19 12:10:00'},
+                    }),
+                },
+                {
+                    'uuid': order_b.uuid,
+                    'last_order_preparation_change': json.dumps({
+                        'lines': {'line-b': {'product_id': self.product_cappuccino.id, 'quantity': 1}},
+                        'metadata': {'serverDate': '2026-08-19 12:10:00'},
+                    }),
+                },
+            ],
+            context={
+                'preparation': {'process_order_options': {}},
+                'current_order_uuid': 'some-third-uuid-matching-neither',
+            },
+        )
+
+        order_a.invalidate_recordset()
+        order_b.invalidate_recordset()
+        self.assertFalse(
+            order_a.kds_order_id,
+            "With more than one order in the batch and no uuid match, neither order must "
+            "be authorized via this fallback - never guess which order was intended.")
+        self.assertFalse(order_b.kds_order_id)
+
+    def test_no_preparation_single_order_still_skips(self):
+        """Required Test 4: no preparation + single order -> skip
+        (confirms the fallback requires preparation to be genuinely
+        present - a single-order batch alone is never sufficient on
+        its own)."""
+        order = self._create_active_pos_order([(self.product_burger, 2)])
+
+        order._flexsys_kds_process_sync_from_ui(
+            [{
+                'uuid': order.uuid,
+                'last_order_preparation_change': json.dumps({
+                    'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                    'metadata': {'serverDate': '2026-08-19 12:15:00'},
+                }),
+            }],
+            context=None,
+        )
+
+        order.invalidate_recordset()
+        self.assertFalse(order.kds_order_id)
+
+    def test_table_fallback_repeated_sync_same_signature_no_duplicate(self):
+        """Required Test 5: repeated authorized sync with the same
+        signature -> no duplicate. Confirms the existing de-duplication
+        rule applies identically to this new fallback path."""
+        order = self._create_active_pos_order([(self.product_burger, 2)])
+        payload = [{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 2}},
+                'metadata': {'serverDate': '2026-08-19 12:20:00'},
+            }),
+        }]
+        context = {
+            'preparation': {'process_order_options': {}},
+            'current_order_uuid': 'dcc344a3-a3a0-45e5-b430-19ff48a458bc',
+        }
+
+        order._flexsys_kds_process_sync_from_ui(payload, context=context)
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        events_before = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+
+        # Repeated delivery of the exact same sync_from_ui call.
+        order._flexsys_kds_process_sync_from_ui(payload, context=context)
+
+        kds_order.invalidate_recordset()
+        events_after = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+        self.assertEqual(events_after, events_before,
+                          "A repeated delivery of the same already-processed content, via "
+                          "the single-order fallback path, must not create a duplicate.")
+        self.assertEqual(len(kds_order.line_ids), 1)
+        self.assertEqual(kds_order.line_ids.qty, 2)
+
+    def test_direct_sale_flow_unaffected_by_table_fallback(self):
+        """Confirms Direct Sale (the exact uuid-match path) remains
+        completely unaffected by the new fallback - correctly bypassed
+        entirely when the uuid genuinely matches."""
+        order = self._create_active_pos_order([(self.product_burger, 3)])
+
+        order._flexsys_kds_process_sync_from_ui(
+            [{
+                'uuid': order.uuid,
+                'last_order_preparation_change': json.dumps({
+                    'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 3}},
+                    'metadata': {'serverDate': '2026-08-19 12:25:00'},
+                }),
+            }],
+            context={'preparation': {'process_order_options': {}}, 'current_order_uuid': order.uuid},
+        )
+
+        order.invalidate_recordset()
+        self.assertTrue(order.kds_order_id)
+        self.assertEqual(order.kds_order_id.line_ids.qty, 3)

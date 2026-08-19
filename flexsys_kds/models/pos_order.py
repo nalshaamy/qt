@@ -896,18 +896,27 @@ class PosOrder(models.Model):
         each entry's own processing unmodified - never read, written,
         or interpreted at this level; only
         `_flexsys_kds_process_one_sync_from_ui_entry()` acts on it.
+
+        REAL BUG FIX ("نتيجة الاختبار الحي - Table Send"): the batch's
+        own size (`len(orders)`) is computed once here and passed
+        through to each entry's own processing alongside `context` -
+        needed for the conservative Table-flow fallback authorization
+        path; see that method's own docstring for the complete
+        explanation and its own explicit, narrow scope.
         """
         self = self.sudo()
+        batch_size = len(orders or [])
         for order_data in (orders or []):
             try:
-                self._flexsys_kds_process_one_sync_from_ui_entry(order_data, context=context)
+                self._flexsys_kds_process_one_sync_from_ui_entry(
+                    order_data, context=context, batch_size=batch_size)
             except Exception:
                 _logger.exception(
                     "FlexSys KDS: failed processing one sync_from_ui order entry "
                     "(isolated to this entry only - other orders in the same "
                     "batch are unaffected). Entry: %r", order_data)
 
-    def _flexsys_kds_process_one_sync_from_ui_entry(self, order_data, context=None):
+    def _flexsys_kds_process_one_sync_from_ui_entry(self, order_data, context=None, batch_size=None):
         """REAL BUG FIX ("CONFIRMED LIVE NETWORK RESULT"): authorization
         is based exclusively on `kds_preparation_change_requested` (set
         by `get_preparation_change()`'s own override, consumed here) -
@@ -1080,20 +1089,76 @@ class PosOrder(models.Model):
             and signature
             and signature != order.kds_last_processed_send_signal
         )
+        # REAL BUG FIX ("نتيجة الاختبار الحي - Table Send"), confirmed
+        # live: for a genuine Table Send, `context.preparation` was
+        # confirmed present, but `context.current_order_uuid` did NOT
+        # match the order actually carried in the sync_from_ui payload
+        # (`ce7e4642-...` vs `dcc344a3-...`) - the field appears to
+        # reflect some other notion of "currently active order in the
+        # cashier's own UI" rather than reliably identifying which
+        # specific order in THIS payload is being sent, at least for
+        # the Table flow. The client's own explicit design, accepted
+        # with an explicit conservative constraint after confirming
+        # `len(orders) == 1` for the one live Table Send trace captured
+        # so far (NOT proven true for every possible Table Send,
+        # deliberately not assumed to be): when `preparation` is
+        # present but the uuid does not match, and this sync_from_ui
+        # call's own entire batch contains EXACTLY one order, that one
+        # order is authorized - "if the payload contains more than one
+        # Order, do not authorize any entry through this path... do not
+        # widen the logic to guess which Order in a multi-order batch."
+        # A multi-order batch under this exact condition is left
+        # completely unauthorized via this path - `authorized_via_flag`
+        # and `authorized_via_generation` remain fully available as
+        # normal for any such order.
+        #
+        # The existing uuid-match path above is completely untouched -
+        # still the FIRST, preferred check, still exactly what
+        # authorizes Direct Sale correctly; this is purely an
+        # additional, narrower fallback for when that check fails but
+        # the batch's own shape makes the intended order unambiguous
+        # anyway. The same signature-based de-duplication rule applies
+        # here identically - a repeated delivery of the same
+        # already-processed content is still correctly recognized and
+        # skipped, never re-processed.
+        authorized_via_table_single_order_fallback = (
+            context_preparation_present
+            and not authorized_via_direct_sale_context
+            and batch_size == 1
+            and signature
+            and signature != order.kds_last_processed_send_signal
+        )
         _logger.info(
             "FlexSys KDS sync_from_ui: order #%s kds_preparation_change_requested=%s "
             "incoming_generation=%r last_processed_generation=%s "
-            "direct_sale_context_present=%s direct_sale_uuid_match=%s has_content_signature=%s",
+            "direct_sale_context_present=%s direct_sale_uuid_match=%s "
+            "batch_size=%r table_single_order_fallback=%s has_content_signature=%s",
             order.id, order.kds_preparation_change_requested, incoming_generation,
             order.kds_last_processed_send_generation, context_preparation_present,
-            authorized_via_direct_sale_context, bool(signature))
-        if not authorized_via_flag and not authorized_via_generation and not authorized_via_direct_sale:
-            if authorized_via_direct_sale_context and not authorized_via_direct_sale:
+            authorized_via_direct_sale_context, batch_size,
+            authorized_via_table_single_order_fallback, bool(signature))
+        if (
+            not authorized_via_flag
+            and not authorized_via_generation
+            and not authorized_via_direct_sale
+            and not authorized_via_table_single_order_fallback
+        ):
+            if context_preparation_present and not authorized_via_direct_sale_context and batch_size != 1:
                 _logger.info(
-                    "FlexSys KDS sync_from_ui: order #%s - Direct Sale context matched "
-                    "this order's own uuid, but the content signature is unchanged from "
-                    "the last processed Send - correctly treated as a duplicate delivery "
-                    "of an already-handled Send, not a new one. Skipped.", order.id)
+                    "FlexSys KDS sync_from_ui: order #%s - preparation context present "
+                    "but uuid did not match and this batch contains more than one order "
+                    "(batch_size=%r) - correctly left unauthorized rather than guessing "
+                    "which order in a multi-order batch was intended. Skipped.",
+                    order.id, batch_size)
+            elif (
+                (authorized_via_direct_sale_context or batch_size == 1)
+                and context_preparation_present
+            ):
+                _logger.info(
+                    "FlexSys KDS sync_from_ui: order #%s - preparation context matched "
+                    "(via uuid or the single-order fallback), but the content signature "
+                    "is unchanged from the last processed Send - correctly treated as a "
+                    "duplicate delivery, not a new Send. Skipped.", order.id)
             else:
                 _logger.info(
                     "FlexSys KDS sync_from_ui: order #%s - no prior get_preparation_change() "
@@ -1105,8 +1170,10 @@ class PosOrder(models.Model):
             authorization_source = 'get_preparation_change()'
         elif authorized_via_generation:
             authorization_source = 'kds_send_generation'
+        elif authorized_via_direct_sale:
+            authorization_source = 'Direct Sale sync_from_ui context (uuid match)'
         else:
-            authorization_source = 'Direct Sale sync_from_ui context'
+            authorization_source = 'Table Send sync_from_ui context (single-order batch fallback)'
         _logger.info(
             "FlexSys KDS sync_from_ui: order #%s - genuine Send authorized via %s, "
             "triggering KDS sync.", order.id, authorization_source)
