@@ -1,6 +1,6 @@
 {
     'name': 'FlexSys KDS',
-    'version': '19.0.7.14.2',
+    'version': '19.0.7.15.0',
     'category': 'Point of Sale',
     'summary': 'Multi-station Kitchen Display System for Odoo POS',
     'description': """
@@ -89,13 +89,28 @@ Technical module name: flexsys_kds
         # have broken POS startup entirely
         # ("TypeError: Cannot read properties of undefined (reading
         # 'currency_id')" inside Odoo's own PosStore.processServerData()).
-        # Both pieces are removed here - see models/pos_order.py's own
+        # Both pieces were removed - see models/pos_order.py's own
         # matching comment (kds_send_generation's field docstring) for
-        # the complete root-cause discussion and the currently-honest
-        # status of this still-open requirement. This module is once
-        # again entirely backend-only, touching no POS register
-        # frontend code at all - the same confirmed-safe state as
-        # v7.12.1.
+        # the complete root-cause discussion. The
+        # _load_pos_data_fields() override specifically was the
+        # confirmed problem - the sendOrderInPreparation() hook point
+        # itself was never implicated and has since been reused safely
+        # below.
+        #
+        # REAL BUG FIX ("Offline Recovery - نتيجة الاختبار الحي"):
+        # reintroduced here, deliberately minimal - exactly ONE file,
+        # patching the SAME confirmed-safe sendOrderInPreparation()
+        # hook point (no field-loading override this time - the
+        # confirmed cause of the v7.13.0 crash) to persist an explicit
+        # "Pending Kitchen Send" warning in plain browser localStorage
+        # (entirely independent of any Odoo data model or field) when a
+        # Send fails while offline, and to re-show that warning on
+        # reconnect. No silent auto-retry, no false success indication
+        # - see that file's own top-of-file comment for the complete
+        # explanation.
+        'point_of_sale._assets_pos': [
+            'flexsys_kds/static/src/js/flexsys_kds_offline_send_warning.js',
+        ],
     },
     'installable': True,
     'application': True,

@@ -8,6 +8,83 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.15.0 — Offline Recovery: Explicit Pending Kitchen Send Warning (no silent auto-retry)
+
+**Confirmed live**: `sync_from_ui` is not automatically retried by
+Odoo 19's own POS after a reconnect for a Send pressed while offline -
+"لا يوجد Automatic RPC retry بعد Reconnect في هذا السيناريو." This
+invalidated the assumption (relied on by v7.12.1's own offline-recovery
+design) that Odoo's own offline-first order persistence reliably
+carries every aspect of a pending Send through to an automatic retry.
+
+### Approved design (Option 2, explicitly): a durable, explicit warning - not silent auto-retry
+Per the client's own explicit direction: build the safest possible
+fix first (zero silent data loss, guaranteed technically), and defer
+automatic re-sync to a future round, only once a confirmed-reliable
+Odoo 19 re-sync method is independently identified - not attempted this
+round.
+
+### Implementation - deliberately the lowest-risk possible, given this project's own history
+New `static/src/js/flexsys_kds_offline_send_warning.js`, patching the
+SAME confirmed-safe `PosStore.prototype.sendOrderInPreparation` hook
+point already used safely in an earlier round (the file that used it
+for a different purpose, `flexsys_kds_send_generation.js`, was itself
+removed in v7.13.1 for unrelated reasons - the hook point's own safety
+was never in question; only the separate `_load_pos_data_fields()`
+override in that same round was the confirmed crash cause).
+
+- **Pending marker**: plain browser `localStorage`, entirely
+  independent of any Odoo data model, record, or field - cannot
+  conflict with, corrupt, or even be visible to any Odoo POS data-
+  loading or serialization mechanism.
+- **Detection**: checked both proactively (`navigator.onLine`, a
+  standard browser API, checked before the native call - covers a
+  scenario where Odoo's own offline handling might resolve locally
+  without throwing at all) and reactively (a caught exception from the
+  native call) - two independent signals, neither assuming exactly how
+  the native method behaves when offline.
+- **Warning display**: Odoo's own standard, widely-used notification
+  service (`notification.add(..., {sticky: true})`) - a stable,
+  well-documented OWL/Odoo pattern, not an uncertain internal mechanism
+  like the one that caused the v7.13.0 crash.
+- **Reconnect**: the standard browser `online` window event re-shows
+  the warning if anything is still pending - never auto-retries.
+- **Clearing**: only after `super().sendOrderInPreparation()` completes
+  without raising - matching this module's own established "acknowledge
+  only after genuine success" principle used throughout the backend.
+- Every piece wrapped in its own try/catch; `super()`'s own call,
+  return value, and thrown-error behavior are never suppressed or
+  altered - only observed from the outside.
+
+### Explicitly not implemented this round, per the client's own direction
+No silent auto-retry. No change to Online Table/Direct Sale flows
+(v7.14.2's own backend authorization logic completely untouched). No
+routing, reconciliation, retention, or delta-logic change.
+
+### Files changed
+New `static/src/js/flexsys_kds_offline_send_warning.js`,
+`__manifest__.py` (`point_of_sale._assets_pos` bundle reintroduced,
+deliberately minimal - exactly one new file, no field-loading override
+this time).
+
+### Tests - honestly scoped
+1 new structural test, confirming the file exists on disk and is
+correctly listed in the manifest's own POS asset bundle. The file's own
+actual runtime behavior (the `localStorage` pending-flag logic, the
+sticky notification, the reconnect listener) is genuinely frontend
+browser behavior this Python/Odoo test suite cannot execute or verify
+at all - stated plainly, not glossed over or silently skipped.
+
+**Total: 375 tests** (up from 374). No database migration required -
+no new fields, no backend logic changed this round.
+
+**Required before this can be considered closed**: the client's own
+live Acceptance Test - Offline → Send → Pending warning shown;
+Reconnect → warning remains; cashier presses Send again → KDS receives
+the order exactly once → warning clears; no duplicates.
+
+---
+
 ## v7.14.2 — Table Send authorization: conservative single-order batch fallback
 
 **Confirmed live**: a genuine Table Send (`context.preparation`

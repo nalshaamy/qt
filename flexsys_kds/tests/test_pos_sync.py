@@ -5699,3 +5699,41 @@ class TestPosSync(FlexSysKdsTestCommon):
         order.invalidate_recordset()
         self.assertTrue(order.kds_order_id)
         self.assertEqual(order.kds_order_id.line_ids.qty, 3)
+
+    # -----------------------------------------------------------------
+    # Dev report "Offline Recovery - نتيجة الاختبار الحي" (approved
+    # Option 2: Explicit Pending/Failed Kitchen Send Warning): the
+    # actual warning-display logic lives entirely in
+    # static/src/js/flexsys_kds_offline_send_warning.js - genuinely
+    # frontend browser behavior (localStorage, the 'online' window
+    # event, a notification service call) that this Python/Odoo test
+    # suite cannot execute or verify at all. Honestly documented here,
+    # not silently skipped: this single structural test confirms the
+    # file exists and is correctly wired into the manifest's own POS
+    # asset bundle - the only part of this round's own change safely
+    # verifiable from this delivery process without a live browser
+    # session.
+    # -----------------------------------------------------------------
+    def test_offline_send_warning_js_file_present_and_wired_in_manifest(self):
+        """Confirms the new frontend file exists on disk and is listed
+        in __manifest__.py's own point_of_sale._assets_pos bundle. Does
+        NOT and cannot verify the file's own runtime behavior (the
+        localStorage pending-flag logic, the sticky notification, the
+        reconnect listener) - that requires a live Odoo 19 browser
+        session, honestly out of reach for this test suite."""
+        import os
+        module_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        js_path = os.path.join(
+            module_root, 'static', 'src', 'js', 'flexsys_kds_offline_send_warning.js')
+        self.assertTrue(
+            os.path.isfile(js_path),
+            f"Expected the new frontend file at {js_path!r} to exist.")
+
+        manifest_path = os.path.join(module_root, '__manifest__.py')
+        with open(manifest_path, encoding='utf-8') as f:
+            manifest = eval(f.read())
+        pos_assets = manifest.get('assets', {}).get('point_of_sale._assets_pos', [])
+        self.assertIn(
+            'flexsys_kds/static/src/js/flexsys_kds_offline_send_warning.js', pos_assets,
+            "The new file must be listed in the point_of_sale._assets_pos bundle, or "
+            "it will never actually load in the POS register.")
