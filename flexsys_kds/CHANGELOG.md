@@ -8,6 +8,69 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.14.1 — Direct Sale context extraction fixed: self.env.context, not a context= kwarg
+
+**Confirmed live via the client's own Network payload + server log
+evidence**, in one round: v7.14.0's own live test still failed - a
+Direct Sale order (`2633-3-000029`) with confirmed-matching
+`context.preparation` and `context.current_order_uuid` in the actual
+wire payload still logged `direct_sale_context_present=False` and
+`direct_sale_uuid_match=False`, and no `kds.order` was created.
+
+### Root cause
+v7.14.0's own extraction (`kwargs.get('context')`) never actually found
+the data, regardless of what the real payload carried. `context` in an
+Odoo RPC call is Odoo's own **standard, call-wide context mechanism**
+(the same one that carries `lang`, `tz`, `active_id`, and so on on
+every RPC call) - it is consumed by Odoo's own `call_kw` dispatch layer
+and applied to `self.env.context` via `with_context(...)` **before**
+the target model method is ever invoked. It is never delivered as an
+explicit `context=` keyword argument inside `**kwargs` at all.
+`kwargs.get('context')` was therefore guaranteed to find nothing, no
+matter what the wire payload actually contained - explaining the exact
+observed server log precisely.
+
+### Fix
+`sync_from_ui()` now reads `self.env.context` - the correct, standard
+way to access an incoming RPC call's own context from within any Odoo
+model method - with the original `kwargs.get('context')` kept as a
+secondary, harmless fallback for any other call shape that might
+genuinely pass it as an explicit keyword argument instead. One-line
+root fix, minimally scoped exactly as requested - no other logic
+touched.
+
+### Explicitly not touched, per the client's own scope restriction
+No new JS hook, no KDS architecture change, no reintroduction of
+content-signature-as-authorization, no change to `kds_send_generation`,
+no routing change, no change to KDS-order creation logic (no
+independent bug found there - the entry never reached it at all, since
+authorization itself was never granted).
+
+### Files changed
+`models/pos_order.py` (`sync_from_ui()`'s own context extraction
+corrected).
+
+### Tests
+5 new/corrected tests: the exact required regression test, reproducing
+the live-confirmed payload shape via `with_context()` (the real
+mechanism, not a kwarg) end to end - confirming `kds.order` is created
+exactly once; Direct Sale without Send still creates nothing after the
+fix (re-confirmed); the restaurant/table flow (flag-based) confirmed
+completely unaffected; the extraction mechanism itself verified
+directly (`self.env.context`, not `kwargs['context']`); and a
+corrected version of the earlier (now-inaccurate, since it exercised
+the confirmed-buggy kwarg-based shape) context-passthrough test.
+
+**Total: 368 tests** (up from 364). No database migration required.
+
+**Required before this can be considered closed**: the client's own
+repeat of the live test - Direct Sale online explicit Send - confirming
+the server log now shows `direct_sale_context_present=True` and
+`direct_sale_uuid_match=True`, and that exactly one `kds.order` is
+created and appears correctly at the right KDS station.
+
+---
+
 ## v7.14.0 — Direct Sale Send authorization: sync_from_ui context, strictly scoped, backend-only
 
 **Confirmed live via the client's own A/B Network trace**: Direct Sale

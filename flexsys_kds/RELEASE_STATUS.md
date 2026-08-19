@@ -1,31 +1,32 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.14.0**
+**Version: 19.0.7.14.1**
 **Status as of this document: code-complete, including everything
-through v7.13.1 (see CHANGELOG.md for the full history), plus a fully
-backend-only fix for Direct Sale orders (no table) never reaching KDS -
-confirmed live that `get_preparation_change()` is NOT a universal Send
-signal, only the restaurant/table flow. Confirmed replacement, also
-live-traced: `sync_from_ui`'s own `kwargs['context']` carries
-`preparation` (present) together with `current_order_uuid` (matching
-the specific order) on a genuine Direct Sale Send, and no
-`sync_from_ui` call at all for an ordinary edit. New authorization path
-added, **strictly scoped to the one order whose own `uuid` matches
-`current_order_uuid`** - never the whole `sync_from_ui` batch - per the
-client's own explicit correction. Content-signature comparison is used
-exclusively for de-duplicating an already-authorized, repeated
-delivery - never as an independent authorization signal on its own,
-preserving the "no Send = no KDS change" invariant exactly. Zero
-frontend risk this round - only `sync_from_ui()`'s own existing
-`**kwargs` capture is read further, no new hooks, no field-loading
-changes, nothing that could repeat the v7.13.0 POS-startup crash. 364
-automated tests, all `py_compile`/XML/JS checks passing, plus a custom
-AST-based undefined-name sweep. **Explicitly NOT claimed**: whether
-Direct Sale offline recovery works - the live reconnect test (required
-before this can be closed) has not yet been run; the
-`kds_send_generation` architecture remains fully intact as the
-confirmed fallback if the context does not survive reconnect. Not yet
-signed off on a live instance — see "What still needs a human" at the
+through v7.14.0 (see CHANGELOG.md for the full history), plus a
+one-line correction found via the client's own confirmed live Network
+payload + server log evidence: v7.14.0's own live test still failed -
+a Direct Sale order with confirmed-matching `context.preparation` and
+`context.current_order_uuid` in the actual wire payload still logged
+`direct_sale_context_present=False`. Root cause: `context` on an Odoo
+RPC call is Odoo's own standard, call-wide context mechanism (the same
+one carrying `lang`/`tz`/`active_id` on every call) - consumed by
+Odoo's own `call_kw` dispatch layer and applied to `self.env.context`
+via `with_context(...)` **before** the model method runs, never
+delivered as an explicit `context=` keyword argument inside `**kwargs`
+at all. `kwargs.get('context')` was therefore guaranteed to find
+nothing regardless of the real payload. Fixed by reading
+`self.env.context` instead - the correct, standard mechanism. Minimally
+scoped exactly as requested: no new hook, no architecture change, no
+content-signature-as-authorization, no `kds_send_generation` change, no
+routing or KDS-creation-logic change (none independently needed - the
+entry never reached that logic at all, since authorization was never
+granted). 368 automated tests, all `py_compile`/XML/JS checks passing,
+plus a custom AST-based undefined-name sweep. **Required before this
+can be closed**: the client's own repeat of the live test, confirming
+`direct_sale_context_present=True` and `direct_sale_uuid_match=True`
+in the server log, and exactly one `kds.order` created and appearing
+correctly at the right station. Not yet signed off on a live instance
+— see "What still needs a human" at the
 end.**
 
 
@@ -1210,49 +1211,55 @@ own order serialization method directly, a different approach from the
 one that failed here, not yet attempted or verified by this delivery
 process).
 
-## Direct Sale Send authorization: sync_from_ui context, strictly scoped, backend-only (v7.14.0)
+## Direct Sale Send authorization (v7.14.0) — ⚠️ EXTRACTION BUG, CORRECTED IN v7.14.1, LEFT AS A RECORD OF THE ACTUAL INVESTIGATION
 **Confirmed live**: Direct Sale orders (no table) never call
 `get_preparation_change()` at all - confirming it is not a universal
-Send signal, only the restaurant/table flow.
+Send signal.
 
-**Confirmed replacement signal, live-traced (client's own A/B test)**:
-`sync_from_ui`'s own `kwargs['context']['preparation']` present +
-`kwargs['context']['current_order_uuid']` matching the order, on a
-genuine Send; no `sync_from_ui` call at all for an ordinary edit.
+**Fix (had a real bug)**: a new authorization path reading
+`kwargs['context']['preparation']` and `kwargs['context']['current_order_uuid']`
+- strictly scoped to the matching order's own `uuid`, with content-
+signature used only for de-duplication, never authorization.
 
-**Fix**: entirely backend-only - `sync_from_ui()`'s own existing
-`**kwargs` capture is read further (no signature change, no new
-hooks). New authorization path, **strictly scoped per the client's own
-explicit correction**: only the one order whose own `uuid` matches
-`current_order_uuid` is authorized - never the whole batch, even
-though `context['preparation']` is itself batch-level.
+**⚠️ CONFIRMED STILL FAILING LIVE**: the client's own repeat live test,
+with confirmed-matching context genuinely present in the wire payload,
+still logged `direct_sale_context_present=False`. See v7.14.1's own
+section immediately below for the root cause (`context` is Odoo's own
+standard RPC-context mechanism, applied to `self.env.context`, never
+delivered as a `context=` keyword argument) and the one-line fix. Left
+here, not deleted, as an honest record of the actual investigation -
+the same convention this document already applies to every other
+superseded section above.
 
-**De-duplication vs. authorization - kept strictly separate, per the
-client's own explicit distinction**: content-signature comparison is
-used only to recognize a repeated delivery of an ALREADY-authorized
-Send as a duplicate - never as an independent reason to authorize. A
-different signature alone, without a matching context (or flag, or
-generation advance), still authorizes nothing - the v7.12.0 fallback's
-own architectural mistake is not reintroduced.
+---
 
-**Zero frontend risk this round** - no field-loading changes, no new
-JS hooks, nothing that could repeat the v7.13.0 POS-startup crash.
+## Direct Sale context extraction fixed: self.env.context, not a context= kwarg (v7.14.1)
+**Confirmed live, in one round, via the client's own Network payload +
+server log evidence together**: v7.14.0's own extraction
+(`kwargs.get('context')`) never found the data regardless of what the
+real payload carried, because `context` on an Odoo RPC call is Odoo's
+own standard, call-wide context mechanism - consumed by `call_kw`'s own
+dispatch layer and applied to `self.env.context` via `with_context(...)`
+**before** the model method runs, never delivered as an explicit
+`context=` keyword argument inside `**kwargs`.
 
-**⚠️ Explicitly NOT claimed**: whether Direct Sale offline recovery
-works. Confirmed live only for the ONLINE case. The
-`kds_send_generation` architecture remains fully intact, unchanged,
-and independently tested as the confirmed fallback if the live
-reconnect test shows the context does not survive.
+**Fix**: read `self.env.context` instead - the correct, standard Odoo
+mechanism - with the original `kwargs.get('context')` kept as a
+harmless secondary fallback. One line, minimally scoped exactly as
+requested - no architecture change, no new hook, no
+content-signature-as-authorization, no `kds_send_generation` change, no
+routing or KDS-creation change (none independently found necessary -
+the entry never reached that logic at all, since authorization itself
+was never granted before this fix).
 
 **What still needs a human - required before this can be closed**: the
-client's own specified live test - new Direct Sale order → disconnect
-→ press Send → wait → reconnect without F5 → inspect the retried
-`sync_from_ui` for whether `context.preparation` and
-`current_order_uuid` survived, and whether exactly one `kds.order` was
-created. If the context does NOT survive, Direct Sale needs the
-`kds_send_generation` fallback activated via a separately-verified
-frontend increment point (following the same caution established after
-v7.13.0/v7.13.1).
+client's own repeat of the live test - confirming the server log now
+shows `direct_sale_context_present=True` and `direct_sale_uuid_match=True`,
+that exactly one `kds.order` is created, and that it appears correctly
+at the right KDS station. Offline recovery for Direct Sale remains
+separately unconfirmed either way (per v7.14.0's own honest status,
+unchanged) - the `kds_send_generation` fallback architecture remains
+fully intact for that scenario if needed.
 
 ---
 
@@ -1517,7 +1524,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 364 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 368 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

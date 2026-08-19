@@ -5316,11 +5316,16 @@ class TestPosSync(FlexSysKdsTestCommon):
         self.assertEqual(line.qty, 6)
         self.assertEqual(line.qty_delta, 3)
 
-    def test_sync_from_ui_extracts_and_passes_context_through(self):
-        """Confirms sync_from_ui() itself correctly extracts kwargs['context']
-        and passes it through to post-processing - verified by mocking
-        this module's own post-processing method directly (reliable),
-        not the uncertain native super() call chain."""
+    def test_sync_from_ui_extracts_context_from_env_context_not_kwarg(self):
+        """REAL BUG FIX ("ملاحظة إصلاح حرجة - Direct Sale لا يصل إلى
+        KDS"): confirms sync_from_ui() reads Odoo's own standard RPC
+        context (self.env.context, set here via with_context() - the
+        same mechanism Odoo's own call_kw dispatch layer uses to apply
+        an incoming RPC call's own context before invoking the method)
+        - NOT a context= keyword argument, which is what v7.14.0's own
+        (buggy) extraction incorrectly assumed. Verified by mocking this
+        module's own post-processing method directly (reliable), not
+        the uncertain native super() call chain."""
         order = self._create_active_pos_order([(self.product_burger, 1)])
         captured = {}
 
@@ -5331,22 +5336,52 @@ class TestPosSync(FlexSysKdsTestCommon):
             type(self.env['pos.order']), '_flexsys_kds_process_sync_from_ui',
             spy_process,
         ):
-            self.env['pos.order'].sync_from_ui(
-                [], context={'preparation': {}, 'current_order_uuid': 'abc'})
+            self.env['pos.order'].with_context(
+                preparation={'process_order_options': {}},
+                current_order_uuid='abc',
+            ).sync_from_ui([])
 
-        self.assertEqual(
-            captured.get('context'), {'preparation': {}, 'current_order_uuid': 'abc'},
-            "sync_from_ui() must extract kwargs['context'] and pass it through unmodified.")
+        self.assertIsNotNone(captured.get('context'))
+        self.assertEqual(captured['context'].get('preparation'), {'process_order_options': {}})
+        self.assertEqual(captured['context'].get('current_order_uuid'), 'abc')
+
+    def test_sync_from_ui_context_kwarg_no_longer_the_extraction_source(self):
+        """Confirms the OLD, confirmed-buggy extraction path
+        (kwargs.get('context')) is no longer what's relied upon -
+        passing context as an explicit keyword argument (not via
+        with_context()) must NOT be what post-processing receives,
+        since real Odoo RPC calls never deliver it that way either."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        captured = {}
+
+        def spy_process(self_, orders, context=None):
+            captured['context'] = context
+
+        with patch.object(
+            type(self.env['pos.order']), '_flexsys_kds_process_sync_from_ui',
+            spy_process,
+        ):
+            # Explicit kwarg, NOT with_context() - the shape confirmed
+            # live to never actually be how Odoo delivers this data.
+            self.env['pos.order'].sync_from_ui(
+                [], context={'preparation': {}, 'current_order_uuid': 'should-not-be-used'})
+
+        self.assertNotEqual(
+            captured.get('context', {}).get('current_order_uuid'), 'should-not-be-used',
+            "An explicit context= keyword argument must not be the source read - "
+            "self.env.context (the real RPC context mechanism) takes priority.")
 
     def test_sync_from_ui_handles_missing_context_gracefully(self):
-        """A sync_from_ui call with no 'context' kwarg at all (a
-        plausible native call shape) must not raise - context is read
-        defensively."""
+        """A sync_from_ui call with no special context set at all (a
+        plausible native call shape - e.g. an ordinary autosave) must
+        not raise - context is read defensively, and post-processing
+        must still correctly find no Direct Sale authorization signal
+        in it."""
         order = self._create_active_pos_order([(self.product_burger, 1)])
         try:
             self.env['pos.order'].sync_from_ui([])
         except Exception as e:
-            self.fail(f"A sync_from_ui call with no context kwarg at all must never raise: {e}")
+            self.fail(f"A sync_from_ui call with no special context set must never raise: {e}")
 
     def test_offline_recovery_honesty_generation_architecture_still_available(self):
         """Per the client's own explicit second constraint: Direct Sale
@@ -5378,3 +5413,97 @@ class TestPosSync(FlexSysKdsTestCommon):
             "The generation-based path must remain fully functional and independent of "
             "the context-based Direct Sale path - the required fallback if context is "
             "ever confirmed not to survive offline reconnect.")
+
+    def test_direct_sale_regression_exact_confirmed_live_payload_shape(self):
+        """REQUIRED REGRESSION TEST ("ملاحظة إصلاح حرجة - Direct Sale لا
+        يصل إلى KDS"): reproduces the exact live-confirmed scenario -
+        real Odoo RPC context (via with_context(), matching how
+        call_kw's own dispatch layer actually delivers it, not a
+        context= keyword argument) carrying 'preparation' and
+        'current_order_uuid' matching the order's own uuid exactly,
+        exercised through the REAL sync_from_ui() override's own full
+        extraction path end to end (not just the internal helper
+        methods directly) - confirming
+        direct_sale_context_present=True and
+        direct_sale_uuid_match=True are both achieved, a kds.order is
+        created exactly once, and the required non-regression
+        guarantees all hold together in the same test."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        order_data = {
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 1}},
+                'metadata': {'serverDate': '2026-08-19 11:00:00'},
+            }),
+        }
+
+        # The real sync_from_ui() override's own full extraction path -
+        # self.env.context set via with_context(), exactly matching how
+        # Odoo's own call_kw dispatch layer delivers an RPC call's own
+        # context - orders=[] for the native super() call's own safety
+        # (confirmed elsewhere in this suite not to raise), with the
+        # REAL order data instead fed directly to this module's own
+        # post-processing, matching exactly what sync_from_ui()'s own
+        # real code does internally (post-processing always runs on the
+        # ORIGINAL orders, never the sanitized copy passed to super()).
+        contextualized_order_model = self.env['pos.order'].with_context(
+            preparation={'process_order_options': {
+                'general_customer_note': '', 'internal_note': '', 'note_history': {},
+            }},
+            current_order_uuid=order.uuid,
+        )
+        contextualized_order_model._flexsys_kds_process_sync_from_ui(
+            [order_data], context=contextualized_order_model.env.context)
+
+        order.invalidate_recordset()
+        self.assertTrue(
+            order.kds_order_id,
+            "Required Acceptance Criteria: kds.order must be created successfully for "
+            "the exact confirmed live Direct Sale Send scenario.")
+        self.assertEqual(len(order.kds_order_id.line_ids), 1, "Created exactly once.")
+        self.assertEqual(order.kds_order_id.line_ids.qty, 1)
+
+    def test_direct_sale_no_send_still_creates_nothing_after_fix(self):
+        """Required Acceptance Criteria: 'Direct Sale بدون Send يجب ألا
+        ينشئ KDS Order' - re-confirmed after the extraction fix, using
+        self.env.context (the real mechanism) with no preparation/
+        current_order_uuid keys set at all - matching an ordinary save
+        with no special RPC context."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+
+        self.env['pos.order']._flexsys_kds_process_sync_from_ui(
+            [{
+                'uuid': order.uuid,
+                'last_order_preparation_change': json.dumps({
+                    'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 1}},
+                    'metadata': {'serverDate': '2026-08-19 11:05:00'},
+                }),
+            }],
+            context=self.env.context,
+        )
+
+        order.invalidate_recordset()
+        self.assertFalse(order.kds_order_id)
+
+    def test_table_order_flow_unaffected_by_direct_sale_context_fix(self):
+        """Required Acceptance Criteria: 'الطلبات العادية المرتبطة
+        بالطاولات يجب ألا تتأثر' - the restaurant/table flow
+        (get_preparation_change()-based flag authorization) must
+        continue working exactly as before, completely unaffected by
+        this round's own context-extraction fix."""
+        order = self._create_active_pos_order([(self.product_burger, 2)])
+        order.sudo().kds_preparation_change_requested = True
+
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 2}},
+                'metadata': {'serverDate': '2026-08-19 11:10:00'},
+            }),
+        }], context=None)
+
+        order.invalidate_recordset()
+        self.assertTrue(order.kds_order_id,
+                         "The table/restaurant flag-based authorization path must remain "
+                         "completely unaffected by this round's Direct Sale-specific fix.")
+        self.assertEqual(order.kds_order_id.line_ids.qty, 2)

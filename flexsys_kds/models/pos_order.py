@@ -727,25 +727,62 @@ class PosOrder(models.Model):
         confirming that method is NOT a universal Send signal across
         every POS flow, only the restaurant/table one it was originally
         confirmed against. The client's own trace instead found a
-        second, genuine Send signal specific to this flow, present
-        directly in THIS method's own `kwargs`:
-        `kwargs['context']['preparation']` (present) together with
-        `kwargs['context']['current_order_uuid']` (matching the
+        second, genuine Send signal specific to this flow: the
+        `sync_from_ui` call's own RPC context carries `preparation`
+        (present) together with `current_order_uuid` (matching the
         specific order being sent) - confirmed absent entirely for an
-        ordinary edit with no Send pressed. See
-        `_flexsys_kds_process_one_sync_from_ui_entry()`'s own docstring
-        for the complete authorization logic this feeds into - the
-        `context` dict is extracted and passed through here,
-        unmodified, so per-entry processing can check it directly.
+        ordinary edit with no Send pressed.
+
+        REAL BUG FIX ("ملاحظة إصلاح حرجة - Direct Sale لا يصل إلى
+        KDS"), correcting v7.14.0's own extraction mistake: this
+        context is NOT delivered as a `context=` keyword argument
+        inside `**kwargs` at all, despite being genuinely present in
+        the wire payload the client's own Network inspection confirmed
+        - `context` is Odoo's own standard RPC-call context (the same
+        mechanism that carries `lang`, `tz`, `active_id`, and so on on
+        every RPC call), consumed by Odoo's own `call_kw` dispatch layer
+        and applied to `self.env.context` via `with_context(...)`
+        BEFORE this model method is ever invoked. `self.env.context` is
+        therefore the correct place to read it - see the code just
+        below, and `_flexsys_kds_process_one_sync_from_ui_entry()`'s
+        own docstring for the complete authorization logic this feeds
+        into. The `context` dict, wherever it's actually found, is
+        always passed through unmodified - never written back or
+        interpreted at this level.
         """
         sanitized_orders = self._flexsys_kds_sanitize_orders_payload(orders)
         result = super().sync_from_ui(sanitized_orders, *args, **kwargs)
         try:
-            # REAL BUG FIX ("DIRECT SALE SEND FLOW NOT REACHING KDS"):
-            # kwargs['context'] is read defensively - never assumed
-            # present or dict-shaped - and passed through as-is; no
-            # part of it is ever written back or modified.
-            context = kwargs.get('context') if isinstance(kwargs, dict) else None
+            # REAL BUG FIX ("ملاحظة إصلاح حرجة - Direct Sale لا يصل إلى
+            # KDS"), confirmed via the client's own server-log evidence:
+            # v7.14.0's own extraction (`kwargs.get('context')`) never
+            # actually found the data, even though the client's own
+            # Network payload inspection confirmed `context.preparation`
+            # and `context.current_order_uuid` genuinely present on the
+            # wire. Root cause: Odoo's own standard RPC dispatch
+            # mechanism (`call_kw`) treats an incoming `context` key as
+            # the SAME context every RPC call can carry (`lang`, `tz`,
+            # `active_id`, and so on) - it is consumed by that dispatch
+            # layer and applied to `self.env.context` via
+            # `with_context(...)` BEFORE this model method is ever
+            # invoked, not delivered as a `context=` keyword argument
+            # inside `**kwargs` at all. `kwargs.get('context')`
+            # therefore always found nothing, regardless of what the
+            # actual wire payload carried - explaining exactly the
+            # observed server log
+            # (`direct_sale_context_present=False`,
+            # `direct_sale_uuid_match=False`) despite the client's own
+            # confirmed-correct Network payload.
+            #
+            # Fixed by reading `self.env.context` instead - the correct,
+            # standard way to access an incoming RPC call's own context
+            # from within any Odoo model method - with the original
+            # `kwargs.get('context')` kept as a secondary, harmless
+            # fallback in case some other call path genuinely does pass
+            # it as an explicit keyword argument instead (covers both
+            # shapes without assuming either one exclusively).
+            context = self.env.context or (
+                kwargs.get('context') if isinstance(kwargs, dict) else None)
             self._flexsys_kds_process_sync_from_ui(orders, context=context)
         except Exception:
             _logger.exception("FlexSys KDS: sync_from_ui post-processing failed; "
