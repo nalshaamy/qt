@@ -5063,3 +5063,318 @@ class TestPosSync(FlexSysKdsTestCommon):
             "functional and testable independent of how the field eventually gets "
             "populated by a future, safely-verified frontend mechanism.")
         self.assertEqual(order.kds_last_processed_send_generation, 1)
+
+    # -----------------------------------------------------------------
+    # Dev report "LIVE A/B EVIDENCE - DIRECT SALE SEND FLOW" +
+    # "DESIGN APPROVED WITH TWO IMPORTANT CONSTRAINTS": Direct Sale
+    # orders (no table) never call get_preparation_change() at all -
+    # confirmed live. The confirmed replacement signal: sync_from_ui's
+    # own kwargs['context'] carries 'preparation' (present) together
+    # with 'current_order_uuid' (matching the specific order). Scoped
+    # STRICTLY to the one order whose own uuid matches - never the
+    # whole batch. Signature comparison is de-duplication only, never
+    # authorization.
+    # -----------------------------------------------------------------
+    def test_direct_sale_context_authorizes_matching_order(self):
+        """Required Test A (live-confirmed scenario): Direct Sale +
+        explicit Send -> sync_from_ui with context.preparation present
+        and context.current_order_uuid matching this order's own uuid
+        -> KDS sync occurs."""
+        order = self._create_active_pos_order([(self.product_burger, 3)])
+        self.assertFalse(order.kds_preparation_change_requested)
+        self.assertEqual(order.kds_send_generation, 0)
+
+        order._flexsys_kds_process_sync_from_ui(
+            [{
+                'uuid': order.uuid,
+                'last_order_preparation_change': json.dumps({
+                    'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 3}},
+                    'metadata': {'serverDate': '2026-08-19 10:00:00'},
+                }),
+            }],
+            context={'preparation': {'process_order_options': {}}, 'current_order_uuid': order.uuid},
+        )
+
+        order.invalidate_recordset()
+        self.assertTrue(
+            order.kds_order_id,
+            "context.preparation present + current_order_uuid matching this order's own "
+            "uuid must authorize the Direct Sale Send, with NO get_preparation_change() "
+            "call and NO kds_send_generation involved at all.")
+        self.assertEqual(order.kds_order_id.line_ids.qty, 3)
+
+    def test_direct_sale_ordinary_edit_without_send_no_kds(self):
+        """Required Test B (live-confirmed scenario): Direct Sale
+        ordinary edit without Send -> live evidence confirms NO
+        sync_from_ui call is even generated in this exact scenario -
+        but this test also confirms the backend's own logic
+        independently: even if sync_from_ui WERE called with no
+        context.preparation at all, nothing must be authorized."""
+        order = self._create_active_pos_order([(self.product_burger, 3)])
+
+        order._flexsys_kds_process_sync_from_ui(
+            [{
+                'uuid': order.uuid,
+                'last_order_preparation_change': json.dumps({
+                    'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 5}},
+                    'metadata': {'serverDate': '2026-08-19 10:01:00'},
+                }),
+            }],
+            context=None,
+        )
+
+        order.invalidate_recordset()
+        self.assertFalse(
+            order.kds_order_id,
+            "No context.preparation at all (matching the live-confirmed absence of "
+            "sync_from_ui for an ordinary Direct Sale edit) must never authorize a sync, "
+            "regardless of the content's own genuine difference.")
+
+    def test_direct_sale_context_never_authorizes_a_different_order_in_same_batch(self):
+        """Required scope constraint, tested directly: context.preparation
+        existing at the batch level must NOT authorize every order in
+        that same sync_from_ui batch - only the one order whose own
+        uuid exactly matches context.current_order_uuid. 'Any other
+        orders that may theoretically be included in the same
+        sync_from_ui batch must remain untouched.'"""
+        order_a = self._create_active_pos_order([(self.product_burger, 1)])
+        order_b = self._create_active_pos_order([(self.product_cappuccino, 1)])
+
+        # A single sync_from_ui call carrying BOTH orders, with the
+        # context's own current_order_uuid pointing ONLY at order_a.
+        order_a.env['pos.order']._flexsys_kds_process_sync_from_ui(
+            [
+                {
+                    'uuid': order_a.uuid,
+                    'last_order_preparation_change': json.dumps({
+                        'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 1}},
+                        'metadata': {'serverDate': '2026-08-19 10:05:00'},
+                    }),
+                },
+                {
+                    'uuid': order_b.uuid,
+                    'last_order_preparation_change': json.dumps({
+                        'lines': {'line-b': {'product_id': self.product_cappuccino.id, 'quantity': 1}},
+                        'metadata': {'serverDate': '2026-08-19 10:05:00'},
+                    }),
+                },
+            ],
+            context={'preparation': {'process_order_options': {}}, 'current_order_uuid': order_a.uuid},
+        )
+
+        order_a.invalidate_recordset()
+        order_b.invalidate_recordset()
+        self.assertTrue(order_a.kds_order_id,
+                         "order_a, the one genuinely matching current_order_uuid, is authorized.")
+        self.assertFalse(
+            order_b.kds_order_id,
+            "order_b must remain completely untouched, even though context.preparation "
+            "was genuinely present at the batch level - authorization is scoped strictly "
+            "to the uuid match, never the whole batch.")
+
+    def test_direct_sale_signature_deduplicates_repeated_same_content_delivery(self):
+        """Required de-duplication rule: 'trusted Send authorization ->
+        compare signature -> same signature = duplicate delivery,
+        ignore.' A repeated sync_from_ui call, still carrying a
+        genuinely matching context, but with the SAME content already
+        processed, must be treated as a duplicate delivery - not a new
+        Send, and not silently re-authorized just because the context
+        still matches."""
+        order = self._create_active_pos_order([(self.product_burger, 3)])
+        payload_entry = {
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 3}},
+                'metadata': {'serverDate': '2026-08-19 10:10:00'},
+            }),
+        }
+        context = {'preparation': {'process_order_options': {}}, 'current_order_uuid': order.uuid}
+
+        order._flexsys_kds_process_sync_from_ui([payload_entry], context=context)
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        events_before = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+
+        # A repeated delivery of the exact same sync_from_ui call - same
+        # content, same context, same matching uuid (plausible: Odoo's
+        # own retry mechanics, or a duplicate network delivery).
+        order._flexsys_kds_process_sync_from_ui([payload_entry], context=context)
+
+        kds_order.invalidate_recordset()
+        events_after = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+        self.assertEqual(
+            events_after, events_before,
+            "A repeated delivery of the SAME already-processed content must be "
+            "recognized as a duplicate and ignored - not re-authorized just because "
+            "the context still matches.")
+        self.assertEqual(kds_order.line_ids.qty, 3)
+
+    def test_direct_sale_signature_never_grants_authorization_on_its_own(self):
+        """Critical distinction, tested directly: a genuinely DIFFERENT
+        content signature must NEVER by itself grant authorization -
+        'The signature must remain deduplication only, never
+        authorization.' Without a matching context (or a flag, or a
+        generation advance), a different signature alone changes
+        nothing - this is the exact architectural mistake the v7.12.0
+        fallback made and the client's own review correctly rejected."""
+        order = self._create_active_pos_order([(self.product_burger, 3)])
+        order.sudo().kds_preparation_change_requested = True
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 3}},
+                'metadata': {'serverDate': '2026-08-19 10:15:00'},
+            }),
+        }])
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        events_before = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+
+        # Genuinely different content, but NO context, NO flag, NO
+        # generation advance - only the content differs.
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 9}},
+                'metadata': {'serverDate': '2026-08-19 10:16:00'},
+            }),
+        }], context=None)
+
+        kds_order.invalidate_recordset()
+        events_after = self.env['kds.event'].search_count([('order_id', '=', kds_order.id)])
+        self.assertEqual(events_after, events_before,
+                          "A different signature alone, with no authorization signal at "
+                          "all present, must never trigger a sync.")
+        self.assertEqual(kds_order.line_ids.qty, 3)
+
+    def test_direct_sale_context_uuid_mismatch_does_not_authorize(self):
+        """A context.preparation present but current_order_uuid pointing
+        at a DIFFERENT uuid than this specific order's own must not
+        authorize this order."""
+        order = self._create_active_pos_order([(self.product_burger, 3)])
+
+        order._flexsys_kds_process_sync_from_ui(
+            [{
+                'uuid': order.uuid,
+                'last_order_preparation_change': json.dumps({
+                    'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 3}},
+                    'metadata': {'serverDate': '2026-08-19 10:20:00'},
+                }),
+            }],
+            context={'preparation': {'process_order_options': {}}, 'current_order_uuid': 'some-other-uuid'},
+        )
+
+        order.invalidate_recordset()
+        self.assertFalse(order.kds_order_id)
+
+    def test_direct_sale_context_missing_preparation_key_does_not_authorize(self):
+        """current_order_uuid matching but NO 'preparation' key present
+        at all must not authorize - both conditions are required
+        together, per the client's own explicit AND requirement."""
+        order = self._create_active_pos_order([(self.product_burger, 3)])
+
+        order._flexsys_kds_process_sync_from_ui(
+            [{
+                'uuid': order.uuid,
+                'last_order_preparation_change': json.dumps({
+                    'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 3}},
+                    'metadata': {'serverDate': '2026-08-19 10:25:00'},
+                }),
+            }],
+            context={'current_order_uuid': order.uuid},  # no 'preparation' key at all
+        )
+
+        order.invalidate_recordset()
+        self.assertFalse(order.kds_order_id)
+
+    def test_direct_sale_second_send_delta_applies_exactly_once(self):
+        """A genuine second Direct Sale Send (context matches again,
+        content genuinely differs) correctly applies the next delta."""
+        order = self._create_active_pos_order([(self.product_burger, 3)])
+        context = {'preparation': {'process_order_options': {}}, 'current_order_uuid': order.uuid}
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 3}},
+                'metadata': {'serverDate': '2026-08-19 10:30:00'},
+            }),
+        }], context=context)
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        self.assertEqual(line.qty, 3)
+
+        order.lines.write({'qty': 6})
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 6}},
+                'metadata': {'serverDate': '2026-08-19 10:31:00'},
+            }),
+        }], context=context)
+
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 6)
+        self.assertEqual(line.qty_delta, 3)
+
+    def test_sync_from_ui_extracts_and_passes_context_through(self):
+        """Confirms sync_from_ui() itself correctly extracts kwargs['context']
+        and passes it through to post-processing - verified by mocking
+        this module's own post-processing method directly (reliable),
+        not the uncertain native super() call chain."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        captured = {}
+
+        def spy_process(self_, orders, context=None):
+            captured['context'] = context
+
+        with patch.object(
+            type(self.env['pos.order']), '_flexsys_kds_process_sync_from_ui',
+            spy_process,
+        ):
+            self.env['pos.order'].sync_from_ui(
+                [], context={'preparation': {}, 'current_order_uuid': 'abc'})
+
+        self.assertEqual(
+            captured.get('context'), {'preparation': {}, 'current_order_uuid': 'abc'},
+            "sync_from_ui() must extract kwargs['context'] and pass it through unmodified.")
+
+    def test_sync_from_ui_handles_missing_context_gracefully(self):
+        """A sync_from_ui call with no 'context' kwarg at all (a
+        plausible native call shape) must not raise - context is read
+        defensively."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        try:
+            self.env['pos.order'].sync_from_ui([])
+        except Exception as e:
+            self.fail(f"A sync_from_ui call with no context kwarg at all must never raise: {e}")
+
+    def test_offline_recovery_honesty_generation_architecture_still_available(self):
+        """Per the client's own explicit second constraint: Direct Sale
+        offline recovery is NOT claimed solved by the context-based
+        mechanism (which may not survive a reconnect - unconfirmed).
+        This test confirms the kds_send_generation architecture remains
+        fully intact and independently usable as the durable fallback,
+        exactly as required: 'If the preparation context does NOT
+        survive reconnect, then Direct Sale still requires a durable
+        Send Intent / generation stored on the order itself... keep the
+        existing generation architecture intact for that reason.'"""
+        order = self._create_active_pos_order([(self.product_burger, 4)])
+
+        # Simulates what a future, verified frontend mechanism would
+        # eventually deliver for Direct Sale specifically, entirely
+        # independent of the context-based path tested above.
+        order._flexsys_kds_process_sync_from_ui([{
+            'uuid': order.uuid,
+            'kds_send_generation': 1,
+            'last_order_preparation_change': json.dumps({
+                'lines': {'line-a': {'product_id': self.product_burger.id, 'quantity': 4}},
+                'metadata': {'serverDate': '2026-08-19 10:35:00'},
+            }),
+        }], context=None)
+
+        order.invalidate_recordset()
+        self.assertTrue(
+            order.kds_order_id,
+            "The generation-based path must remain fully functional and independent of "
+            "the context-based Direct Sale path - the required fallback if context is "
+            "ever confirmed not to survive offline reconnect.")

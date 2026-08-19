@@ -718,11 +718,35 @@ class PosOrder(models.Model):
         `kds_last_processed_send_signal`/`kds_last_processed_send_generation`,
         not merely a defensive backstop alongside a field-loading
         exclusion that does not currently exist.
+
+        REAL BUG FIX ("DIRECT SALE SEND FLOW NOT REACHING KDS"),
+        confirmed via the client's own live A/B Network trace: Direct
+        Sale orders (created without a table - Odoo 19's own confirmed
+        "New Order" action on the Floor plan view) never call
+        `get_preparation_change()` at all when Send is pressed -
+        confirming that method is NOT a universal Send signal across
+        every POS flow, only the restaurant/table one it was originally
+        confirmed against. The client's own trace instead found a
+        second, genuine Send signal specific to this flow, present
+        directly in THIS method's own `kwargs`:
+        `kwargs['context']['preparation']` (present) together with
+        `kwargs['context']['current_order_uuid']` (matching the
+        specific order being sent) - confirmed absent entirely for an
+        ordinary edit with no Send pressed. See
+        `_flexsys_kds_process_one_sync_from_ui_entry()`'s own docstring
+        for the complete authorization logic this feeds into - the
+        `context` dict is extracted and passed through here,
+        unmodified, so per-entry processing can check it directly.
         """
         sanitized_orders = self._flexsys_kds_sanitize_orders_payload(orders)
         result = super().sync_from_ui(sanitized_orders, *args, **kwargs)
         try:
-            self._flexsys_kds_process_sync_from_ui(orders)
+            # REAL BUG FIX ("DIRECT SALE SEND FLOW NOT REACHING KDS"):
+            # kwargs['context'] is read defensively - never assumed
+            # present or dict-shaped - and passed through as-is; no
+            # part of it is ever written back or modified.
+            context = kwargs.get('context') if isinstance(kwargs, dict) else None
+            self._flexsys_kds_process_sync_from_ui(orders, context=context)
         except Exception:
             _logger.exception("FlexSys KDS: sync_from_ui post-processing failed; "
                                "native POS sync itself was not affected.")
@@ -785,7 +809,7 @@ class PosOrder(models.Model):
             sanitized.append(entry)
         return sanitized
 
-    def _flexsys_kds_process_sync_from_ui(self, orders):
+    def _flexsys_kds_process_sync_from_ui(self, orders, context=None):
         """REAL BUG FIX ("Live test result - post-send modification is
         still not propagated to KDS"), confirmed live via Network trace
         (get_preparation_change -> sync_from_ui, both HTTP 200) on a
@@ -827,18 +851,26 @@ class PosOrder(models.Model):
         cheap to leave in place - genuinely useful audit trail for a
         "why didn't KDS update" question either way, not just a
         temporary debugging aid to be stripped out later.
+
+        REAL BUG FIX ("DIRECT SALE SEND FLOW NOT REACHING KDS"):
+        `context` (the `sync_from_ui` call's own `kwargs['context']`,
+        confirmed live to carry the Direct Sale Send signal - see
+        `sync_from_ui()`'s own docstring above) is passed through to
+        each entry's own processing unmodified - never read, written,
+        or interpreted at this level; only
+        `_flexsys_kds_process_one_sync_from_ui_entry()` acts on it.
         """
         self = self.sudo()
         for order_data in (orders or []):
             try:
-                self._flexsys_kds_process_one_sync_from_ui_entry(order_data)
+                self._flexsys_kds_process_one_sync_from_ui_entry(order_data, context=context)
             except Exception:
                 _logger.exception(
                     "FlexSys KDS: failed processing one sync_from_ui order entry "
                     "(isolated to this entry only - other orders in the same "
                     "batch are unaffected). Entry: %r", order_data)
 
-    def _flexsys_kds_process_one_sync_from_ui_entry(self, order_data):
+    def _flexsys_kds_process_one_sync_from_ui_entry(self, order_data, context=None):
         """REAL BUG FIX ("CONFIRMED LIVE NETWORK RESULT"): authorization
         is based exclusively on `kds_preparation_change_requested` (set
         by `get_preparation_change()`'s own override, consumed here) -
@@ -958,21 +990,89 @@ class PosOrder(models.Model):
             isinstance(incoming_generation, int)
             and incoming_generation > order.kds_last_processed_send_generation
         )
+        # REAL BUG FIX ("DIRECT SALE SEND FLOW NOT REACHING KDS"),
+        # confirmed via the client's own live A/B Network trace: Direct
+        # Sale orders (no table) never call get_preparation_change() at
+        # all - confirming that method is not a universal Send signal.
+        # The confirmed replacement signal for THIS flow specifically:
+        # sync_from_ui's own kwargs['context'] carries a genuinely
+        # present 'preparation' key together with 'current_order_uuid'
+        # - both confirmed absent for an ordinary edit with no Send.
+        #
+        # REAL BUG FIX ("DESIGN APPROVED WITH TWO IMPORTANT
+        # CONSTRAINTS") - the client's own explicit scope correction to
+        # this design, applied exactly as specified: authorization is
+        # NOT granted to every order in the sync_from_ui batch merely
+        # because context['preparation'] exists somewhere in the call -
+        # it is granted ONLY to the one order whose own uuid matches
+        # context['current_order_uuid'] exactly. Any other order that
+        # might theoretically be present in the same batch is left
+        # completely untouched by this specific authorization path,
+        # even if the batch-level context still carries a genuine
+        # preparation key - "Only that matching order should receive
+        # the Direct Sale Send authorization."
+        context_preparation_present = bool(context) and bool(context.get('preparation'))
+        context_current_order_uuid = context.get('current_order_uuid') if context else None
+        authorized_via_direct_sale_context = (
+            context_preparation_present
+            and context_current_order_uuid
+            and order_uuid
+            and order_uuid == context_current_order_uuid
+        )
+        # REAL BUG FIX ("DESIGN APPROVED..."), de-duplication rule -
+        # applied ONLY to this new authorization path, which (unlike
+        # the flag and generation paths above, each of which already
+        # has its own dedicated consume/advance mechanism making a
+        # repeat impossible on its own) has no other guard against a
+        # repeated delivery of the SAME already-processed Send:
+        # "trusted Send authorization -> compare signature -> same
+        # signature = duplicate delivery, ignore -> different signature
+        # = process." The signature comparison here is EXCLUSIVELY a
+        # de-duplication check on an ALREADY-established authorization
+        # - it is never itself the reason authorization was granted;
+        # `authorized_via_direct_sale_context` above was already fully
+        # decided, using only the explicit context signal, before this
+        # comparison is even reached. "The signature must remain
+        # deduplication only, never authorization" - a genuinely
+        # different content signature does NOT grant authorization on
+        # its own anywhere in this method; only a context match (this
+        # path), the flag (get_preparation_change), or a generation
+        # advance can.
+        authorized_via_direct_sale = (
+            authorized_via_direct_sale_context
+            and signature
+            and signature != order.kds_last_processed_send_signal
+        )
         _logger.info(
             "FlexSys KDS sync_from_ui: order #%s kds_preparation_change_requested=%s "
-            "incoming_generation=%r last_processed_generation=%s has_content_signature=%s",
+            "incoming_generation=%r last_processed_generation=%s "
+            "direct_sale_context_present=%s direct_sale_uuid_match=%s has_content_signature=%s",
             order.id, order.kds_preparation_change_requested, incoming_generation,
-            order.kds_last_processed_send_generation, bool(signature))
-        if not authorized_via_flag and not authorized_via_generation:
-            _logger.info(
-                "FlexSys KDS sync_from_ui: order #%s - no prior get_preparation_change() "
-                "call recorded and no new kds_send_generation either, correctly treated "
-                "as an ordinary save, not a genuine Send. Skipped.", order.id)
+            order.kds_last_processed_send_generation, context_preparation_present,
+            authorized_via_direct_sale_context, bool(signature))
+        if not authorized_via_flag and not authorized_via_generation and not authorized_via_direct_sale:
+            if authorized_via_direct_sale_context and not authorized_via_direct_sale:
+                _logger.info(
+                    "FlexSys KDS sync_from_ui: order #%s - Direct Sale context matched "
+                    "this order's own uuid, but the content signature is unchanged from "
+                    "the last processed Send - correctly treated as a duplicate delivery "
+                    "of an already-handled Send, not a new one. Skipped.", order.id)
+            else:
+                _logger.info(
+                    "FlexSys KDS sync_from_ui: order #%s - no prior get_preparation_change() "
+                    "call recorded, no new kds_send_generation, and no matching Direct Sale "
+                    "context either, correctly treated as an ordinary save, not a genuine "
+                    "Send. Skipped.", order.id)
             return
+        if authorized_via_flag:
+            authorization_source = 'get_preparation_change()'
+        elif authorized_via_generation:
+            authorization_source = 'kds_send_generation'
+        else:
+            authorization_source = 'Direct Sale sync_from_ui context'
         _logger.info(
             "FlexSys KDS sync_from_ui: order #%s - genuine Send authorized via %s, "
-            "triggering KDS sync.", order.id,
-            'get_preparation_change()' if authorized_via_flag else 'kds_send_generation')
+            "triggering KDS sync.", order.id, authorization_source)
         # REAL BUG FIX ("SECOND CRITICAL ISSUE"): sync happens FIRST;
         # authorization marker(s) are only consumed/advanced AFTER it
         # completes without raising - see this method's own docstring

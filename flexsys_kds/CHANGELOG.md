@@ -8,6 +8,100 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.14.0 — Direct Sale Send authorization: sync_from_ui context, strictly scoped, backend-only
+
+**Confirmed live via the client's own A/B Network trace**: Direct Sale
+orders (created without a table - Odoo 19's own confirmed "New Order"
+action on the Floor plan view) never call `get_preparation_change()` at
+all when Send is pressed. `get_preparation_change()` is therefore
+confirmed NOT to be a universal Send signal - only the restaurant/table
+flow it was originally confirmed against.
+
+### Confirmed replacement signal, live-traced
+Explicit Send (Direct Sale): `pos.order.sync_from_ui` with
+`kwargs['context']['preparation']` present AND
+`kwargs['context']['current_order_uuid']` matching the order being
+sent. Ordinary edit without Send: no `sync_from_ui` call is even
+generated for this flow.
+
+### Fix - entirely backend-only, zero frontend risk
+`sync_from_ui()`'s own override extracts `kwargs['context']` (already
+captured by its existing `**kwargs` signature - no signature change)
+and passes it through to post-processing. A new authorization path,
+**strictly scoped per the client's own explicit correction**: granted
+only to the one order whose own `uuid` exactly matches
+`context['current_order_uuid']` - never to every order that might
+theoretically be present in the same `sync_from_ui` batch, even though
+`context['preparation']` is itself a batch-level (not per-order) value.
+
+### De-duplication, not authorization - the client's own explicit distinction
+"Trusted Send authorization -> compare signature -> same signature =
+duplicate delivery, ignore -> different signature = process." Content-
+signature comparison is applied ONLY after the context-based
+authorization is already independently established via `uuid` match -
+never as the reason authorization was granted. A genuinely different
+signature, with no matching context (or flag, or generation advance),
+still authorizes nothing on its own anywhere in this method - the exact
+architectural mistake the v7.12.0 fallback made and the client's own
+review correctly rejected is not reintroduced here.
+
+### Unified with the existing generation architecture, not replacing it
+Three independent authorization paths, evaluated together:
+`kds_preparation_change_requested` (the flag, `get_preparation_change`-
+based, restaurant/table), `kds_send_generation` (the durable counter,
+currently inert pending a verified frontend increment point after
+v7.13.0/v7.13.1), and now the Direct Sale `sync_from_ui` context path.
+Any one of the three is sufficient; all three feed the same downstream
+reconciliation and "sync first, consume markers after success" logic
+(v7.12.1's own fix, unchanged).
+
+### Explicitly NOT claimed: Direct Sale offline recovery is solved
+Per the client's own second, equally important constraint: it has been
+confirmed live that Direct Sale explicit Send online produces
+`sync_from_ui` with `context.preparation` and `current_order_uuid` - it
+has NOT been confirmed whether Odoo's own offline persistence retries
+and preserves this transient RPC context after a genuine disconnect/
+reconnect, or only retries the order's own persisted field data (as it
+already does for `last_order_preparation_change`). The
+`kds_send_generation` architecture is kept fully intact, unchanged, and
+independently tested specifically as the durable fallback for this
+exact scenario if the live reconnect test (required before this can be
+closed) shows the context does not survive.
+
+### Files changed
+`models/pos_order.py` (`sync_from_ui()` extracts and passes `context`;
+`_flexsys_kds_process_sync_from_ui()` and
+`_flexsys_kds_process_one_sync_from_ui_entry()` both accept and use it;
+new Direct Sale authorization and de-duplication logic).
+
+### Tests
+11 new tests: the exact confirmed Direct Sale Send scenario authorizes
+correctly; the exact confirmed no-Send scenario authorizes nothing;
+the critical batch-scope constraint (context present at the batch
+level must never authorize a non-matching order in the same batch);
+signature-based de-duplication of a repeated identical delivery; the
+critical distinction that a different signature alone, with no
+authorization signal, never triggers a sync; a `current_order_uuid`
+mismatch does not authorize; a missing `preparation` key does not
+authorize even with a matching uuid; a genuine second Direct Sale Send
+applies the next delta exactly once; `sync_from_ui()` itself correctly
+extracts and forwards `context` (verified via a safe method-level spy,
+not the uncertain native `super()` call); a call with no `context`
+kwarg at all does not raise; and the generation-based fallback
+architecture remains fully independent and functional.
+
+**Total: 364 tests** (up from 353). No database migration required -
+no new fields this round.
+
+**Required before this can be considered closed for offline recovery**:
+per the client's own explicit instruction, the live reconnect test
+(new Direct Sale order -> disconnect -> Send -> reconnect without F5 ->
+inspect the retried `sync_from_ui` for `context.preparation` and
+`current_order_uuid`) - this delivery does not claim that result either
+way.
+
+---
+
 ## v7.13.1 — EMERGENCY REVERT: v7.13.0 broke POS startup entirely
 
 **Release blocker, confirmed live, fixed immediately, ahead of any

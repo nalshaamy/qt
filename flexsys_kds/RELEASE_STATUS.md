@@ -1,31 +1,32 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.13.1**
-**⚠️ Status as of this document: EMERGENCY REVERT of a confirmed
-release blocker.** v7.13.0 (this document's own immediately-prior
-version) was confirmed live to prevent the POS register from opening
-at all - `TypeError: Cannot read properties of undefined (reading
-'currency_id')` inside Odoo's own `PosStore.processServerData()`,
-before any Offline Send testing could begin. The suspected cause (a
-new `_load_pos_data_fields()` override on `pos.order`, intended to
-expose `kds_send_generation` to the POS frontend) and its paired JS
-increment patch are both reverted completely - this module is once
-again entirely backend-only, the same confirmed-safe state as v7.12.1.
-**Honest, explicit root-cause status**: not fully confirmed - two
-sources consulted while designing v7.13.0 directly conflicted on
-whether this exact mechanism is safe for `pos.order` specifically in
-Odoo 19, and the live crash confirms the more cautious source was
-right, but the deeper reason has not been independently re-verified.
-**What is unchanged**: per the client's own explicit instruction, the
-backend generation architecture itself (`kds_send_generation`,
-`kds_last_processed_send_generation`, and all of
-v7.12.1's own authorization/idempotency logic) is completely intact
-and independently re-tested. 353 automated tests, all
-`py_compile`/XML/JS checks passing, plus a custom AST-based
-undefined-name sweep. **The single highest-priority item for the next
-live test cycle: confirm POS opens normally before any further work is
-attempted.** Not yet signed off on a live instance — see "What still
-needs a human" at the end.**
+**Version: 19.0.7.14.0**
+**Status as of this document: code-complete, including everything
+through v7.13.1 (see CHANGELOG.md for the full history), plus a fully
+backend-only fix for Direct Sale orders (no table) never reaching KDS -
+confirmed live that `get_preparation_change()` is NOT a universal Send
+signal, only the restaurant/table flow. Confirmed replacement, also
+live-traced: `sync_from_ui`'s own `kwargs['context']` carries
+`preparation` (present) together with `current_order_uuid` (matching
+the specific order) on a genuine Direct Sale Send, and no
+`sync_from_ui` call at all for an ordinary edit. New authorization path
+added, **strictly scoped to the one order whose own `uuid` matches
+`current_order_uuid`** - never the whole `sync_from_ui` batch - per the
+client's own explicit correction. Content-signature comparison is used
+exclusively for de-duplicating an already-authorized, repeated
+delivery - never as an independent authorization signal on its own,
+preserving the "no Send = no KDS change" invariant exactly. Zero
+frontend risk this round - only `sync_from_ui()`'s own existing
+`**kwargs` capture is read further, no new hooks, no field-loading
+changes, nothing that could repeat the v7.13.0 POS-startup crash. 364
+automated tests, all `py_compile`/XML/JS checks passing, plus a custom
+AST-based undefined-name sweep. **Explicitly NOT claimed**: whether
+Direct Sale offline recovery works - the live reconnect test (required
+before this can be closed) has not yet been run; the
+`kds_send_generation` architecture remains fully intact as the
+confirmed fallback if the context does not survive reconnect. Not yet
+signed off on a live instance — see "What still needs a human" at the
+end.**
 
 
 This document maps directly to that request's own section structure
@@ -1209,6 +1210,50 @@ own order serialization method directly, a different approach from the
 one that failed here, not yet attempted or verified by this delivery
 process).
 
+## Direct Sale Send authorization: sync_from_ui context, strictly scoped, backend-only (v7.14.0)
+**Confirmed live**: Direct Sale orders (no table) never call
+`get_preparation_change()` at all - confirming it is not a universal
+Send signal, only the restaurant/table flow.
+
+**Confirmed replacement signal, live-traced (client's own A/B test)**:
+`sync_from_ui`'s own `kwargs['context']['preparation']` present +
+`kwargs['context']['current_order_uuid']` matching the order, on a
+genuine Send; no `sync_from_ui` call at all for an ordinary edit.
+
+**Fix**: entirely backend-only - `sync_from_ui()`'s own existing
+`**kwargs` capture is read further (no signature change, no new
+hooks). New authorization path, **strictly scoped per the client's own
+explicit correction**: only the one order whose own `uuid` matches
+`current_order_uuid` is authorized - never the whole batch, even
+though `context['preparation']` is itself batch-level.
+
+**De-duplication vs. authorization - kept strictly separate, per the
+client's own explicit distinction**: content-signature comparison is
+used only to recognize a repeated delivery of an ALREADY-authorized
+Send as a duplicate - never as an independent reason to authorize. A
+different signature alone, without a matching context (or flag, or
+generation advance), still authorizes nothing - the v7.12.0 fallback's
+own architectural mistake is not reintroduced.
+
+**Zero frontend risk this round** - no field-loading changes, no new
+JS hooks, nothing that could repeat the v7.13.0 POS-startup crash.
+
+**⚠️ Explicitly NOT claimed**: whether Direct Sale offline recovery
+works. Confirmed live only for the ONLINE case. The
+`kds_send_generation` architecture remains fully intact, unchanged,
+and independently tested as the confirmed fallback if the live
+reconnect test shows the context does not survive.
+
+**What still needs a human - required before this can be closed**: the
+client's own specified live test - new Direct Sale order → disconnect
+→ press Send → wait → reconnect without F5 → inspect the retried
+`sync_from_ui` for whether `context.preparation` and
+`current_order_uuid` survived, and whether exactly one `kds.order` was
+created. If the context does NOT survive, Direct Sale needs the
+`kds_send_generation` fallback activated via a separately-verified
+frontend increment point (following the same caution established after
+v7.13.0/v7.13.1).
+
 ---
 
 ## What still needs a human
@@ -1472,7 +1517,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 353 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 364 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |
