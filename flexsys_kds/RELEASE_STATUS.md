@@ -1,33 +1,37 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.15.0**
+**Version: 19.0.7.17.0**
 **Status as of this document: code-complete, including everything
-through v7.14.2 (see CHANGELOG.md for the full history), plus Offline
-Recovery via an explicit "Pending Kitchen Send" warning - confirmed
-live that Odoo 19's own POS does NOT automatically retry `sync_from_ui`
-after a reconnect for a Send pressed while offline, invalidating the
-assumption v7.12.1's own offline-recovery design had relied on. Per the
-client's own explicit direction, the safest possible fix is built first
-(zero silent data loss, guaranteed) with automatic re-sync deliberately
-deferred to a future round. New
-`static/src/js/flexsys_kds_offline_send_warning.js` patches the same
-confirmed-safe `sendOrderInPreparation` hook point (no field-loading
-override this time - the confirmed cause of the v7.13.0 crash) to
-persist a pending-Send marker in plain browser `localStorage`
-(completely independent of any Odoo data model) when a Send fails or
-the device is offline, shows a sticky warning via Odoo's own standard
-notification service, re-shows it on reconnect, and clears it only
-after a genuine successful Send. No silent auto-retry; Online Table and
-Direct Sale flows (v7.14.2's own backend logic) are completely
-untouched. 375 automated tests, all `py_compile`/XML/JS checks passing,
-plus a custom AST-based undefined-name sweep. **Honestly scoped
-testing**: the new file's own actual runtime behavior is genuine
-frontend browser behavior this test suite cannot execute or verify at
-all - only its presence and correct manifest wiring are confirmed.
-**Required before this can be closed**: the client's own live
-Acceptance Test (Offline → Send → Pending warning; Reconnect → warning
-remains; Send again → KDS receives the order exactly once → warning
-clears; no duplicates). Not yet signed off on a live instance — see
+through v7.16.0 (see CHANGELOG.md for the full history), plus a
+continuation of the same Printing cleanup - no `kds.print.job` is ever
+created without a resolvable printer. Both `create_reprint()` and
+`action_print_full_order()` resolved a printer and passed `.id`
+straight into `create()` without checking whether that search actually
+found anything - a station with no printer configured silently got a
+permanently unexecutable job with `printer_id=False`. Fixed with a new
+`NoPrinterConfiguredError` (a plain `UserError` subclass carrying a
+stable `error_code = 'no_printer'`) raised instead of ever creating
+such a job; `action_print_full_order()` applies this per-station in its
+own loop, so one station's missing printer never blocks printing
+correctly to another station that has one. The already-correct
+physical-failure-then-retry case (`action_mark_failed()` - same job,
+`retry_count` increments, no new row) is confirmed unchanged and now
+explicitly tested. On the KDS Screen frontend
+(`kds_app.js`/`kds_store.js` - this project's own module code within
+`web.assets_backend`, not a patch on any Odoo POS core model, a
+fundamentally lower-risk surface than every `point_of_sale._assets_pos`
+change in this project's history) a non-blocking toast now shows the
+exact required "Printing unavailable" / "No printer is configured for
+this station." message via Odoo's own standard notification service.
+The public kiosk print route, which had zero exception handling around
+this exact call before this fix, now returns a clean JSON error instead
+of an unhandled server error. One explicitly out-of-scope edge case
+(the automatic backup-printer escalation path technically creating a
+"Reprint"-labeled job with no user having asked for one) is documented,
+not fixed, per the dev request's own scope limit. 391 automated tests,
+all `py_compile`/XML/JS checks passing, plus a custom AST-based
+undefined-name sweep. No database migration needed - no new fields this
+round. Not yet signed off on a live instance — see
 "What still needs a human" at the end.**
 
 
@@ -1330,6 +1334,93 @@ Offline → Send → Pending warning shown; Reconnect → warning remains;
 Send again → KDS receives the order exactly once → warning clears; no
 duplicates.
 
+## Printing UI & Job History: unified Print Jobs screen, correct Print/Reprint sequencing (v7.16.0)
+**Different area of the module** - Printing UI/history cleanup only, no
+printing engine redesign (the atomic claim/lease mechanism,
+`_print_payload()`, and every action method are all unchanged).
+
+**Merged**: the separate "Reprints" screen/action is removed entirely -
+confirmed it was always the exact same `kds.print.job` model and list
+view "Print Jobs" already used, just pre-filtered by `job_type =
+'reprint'`. Landing page now shows two cards instead of three.
+
+**Root cause of the reported symptom**: the data was never wrong -
+sorted by the list's own default `create_date desc`, newer manual
+reprints naturally appeared above an older, still-correct first-print
+row. There was simply no field stating the real print sequence plainly.
+
+**Fix**: two new computed/stored fields - `print_number` (this job's
+own position among every job sharing the same order+station, by
+database id, not `create_date` which can collide) and
+`display_job_type` (simplified Print/Reprint label, `print_number == 1`
+is Print). Deliberately separate from the existing, unchanged
+`job_type` (auto/manual/reprint - a different, technical distinction
+the printing engine still needs internally).
+
+**Retry Count vs Reprint Count**: confirmed already correctly separate
+fields/concepts - no bug found in the distinction itself, and now
+explicitly tested (`action_mark_failed()`'s own retry never creates a
+new row or changes `print_number`/`display_job_type`).
+
+**Column set**: Order | Station | Printer | Job Type | Print # | Scope
+| Reprint Reason | Status | Retry Count | Escalated | User | Created On
+- matching the dev request's own list exactly, plus a new search view
+with Print/Reprint quick filters replacing the removed Reprints
+destination's own filtering purpose.
+
+**What still needs a human**: visual confirmation on a real Odoo 19
+instance that the merged Print Jobs screen renders as expected, and
+that `print_number`/`display_job_type` backfill correctly for any
+pre-existing print job records after the module update (Odoo's own
+standard automatic recompute-on-upgrade behavior for a newly-added
+stored compute field - not independently re-verified live).
+
+## Printing: no job without a resolvable printer, with a non-blocking KDS Screen Toast (v7.17.0)
+**Continuation of v7.16.0's own Printing cleanup** - items 1, 2, 6
+already delivered; this round adds items 3-5: no `kds.print.job`
+without a resolvable printer.
+
+**Root cause confirmed**: both `create_reprint()` and
+`action_print_full_order()` resolved a printer and passed `.id`
+straight into `create()` without checking whether the search actually
+found anything - a station with none configured silently got a
+permanently unexecutable job with `printer_id=False`.
+
+**Fix**: new `NoPrinterConfiguredError` (a plain `UserError` subclass,
+carrying a stable, non-translated `error_code = 'no_printer'`), raised
+instead of ever creating such a job. `create_reprint()` raises for the
+whole call; `action_print_full_order()` applies the same guard
+per-station in its own loop, so one station's missing printer never
+blocks printing correctly to another station that has one, with a
+clear audit-log event for the skipped station.
+
+**Item 4 (physical failure with a valid printer)**: confirmed already
+correct and unmodified - `action_mark_failed()` updates the same job
+row, increments `retry_count`, creates nothing new. Now explicitly
+tested.
+
+**Toast**: `_kds_error()` now automatically includes `error_code` when
+the raised exception defines one (fully backward compatible). The
+public kiosk's own print route had zero exception handling around this
+call before this fix - a raw server error, not clean JSON - now fixed.
+On the KDS Screen frontend itself (`kds_app.js`/`kds_store.js` -
+`web.assets_backend`, this project's own module code, not a patch on
+any Odoo POS core model) a non-blocking toast (Odoo's own standard
+notification service, no OK button) shows the exact required message.
+
+**Honest, explicitly out-of-scope edge case, documented not fixed**:
+the automatic backup-printer escalation after exhausted retries creates
+a genuinely new job row that, by this round's own numbering, displays
+as "Reprint" even though no user explicitly requested one. Not part of
+the dev request's own three named scenarios; worth a dedicated look
+later if it proves confusing in practice.
+
+**What still needs a human**: live confirmation that the toast actually
+renders correctly (non-blocking, correct message) when tapping Print/
+Reprint on a station with no printer configured, both from the backend
+KDS Screen and the public kiosk view; and that a station WITH a printer
+still prints normally, unaffected by this round's own changes.
+
 ---
 
 ## What still needs a human
@@ -1593,7 +1684,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 375 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 391 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

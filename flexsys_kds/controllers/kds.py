@@ -43,7 +43,22 @@ CANCELLED_GRACE_MINUTES = 5
 
 
 def _kds_error(exc):
-    return {'ok': False, 'error': str(exc)}
+    """UI/DATA FIX ("Printing Cleanup & Job History - Final Request"),
+    item 3: automatically surfaces `error_code` when the raised
+    exception carries one (e.g. models.kds_print_job.NoPrinterConfiguredError's
+    own `error_code = 'no_printer'`) - lets a frontend caller
+    distinguish a specific, expected condition from any other error
+    without ever having to pattern-match the translated message text
+    itself. Every existing caller of this helper is unaffected: `error`
+    is always present exactly as before; `error_code` is simply absent
+    (falsy/undefined on the JS side) for any exception that doesn't
+    define one.
+    """
+    result = {'ok': False, 'error': str(exc)}
+    error_code = getattr(exc, 'error_code', None)
+    if error_code:
+        result['error_code'] = error_code
+    return result
 
 
 def _effective_stage(lines):

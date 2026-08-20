@@ -8,6 +8,213 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.17.0 — Printing: no job without a resolvable printer, with a non-blocking KDS Screen Toast
+
+**Continuation of v7.16.0's own Printing UI & Job History cleanup.**
+Items 1, 2, and 6 (merged screen, `print_number`/`display_job_type`,
+column layout) were already delivered in that round and are unchanged.
+This round adds the one genuinely new requirement: items 3-5, no
+`kds.print.job` without a resolvable printer.
+
+### Root cause confirmed
+Both `kds.print.job.create_reprint()` and
+`kds.order.action_print_full_order()` resolved
+`station.printer_ids.filtered('is_default')[:1] or
+station.printer_ids[:1]` and passed `.id` straight into `create()`
+without ever checking whether either search actually found anything -
+a station with no printer configured got `printer_id: False`, silently
+creating a permanently unexecutable job. (The auto-print path in
+`pos_order.py` already had this exact guard from an earlier round -
+this round brings the other two creation points up to the same
+standard.)
+
+### Fix
+New `NoPrinterConfiguredError` (a plain `UserError` subclass, so every
+existing `except UserError` catches it unmodified, with one addition:
+a stable, non-translated `error_code = 'no_printer'` a caller can check
+without pattern-matching the translated message).
+
+- `create_reprint()`: resolves the printer *first*; raises
+  `NoPrinterConfiguredError` instead of ever creating a job when none is
+  found. "Do NOT create kds.print.job. Do NOT increase Print # /
+  Reprint count. لا تسجل العملية كـFailed Print Job" - satisfied exactly:
+  no row is created at all, so `print_number` is never touched and no
+  `status='failed'` job exists for a print that was never even attempted.
+- `action_print_full_order()`: same guard, applied **per station** in
+  its own loop rather than raising for the whole call - one station's
+  missing printer must not prevent printing correctly to another
+  station that does have one configured, matching the same principle
+  already established for auto-print. A skipped station gets a clear
+  audit-log event explaining why.
+
+### Item 4 (printer exists, physical failure) - confirmed already correct, not modified
+`action_mark_failed()` already updates the SAME job row and increments
+`retry_count` - no new record, no change to `print_number`/
+`display_job_type`. No bug found here; now explicitly tested.
+
+### Item 3's own Toast requirement
+`/flexsys_kds/print/reprint` (`controllers/kds.py`) already catches
+`UserError` generically - `NoPrinterConfiguredError` needed no new
+except clause. `_kds_error()` now automatically includes `error_code`
+whenever the raised exception defines one (fully backward compatible -
+`error` is always present exactly as before). The public kiosk's own
+`/flexsyskds/public/api/print` route (`controllers/kds_kiosk.py`) had
+**no** exception handling around this call at all before this fix - an
+unhandled server error, not a clean JSON response - now fixed to match
+the backend controller's own convention.
+
+On the KDS Screen frontend (`kds_app.js`/`kds_store.js` -
+`web.assets_backend`, this project's own module code, not a patch on
+any Odoo POS core model, a fundamentally lower-risk surface than every
+`point_of_sale._assets_pos` change in this project's own history):
+`kds_store.js`'s own `reprint()` now returns the RPC result instead of
+discarding it; `kds_app.js`'s own `onPrintClick` awaits it and, on
+`error_code === 'no_printer'`, shows Odoo's own standard notification
+service as a non-blocking toast (`type: 'warning'`, no OK button
+required) with the exact required title/message pair - "Printing
+unavailable" / "No printer is configured for this station." Any other,
+less expected failure still gets a generic toast using the backend's
+own error message, rather than the previous behavior of silently doing
+nothing for every failure path, not just this new one.
+
+### Honest, explicitly out-of-scope edge case, noted not fixed
+When `action_mark_failed()` exhausts its own retry budget and falls
+back to a backup printer, it creates a genuinely new `kds.print.job`
+row on that backup printer - which, by this round's own
+order+station-scoped `print_number` logic, is technically a second job
+and would display as `display_job_type='reprint'`, even though no user
+explicitly requested a reprint (the system escalated automatically
+after repeated technical failures). Not addressed this round - not
+part of the dev request's own three named scenarios (no printer /
+physical failure+retry / explicit user reprint), and the request's own
+scope restriction is explicit about not redesigning the printing
+engine's own escalation behavior. Worth a dedicated look in a future
+round if it proves confusing in practice.
+
+### Files changed
+`models/kds_print_job.py` (`NoPrinterConfiguredError`; `create_reprint()`
+guard), `models/kds_order.py` (`action_print_full_order()` per-station
+guard), `controllers/kds.py` (`_kds_error()` includes `error_code`),
+`controllers/kds_kiosk.py` (`kiosk_print()` now has exception
+handling), `static/src/js/kds_store.js` (`reprint()` returns the
+result), `static/src/js/kds_app.js` (notification service; `onPrintClick`
+shows the toast).
+
+### Tests
+9 new tests: no printer raises and creates nothing;
+`error_code='no_printer'` is present on the exception;
+`action_print_full_order()` skips only the station without a printer,
+leaving the one with a printer unaffected; that same action's own
+non-regression when a printer does exist; the physical-failure-then-
+retry case confirmed already correct (same job, `retry_count`
+increments, `print_number` untouched); a successful retry stays the
+same job; the dev request's own full worked example end to end (Print
+#1, retry, User Reprint #2 with its own retries, another Reprint #3 -
+confirming every field matches exactly); `_kds_error()` correctly
+surfaces `error_code` for `NoPrinterConfiguredError` and correctly
+omits it for an ordinary `UserError`.
+
+**Total: 391 tests** (up from 382). No database migration required -
+no new fields this round (both `print_number`/`display_job_type` were
+already added in v7.16.0).
+
+---
+
+## v7.16.0 — Printing UI & Job History: unified Print Jobs screen, correct Print/Reprint sequencing
+
+**Scope**: a different area of the module from the KDS Send/offline
+work in every round above - Printing UI and job-history cleanup only,
+no printing engine redesign.
+
+### 1 & 2 - Print Jobs and Reprints merged into one screen
+The separate `action_kds_reprint_log` ("Reprints") destination is
+removed entirely - confirmed it was always the exact same
+`kds.print.job` model and list view Print Jobs already used, just
+filtered by `job_type = 'reprint'`. The Printing landing page now shows
+two cards (Printers, Print Jobs) instead of three; two even columns
+replace the original three.
+
+### 3-6 - Root cause of the reported symptom, and the fix
+"نفس الطلب يظهر بعدة سجلات Reprint... ولا يظهر سجل Print الأصلي":
+confirmed the underlying data was never wrong - `job_type`
+(auto/manual/reprint, a technical "how was this job triggered"
+distinction the printing engine still needs and keeps unchanged) simply
+never told a person looking at the history "was this the first print for
+this order+station, or a repeat." Sorted by the list's own default
+`create_date desc`, several manual reprints naturally appeared above an
+older, still-correct auto-print row - not lost, just not visually
+distinguished as the sequence's own start.
+
+Two new fields, computed and stored on `kds.print.job`:
+- **`print_number`** (Integer): this job's own position among every
+  `kds.print.job` sharing the same `(order_id, station_id)`, ordered by
+  database id (more reliable than `create_date`, which can collide for
+  jobs created within the same second). The first print for a given
+  order+station - auto or manual, whichever happens first - is always
+  1; every subsequent one, regardless of its own `job_type`, is 2, 3,
+  4...
+- **`display_job_type`** (Selection: Print/Reprint): `print_number == 1`
+  is `'print'`, anything else is `'reprint'` - the simplified label the
+  dev request's own column list asks for. Deliberately a *separate*
+  field from `job_type`, not a relabeling of it - `job_type` keeps its
+  own different meaning, untouched, for everything else in this module
+  that already depends on it.
+
+Only the newly-created job's own position is computed and stored -
+matching Odoo's own standard compute/depends semantics, an earlier
+sibling's own already-correct `print_number` is never recomputed just
+because a later reprint was created.
+
+**Retry Count vs Reprint Count, confirmed and tested explicitly**:
+these were already two completely separate fields
+(`retry_count`/`action_mark_failed()` vs `job_type`/`create_reprint()`)
+- a technical retry of the same job (`action_mark_failed()`, below the
+auto-retry threshold) increments `retry_count` on the SAME row and
+creates no new record at all, never touching `print_number` or
+`display_job_type`. No bug found in this distinction itself - the
+reported confusion was entirely a display/history-clarity problem,
+addressed above.
+
+### 7 - Column set and order
+`Order | Station | Printer | Job Type (display_job_type) | Print # |
+Scope | Reprint Reason | Status | Retry Count | Escalated | User |
+Created On` - matching the dev request's own list exactly. A new search
+view adds Print/Reprint quick filters (replacing the separate Reprints
+destination's own filtering purpose) plus Failed/Escalated filters and
+group-by options.
+
+### Explicitly not touched, per the dev request's own scope limit
+No printing engine redesign - the atomic claim/lease mechanism,
+`_print_payload()`, `action_dispatch()`/`action_mark_printed()`/
+`action_mark_failed()`, and `create_reprint()`'s own logic are all
+completely unchanged.
+
+### Files changed
+`models/kds_print_job.py` (`print_number`, `display_job_type`,
+`_compute_print_number()`), `views/kds_print_job_views.xml` (merged
+list view, new search view, `action_kds_reprint_log` removed),
+`views/kds_printer_hub_views.xml` (Reprints card removed, two-column
+layout), `views/kds_menus.xml` and `models/kds_printer_hub.py`
+(documentation updated to match).
+
+### Tests
+7 new tests: the first print (auto or manual) is always
+`print_number=1`/`display_job_type='print'`; a reprint after a first
+print is correctly 2, with the original's own numbering completely
+undisturbed; three sequential manual reprints number 2, 3, 4 correctly
+(the exact reported scenario, reproduced and confirmed fixed);
+numbering is scoped independently per order+station; `retry_count`
+never affects `print_number`/`display_job_type` and never creates an
+extra row; and `create_reprint()` is confirmed to create a genuinely
+new, separate record.
+
+**Total: 382 tests** (up from 375). No database migration required -
+both new fields are computed/stored, backfilled automatically for
+existing records the next time each is touched or the module is
+upgraded (Odoo recomputes stored compute fields on module update).
+
+---
+
 ## v7.15.0 — Offline Recovery: Explicit Pending Kitchen Send Warning (no silent auto-retry)
 
 **Confirmed live**: `sync_from_ui` is not automatically retried by

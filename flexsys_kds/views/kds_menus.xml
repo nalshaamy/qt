@@ -19,11 +19,15 @@
     <menuitem id="menu_kds_routing" name="Routing" parent="menu_kds_configuration" action="action_kds_routing_rule" sequence="20"/>
 
     <!-- Consolidated per explicit request: one "Printers" menu entry
-         opening a single screen with three real notebook tabs
-         (Printers / Print Jobs / Reprints - see kds_printer_hub.py),
-         replacing the three separate flat menu items that used to sit
-         here. The three underlying actions (action_kds_printer,
-         action_kds_print_job, action_kds_reprint_log) are untouched -
+         opening a landing page with two cards (Printers / Print Jobs -
+         see kds_printer_hub.py), replacing the flat menu items that
+         used to sit here. UI/DATA FIX ("Printing UI & Job History -
+         Final Cleanup Before Testing"): the earlier three-card version
+         (Printers / Print Jobs / Reprints) had a separate Reprints
+         destination; that card and its own action_kds_reprint_log are
+         both removed - Print Jobs now covers both print and reprint
+         history in one screen. The two remaining actions
+         (action_kds_printer, action_kds_print_job) are untouched -
          action_kds_printer specifically is still used directly by
          kds.station's own "Printers" smart button. -->
     <menuitem id="menu_kds_printer_hub" name="Printers" parent="menu_kds_configuration" action="action_kds_printer_hub" sequence="30"/>

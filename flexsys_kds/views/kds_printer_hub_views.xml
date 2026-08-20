@@ -14,10 +14,19 @@
                 <sheet>
                     <div class="o_kds_hub_header mb-4">
                         <h1 class="mb-1">Printing</h1>
-                        <p class="text-muted mb-0">Printers, the job queue, and the reprint trail - each has its own page.</p>
+                        <p class="text-muted mb-0">Printers and the full print job history - print and reprint - each has its own page.</p>
                     </div>
+                    <!-- UI/DATA FIX ("Printing UI & Job History - Final
+                         Cleanup Before Testing"), items 1 & 2: the
+                         separate Reprints card/destination is removed
+                         entirely - Print Jobs (below) now covers both,
+                         since both were always the exact same
+                         kds.print.job model and list view underneath.
+                         Two even columns (col-md-6) replace the
+                         original three (col-md-4) now that only two
+                         cards remain. -->
                     <div class="row g-3">
-                        <div class="col-12 col-md-4">
+                        <div class="col-12 col-md-6">
                             <div class="card o_kds_hub_block h-100">
                                 <div class="card-body d-flex flex-column">
                                     <div class="o_kds_hub_icon mb-3"><i class="fa fa-print" role="img" aria-label="Printers"/></div>
@@ -30,29 +39,16 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-12 col-md-4">
+                        <div class="col-12 col-md-6">
                             <div class="card o_kds_hub_block h-100">
                                 <div class="card-body d-flex flex-column">
                                     <div class="o_kds_hub_icon mb-3"><i class="fa fa-list-alt" role="img" aria-label="Print Jobs"/></div>
                                     <h5 class="card-title">Print Jobs</h5>
                                     <p class="card-text text-muted flex-grow-1">
-                                        The full print queue - every job's status, retries, and any escalation to a backup printer.
+                                        The full print history - every job's status, retries, and any escalation to a backup printer - first prints and reprints together, each clearly labeled and numbered.
                                     </p>
                                     <button name="%(action_kds_print_job)d" type="action"
                                             string="Open Print Jobs" class="btn btn-primary o_kds_hub_btn"/>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-12 col-md-4">
-                            <div class="card o_kds_hub_block h-100">
-                                <div class="card-body d-flex flex-column">
-                                    <div class="o_kds_hub_icon mb-3"><i class="fa fa-refresh" role="img" aria-label="Reprints"/></div>
-                                    <h5 class="card-title">Reprints</h5>
-                                    <p class="card-text text-muted flex-grow-1">
-                                        Just the reprint jobs - a focused audit trail of every ticket reprinted, and why.
-                                    </p>
-                                    <button name="%(action_kds_reprint_log)d" type="action"
-                                            string="Open Reprints" class="btn btn-primary o_kds_hub_btn"/>
                                 </div>
                             </div>
                         </div>

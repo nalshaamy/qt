@@ -278,3 +278,413 @@ class TestPrinting(FlexSysKdsTestCommon):
             'job_type': 'auto',
         })
         self.assertEqual(job.copies, 1)
+
+    # -----------------------------------------------------------------
+    # UI/DATA FIX ("Printing UI & Job History - Final Cleanup Before
+    # Testing"): print_number/display_job_type correctly reflect the
+    # real print sequence per (order_id, station_id), independent of
+    # the technical job_type value (auto/manual/reprint) each job was
+    # actually created with, and independent of retry_count (a
+    # completely separate concept - technical retries of the SAME job,
+    # not new print jobs at all).
+    # -----------------------------------------------------------------
+    def test_first_print_is_number_one_and_display_type_print(self):
+        """The first print job ever created for a given (order,
+        station) - whichever job_type it happens to be (auto or
+        manual) - must be print_number=1, display_job_type='print'."""
+        order = self._order()
+        job = self.env['kds.print.job'].create({
+            'order_id': order.id,
+            'station_id': self.station_kitchen.id,
+            'printer_id': self.printer_primary.id,
+            'job_type': 'auto',
+        })
+        self.assertEqual(job.print_number, 1)
+        self.assertEqual(job.display_job_type, 'print')
+
+    def test_first_print_manual_is_still_number_one(self):
+        """A first job created as 'manual' (e.g. via
+        action_print_full_order) is print_number=1 just the same - the
+        FIRST job for its own (order, station) is always 'Print',
+        regardless of whether it happened to be triggered automatically
+        or manually."""
+        order = self._order()
+        job = self.env['kds.print.job'].create({
+            'order_id': order.id,
+            'station_id': self.station_kitchen.id,
+            'printer_id': self.printer_primary.id,
+            'job_type': 'manual',
+        })
+        self.assertEqual(job.print_number, 1)
+        self.assertEqual(job.display_job_type, 'print')
+
+    def test_reprint_after_first_print_is_number_two(self):
+        """The exact reported scenario: after a genuine first print,
+        create_reprint() must produce print_number=2,
+        display_job_type='reprint' - and the ORIGINAL first job's own
+        print_number/display_job_type must remain correctly 1/'print',
+        never recomputed or disturbed by the later reprint's own
+        creation."""
+        order = self._order()
+        first_job = self.env['kds.print.job'].create({
+            'order_id': order.id,
+            'station_id': self.station_kitchen.id,
+            'printer_id': self.printer_primary.id,
+            'job_type': 'auto',
+        })
+        self.assertEqual(first_job.print_number, 1)
+
+        reprint_job = self.env['kds.print.job'].create_reprint(
+            order, self.station_kitchen, reason='kitchen_request')
+
+        self.assertEqual(reprint_job.print_number, 2)
+        self.assertEqual(reprint_job.display_job_type, 'reprint')
+        first_job.invalidate_recordset()
+        self.assertEqual(
+            first_job.print_number, 1,
+            "The original first job's own print_number must remain 1, completely "
+            "unaffected by the later reprint's own creation.")
+        self.assertEqual(first_job.display_job_type, 'print')
+
+    def test_multiple_reprints_number_sequentially(self):
+        """Test D's own required scenario, multiple times over: three
+        manual reprints after an initial auto print must number 2, 3,
+        4 in the order they were actually created - the exact reported
+        bug scenario ('نفس الطلب يظهر بعدة سجلات Reprint... ولا يظهر
+        سجل Print الأصلي'), reproduced and confirmed fixed."""
+        order = self._order()
+        original = self.env['kds.print.job'].create({
+            'order_id': order.id,
+            'station_id': self.station_kitchen.id,
+            'printer_id': self.printer_primary.id,
+            'job_type': 'auto',
+        })
+        self.assertEqual(original.print_number, 1)
+        self.assertEqual(original.display_job_type, 'print')
+
+        reprint_2 = self.env['kds.print.job'].create_reprint(
+            order, self.station_kitchen, reason='lost_ticket')
+        reprint_3 = self.env['kds.print.job'].create_reprint(
+            order, self.station_kitchen, reason='kitchen_request')
+        reprint_4 = self.env['kds.print.job'].create_reprint(
+            order, self.station_kitchen, reason='customer_change')
+
+        self.assertEqual(reprint_2.print_number, 2)
+        self.assertEqual(reprint_3.print_number, 3)
+        self.assertEqual(reprint_4.print_number, 4)
+        for job in (reprint_2, reprint_3, reprint_4):
+            self.assertEqual(job.display_job_type, 'reprint')
+
+        # The original must STILL correctly show as the first Print,
+        # visible in the history alongside the three reprints - not
+        # "missing", the exact reported symptom.
+        original.invalidate_recordset()
+        self.assertEqual(original.print_number, 1)
+        self.assertEqual(original.display_job_type, 'print')
+
+    def test_print_numbering_independent_across_orders_and_stations(self):
+        """Confirms the sequence is scoped strictly per (order_id,
+        station_id) - a different order, or the same order at a
+        different station, must start its own sequence at 1, never
+        continuing another one's own numbering."""
+        order_a = self._order()
+        order_b = self._order()
+
+        job_a1 = self.env['kds.print.job'].create({
+            'order_id': order_a.id, 'station_id': self.station_kitchen.id,
+            'printer_id': self.printer_primary.id, 'job_type': 'auto',
+        })
+        job_b1 = self.env['kds.print.job'].create({
+            'order_id': order_b.id, 'station_id': self.station_kitchen.id,
+            'printer_id': self.printer_primary.id, 'job_type': 'auto',
+        })
+
+        self.assertEqual(job_a1.print_number, 1)
+        self.assertEqual(job_b1.print_number, 1,
+                          "A different order must start its own sequence at 1, "
+                          "not continue order_a's own numbering.")
+
+    def test_retry_count_never_affects_print_number_or_display_type(self):
+        """Required: 'Retry Count لا يعني Reprint Count.' A technical
+        retry of the SAME print job (action_mark_failed, below the
+        auto-retry threshold) must never create a new print_job row,
+        never change print_number, and never change display_job_type -
+        only retry_count itself changes."""
+        order = self._order()
+        job = self.env['kds.print.job'].create({
+            'order_id': order.id,
+            'station_id': self.station_kitchen.id,
+            'printer_id': self.printer_primary.id,
+            'job_type': 'auto',
+        })
+        self.assertEqual(job.print_number, 1)
+        self.assertEqual(job.display_job_type, 'print')
+        self.assertEqual(job.retry_count, 0)
+
+        job.action_mark_failed('simulated printer error')
+
+        job.invalidate_recordset()
+        self.assertEqual(job.retry_count, 1,
+                          "retry_count increments on the SAME job - no new row created.")
+        self.assertEqual(
+            job.print_number, 1,
+            "print_number must remain 1 - a technical retry is not a new print event.")
+        self.assertEqual(
+            job.display_job_type, 'print',
+            "display_job_type must remain 'print' - retries never turn a first print "
+            "into a 'reprint'.")
+        # Confirms no new kds.print.job row was created by the retry.
+        self.assertEqual(
+            self.env['kds.print.job'].search_count([
+                ('order_id', '=', order.id), ('station_id', '=', self.station_kitchen.id),
+            ]),
+            1,
+            "A retry must never create an additional print_job row - Retry Count and "
+            "Reprint Count are completely separate concepts.")
+
+    def test_reprint_action_creates_a_genuinely_new_job_row(self):
+        """Confirms create_reprint() itself creates a distinct new
+        kds.print.job row (not just bumping some counter on the
+        original) - the required 'كل طلب إعادة طباعة يدوي ينشئ سجلًا
+        جديدًا'."""
+        order = self._order()
+        first_job = self.env['kds.print.job'].create({
+            'order_id': order.id,
+            'station_id': self.station_kitchen.id,
+            'printer_id': self.printer_primary.id,
+            'job_type': 'auto',
+        })
+
+        reprint_job = self.env['kds.print.job'].create_reprint(
+            order, self.station_kitchen, reason='manager_request')
+
+        self.assertNotEqual(
+            reprint_job.id, first_job.id,
+            "A reprint must be a genuinely new, separate kds.print.job record.")
+        self.assertEqual(
+            self.env['kds.print.job'].search_count([
+                ('order_id', '=', order.id), ('station_id', '=', self.station_kitchen.id),
+            ]),
+            2)
+
+    # -----------------------------------------------------------------
+    # UI/DATA FIX ("Printing Cleanup & Job History - Final Request"),
+    # item 3: no kds.print.job must ever be created for a station with
+    # no configured/eligible printer - confirmed the previous behavior
+    # silently created a permanently unexecutable job with
+    # printer_id=False.
+    # -----------------------------------------------------------------
+    def test_create_reprint_no_printer_raises_and_creates_no_job(self):
+        """Required: 'Do NOT create kds.print.job. Do NOT increase
+        Print # / Reprint count.' A station with zero printers
+        configured must raise, not silently create a broken job."""
+        from odoo.addons.flexsys_kds.models.kds_print_job import NoPrinterConfiguredError
+        order = self._order()
+        station_no_printer = self.env['kds.station'].create({
+            'name': 'Dessert Station (no printer)',
+            'code': 'DESSERT_NOPRN',
+        })
+
+        with self.assertRaises(NoPrinterConfiguredError):
+            self.env['kds.print.job'].create_reprint(
+                order, station_no_printer, reason='kitchen_request')
+
+        self.assertEqual(
+            self.env['kds.print.job'].search_count([
+                ('order_id', '=', order.id), ('station_id', '=', station_no_printer.id),
+            ]),
+            0,
+            "No kds.print.job of any kind must have been created.")
+
+    def test_no_printer_error_carries_stable_error_code(self):
+        """Confirms the exception carries a stable, non-translated
+        error_code a caller (a controller) can check, distinguishing
+        this specific condition from any other UserError."""
+        order = self._order()
+        station_no_printer = self.env['kds.station'].create({
+            'name': 'Dessert Station 2 (no printer)',
+            'code': 'DESSERT_NOPRN2',
+        })
+        try:
+            self.env['kds.print.job'].create_reprint(
+                order, station_no_printer, reason='kitchen_request')
+            self.fail("Expected NoPrinterConfiguredError to be raised.")
+        except Exception as e:
+            self.assertEqual(getattr(e, 'error_code', None), 'no_printer')
+
+    def test_action_print_full_order_skips_station_without_printer(self):
+        """The same fix for action_print_full_order(), but per-station:
+        one station with no printer must not prevent printing correctly
+        to another station that DOES have one configured."""
+        order = self._order()  # already routed to station_kitchen, which has printers
+        station_no_printer = self.env['kds.station'].create({
+            'name': 'Bar Station (no printer)',
+            'code': 'BAR_NOPRN',
+        })
+        bar_line = self.env['pos.order.line'].create({
+            'order_id': order.pos_order_id.id,
+            'product_id': self.product_cappuccino.id,
+            'qty': 1, 'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
+        })
+        kds_line = self.env['kds.order.line'].create({
+            'order_id': order.id, 'product_id': self.product_cappuccino.id,
+            'product_name': self.product_cappuccino.name, 'qty': 1,
+            'station_id': station_no_printer.id,
+        })
+        order.invalidate_recordset()
+
+        order.action_print_full_order(bypass_check=True)
+
+        kitchen_jobs = self.env['kds.print.job'].search([
+            ('order_id', '=', order.id), ('station_id', '=', self.station_kitchen.id),
+        ])
+        no_printer_jobs = self.env['kds.print.job'].search([
+            ('order_id', '=', order.id), ('station_id', '=', station_no_printer.id),
+        ])
+        self.assertEqual(
+            len(kitchen_jobs), 1,
+            "The station WITH a printer must still get its own print job created.")
+        self.assertEqual(
+            len(no_printer_jobs), 0,
+            "The station WITHOUT a printer must get no job at all - not a broken one.")
+
+    def test_action_print_full_order_still_works_when_printer_exists(self):
+        """Non-regression: a station that DOES have a printer configured
+        must continue to get a correctly-created print job exactly as
+        before."""
+        order = self._order()
+        order.action_print_full_order(bypass_check=True)
+
+        job = self.env['kds.print.job'].search([
+            ('order_id', '=', order.id), ('station_id', '=', self.station_kitchen.id),
+        ])
+        self.assertEqual(len(job), 1)
+        self.assertTrue(job.printer_id)
+        self.assertEqual(job.print_number, 1)
+        self.assertEqual(job.display_job_type, 'print')
+
+    def test_printer_exists_physical_failure_same_job_retry_increments(self):
+        """Required acceptance case (item 4): 'إذا تم Resolve لطابعة
+        صالحة وتم إنشاء Job ثم فشلت الطباعة: Job exists -> same Job ->
+        Retry Count increases' - confirms this ALREADY correct behavior
+        directly, unaffected by this round's own changes."""
+        order = self._order()
+        job = self.env['kds.print.job'].create({
+            'order_id': order.id,
+            'station_id': self.station_kitchen.id,
+            'printer_id': self.printer_primary.id,
+            'job_type': 'auto',
+        })
+        self.assertEqual(job.print_number, 1)
+        self.assertEqual(job.retry_count, 0)
+
+        job.action_mark_failed('simulated physical printer failure')
+
+        job.invalidate_recordset()
+        self.assertEqual(job.retry_count, 1, "Same job, retry_count increments.")
+        self.assertEqual(job.print_number, 1, "Still print #1 - no new job created.")
+        self.assertEqual(job.display_job_type, 'print', "Not turned into a Reprint by a retry.")
+        self.assertEqual(
+            self.env['kds.print.job'].search_count([
+                ('order_id', '=', order.id), ('station_id', '=', self.station_kitchen.id),
+            ]),
+            1, "No new kds.print.job row created by the physical failure/retry.")
+
+    def test_successful_retry_stays_same_job(self):
+        """Required acceptance case: 'Successful retry -> Same Job.'"""
+        order = self._order()
+        job = self.env['kds.print.job'].create({
+            'order_id': order.id,
+            'station_id': self.station_kitchen.id,
+            'printer_id': self.printer_primary.id,
+            'job_type': 'auto',
+        })
+        job.action_mark_failed('transient error')
+        job.invalidate_recordset()
+        self.assertEqual(job.retry_count, 1)
+        self.assertEqual(job.status, 'pending')
+
+        job.action_mark_printed()
+
+        job.invalidate_recordset()
+        self.assertEqual(job.status, 'printed')
+        self.assertEqual(job.print_number, 1)
+        self.assertEqual(job.display_job_type, 'print')
+        self.assertEqual(
+            self.env['kds.print.job'].search_count([
+                ('order_id', '=', order.id), ('station_id', '=', self.station_kitchen.id),
+            ]),
+            1, "A successful retry must still be the exact same single job row.")
+
+    def test_full_acceptance_sequence_print_retry_reprint_reprint(self):
+        """The dev request's own full worked example, reproduced end to
+        end: Print #1 (retry 0) -> physical failure, retry -> User
+        Reprint -> Print #2 -> another Reprint -> Print #3 with its own
+        retries."""
+        order = self._order()
+        first = self.env['kds.print.job'].create({
+            'order_id': order.id,
+            'station_id': self.station_kitchen.id,
+            'printer_id': self.printer_primary.id,
+            'job_type': 'auto',
+        })
+        self.assertEqual(first.print_number, 1)
+        self.assertEqual(first.display_job_type, 'print')
+        self.assertEqual(first.retry_count, 0)
+
+        first.action_mark_failed('printer jam')
+        first.invalidate_recordset()
+        self.assertEqual(first.retry_count, 1)
+        self.assertEqual(first.print_number, 1, "Still the same job/number after a retry.")
+
+        second = self.env['kds.print.job'].create_reprint(
+            order, self.station_kitchen, reason='lost_ticket')
+        self.assertEqual(second.print_number, 2)
+        self.assertEqual(second.display_job_type, 'reprint')
+        self.assertEqual(second.retry_count, 0)
+
+        second.action_mark_failed('printer jam')
+        second.action_mark_failed('printer jam again')
+        second.invalidate_recordset()
+        self.assertEqual(second.retry_count, 2)
+        self.assertEqual(second.print_number, 2, "Retries never change print_number.")
+        self.assertEqual(second.display_job_type, 'reprint')
+
+        third = self.env['kds.print.job'].create_reprint(
+            order, self.station_kitchen, reason='customer_change')
+        self.assertEqual(third.print_number, 3)
+        self.assertEqual(third.display_job_type, 'reprint')
+        self.assertEqual(third.retry_count, 0)
+
+        # Final state check across all three jobs at once.
+        all_jobs = self.env['kds.print.job'].search(
+            [('order_id', '=', order.id), ('station_id', '=', self.station_kitchen.id)],
+            order='print_number asc')
+        self.assertEqual(len(all_jobs), 3, "No accidental duplicate jobs.")
+        self.assertEqual(all_jobs.mapped('print_number'), [1, 2, 3])
+        self.assertEqual(all_jobs.mapped('display_job_type'), ['print', 'reprint', 'reprint'])
+        self.assertEqual(all_jobs.mapped('retry_count'), [1, 2, 0])
+
+    def test_kds_reprint_controller_returns_no_printer_error_code(self):
+        """Confirms the /flexsys_kds/print/reprint controller correctly
+        surfaces error_code='no_printer' via _kds_error() when the
+        underlying create_reprint() raises NoPrinterConfiguredError -
+        the JSON shape the frontend's own onPrintClick relies on to
+        show the specific required Toast."""
+        from odoo.addons.flexsys_kds.controllers.kds import _kds_error
+        from odoo.addons.flexsys_kds.models.kds_print_job import NoPrinterConfiguredError
+        exc = NoPrinterConfiguredError("No printer is configured for this station.")
+        result = _kds_error(exc)
+        self.assertEqual(result['ok'], False)
+        self.assertEqual(result['error_code'], 'no_printer')
+        self.assertIn('No printer is configured', result['error'])
+
+    def test_kds_error_helper_omits_error_code_for_ordinary_exceptions(self):
+        """Confirms _kds_error() doesn't fabricate an error_code for an
+        exception that doesn't define one - existing callers/behavior
+        for every other error path are unaffected."""
+        from odoo.addons.flexsys_kds.controllers.kds import _kds_error
+        from odoo.exceptions import UserError
+        result = _kds_error(UserError("Some other, ordinary error"))
+        self.assertEqual(result['ok'], False)
+        self.assertNotIn('error_code', result)

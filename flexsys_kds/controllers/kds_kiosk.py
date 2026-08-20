@@ -356,8 +356,28 @@ class FlexSysKdsKioskController(http.Controller):
         # there's no logged-in user on the public kiosk to gate by
         # anyway, so bypass_check=True here matches every other kiosk
         # action (accept/start/ready).
-        job = env['kds.print.job'].create_reprint(
-            order, station, reason='kitchen_request', bypass_check=True)
+        # UI/DATA FIX ("Printing Cleanup & Job History - Final
+        # Request"), item 3: create_reprint() now raises a UserError
+        # (NoPrinterConfiguredError specifically) instead of silently
+        # creating a job with no printer, for a station with none
+        # configured - this call had no try/except around it at all
+        # before this fix, so that exception would have surfaced as an
+        # unhandled server error instead of the clean {'ok': False,
+        # 'error': ...} JSON response every other route on this kiosk
+        # controller already returns for an expected failure.
+        # error_code, when present, lets a kiosk frontend distinguish
+        # this specific condition without pattern-matching the
+        # translated message text - the same convention already
+        # established in controllers/kds.py's own _kds_error().
+        try:
+            job = env['kds.print.job'].create_reprint(
+                order, station, reason='kitchen_request', bypass_check=True)
+        except UserError as e:
+            result = {'ok': False, 'error': str(e)}
+            error_code = getattr(e, 'error_code', None)
+            if error_code:
+                result['error_code'] = error_code
+            return result
         return {'ok': True, 'job_id': job.id}
 
 

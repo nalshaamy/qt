@@ -3,22 +3,30 @@ from odoo import fields, models
 
 
 class KdsPrinterHub(models.TransientModel):
-    """Landing screen for Configuration > Printers - three distinct
-    "blocks" (Printers / Print Jobs / Reprints), each a card linking to
-    its own separate, full-featured page, per explicit request ("داخل
-    FlexSys KDS نفسها، بتصميم مربعات/أقسام مميزة، ولكل واحدة صفحة
-    إعداداتها الخاصة" - inside FlexSys KDS itself, styled as distinct
-    boxes, each with its own dedicated page) - not Odoo's own General
-    Settings app (a real res.config.settings integration there is a
-    meaningfully bigger, riskier undertaking with its own very specific
-    structural requirements, and wasn't what was actually being asked
-    for here), and not the three-tabs-in-one-screen version from the
-    previous round either (that combined everything into one page; this
-    is back to three separate destinations, just reached via a styled
-    landing page instead of three flat menu items).
+    """Landing screen for Configuration > Printers - two "blocks"
+    (Printers / Print Jobs), each a card linking to its own separate,
+    full-featured page, per explicit request ("داخل FlexSys KDS نفسها،
+    بتصميم مربعات/أقسام مميزة، ولكل واحدة صفحة إعداداتها الخاصة" - inside
+    FlexSys KDS itself, styled as distinct boxes, each with its own
+    dedicated page) - not Odoo's own General Settings app (a real
+    res.config.settings integration there is a meaningfully bigger,
+    riskier undertaking with its own very specific structural
+    requirements, and wasn't what was actually being asked for here),
+    and not the three-tabs-in-one-screen version from an earlier round
+    either (that combined everything into one page; this is separate
+    destinations, reached via a styled landing page instead of flat
+    menu items).
 
-    The three real actions (action_kds_printer, action_kds_print_job,
-    action_kds_reprint_log) are untouched, exactly as before.
+    UI/DATA FIX ("Printing UI & Job History - Final Cleanup Before
+    Testing"), items 1 & 2: this used to be three cards
+    (Printers / Print Jobs / Reprints) - the Reprints card and its own
+    action_kds_reprint_log are both removed entirely, since both were
+    always the exact same kds.print.job model and list view Print Jobs
+    already used; Print Jobs alone now covers the full print + reprint
+    history.
+
+    The two remaining real actions (action_kds_printer,
+    action_kds_print_job) are untouched.
     """
     _name = 'kds.printer.hub'
     _description = 'FlexSys KDS Printers Hub'

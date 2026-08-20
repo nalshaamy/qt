@@ -932,14 +932,39 @@ class KdsOrder(models.Model):
         notify_stations(self.env, self.station_ids)
 
     def action_print_full_order(self, bypass_check=False):
+        """UI/DATA FIX ("Printing Cleanup & Job History - Final
+        Request"), item 3: the same confirmed bug as create_reprint()'s
+        own matching fix - this used to create a kds.print.job with
+        printer_id=False for any station with no configured/eligible
+        printer, silently persisting a permanently unexecutable job.
+
+        Fixed the same way, but per-station rather than raising for the
+        whole call: this action can cover several stations (e.g. an
+        order routed to both Kitchen and Bar), and one station's own
+        missing printer must not prevent printing correctly to every
+        OTHER station that does have one configured - the exact same
+        principle already established, live and unchanged, in
+        pos_order.py's own auto-print path for this same scenario. A
+        station with no printer is skipped, with a clear audit-log
+        event explaining why, rather than either creating a broken job
+        or aborting the whole action.
+        """
         self.ensure_one()
         self._kds_check_action('print_full_order', bypass=bypass_check)
         self._kds_check_order_access(bypass=bypass_check)
         for station in self.station_ids:
+            printer = station.printer_ids.filtered('is_default')[:1] or station.printer_ids[:1]
+            if not printer:
+                self.env['kds.event'].log(
+                    self, event_type='override', station=station,
+                    note=_("Printing unavailable: no printer is configured for "
+                           "station '%s' - no print job was created.") % station.name
+                )
+                continue
             self.env['kds.print.job'].create({
                 'order_id': self.id,
                 'station_id': station.id,
-                'printer_id': (station.printer_ids.filtered('is_default')[:1] or station.printer_ids[:1]).id,
+                'printer_id': printer.id,
                 'job_type': 'manual',
                 'scope': 'full_order',
             })
