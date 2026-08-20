@@ -8,6 +8,141 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.20.0 — Print Agent Authentication: confirmed root cause (manual copy error), plus hmac.compare_digest() hardening
+
+**Confirmed live**: `/flexsys_kds/print/agent/claim` returned "Invalid
+printer or agent key" despite HTTP/JSON-RPC communication succeeding
+and the key appearing valid (49 characters, ASCII).
+
+### Traced end to end, as required: Printer form → agent_key → claim → _agent_claim_jobs() → hmac.compare_digest()
+Confirmed directly that `printer.agent_key` (read from the database)
+and the key compared in `_printer_from_key()` are the exact same value
+at every step - no transformation, no encoding change, nothing wrong
+in the stored/compared value itself anywhere in this chain.
+
+### Root cause found instead: a confirmed, precise manual-copy discrepancy
+`secrets.token_urlsafe(24)` was directly re-verified to always generate
+exactly 32 characters (50 trials, zero variance). The key the external
+mock agent actually received was 49 characters - a 17-character excess
+matching `len("Print Agent Key: ")` exactly. Strong conclusion:
+`action_show_agent_key()`'s own sticky notification renders its title
+and message close together with no strong visual break preventing a
+manual selection from spanning both - the administrator most likely
+selected and copied the title text along with the actual key. The
+underlying value was never wrong; the display made a manual copy error
+easy to make without noticing - an inherent risk of the client's own
+explicitly chosen "Show" (manual copy) design over new,
+`navigator.clipboard`-based automatic copy.
+
+### Fix 1 - restructured the revealed message to reduce this specific copy error
+`action_show_agent_key()`'s own message is now the key ALONE as the
+very first line (a copy starting from the beginning of the message body
+never needs to skip past anything else), followed by a blank line and
+a plain-English verification hint (the key's own current length) - so
+the administrator can visually confirm what they copied before
+configuring the external agent with it. Does not, and cannot, guarantee
+no future manual-copy error is ever possible (still manual selection
+from a browser notification, the client's own explicitly accepted
+trade-off) - directly targets the confirmed, specific failure mode
+found here.
+
+### Fix 2 - hardened hmac.compare_digest() against malformed input, as explicitly required
+`hmac.compare_digest()` raises `TypeError` if its two arguments are of
+different types (`str` vs `bytes`, or either compared against `None`/an
+`int`/a `list`/a `dict`) and additionally for a `str` argument
+containing any non-ASCII character (both confirmed directly against the
+real CPython function, six distinct malformed-input cases, all
+previously raising `TypeError`). Any of these - a bug on the external
+agent's own side, or exactly the kind of malformed value a copy error
+like the one found above could produce - would have surfaced as an
+unhandled `TypeError`, a raw HTTP 500, instead of the same clean
+`{'ok': False, 'error': 'Invalid printer or agent key'}` response every
+other authentication failure already correctly returns.
+`_printer_from_key()` now wraps the comparison in its own
+`try/except TypeError`, treating any such malformed input as simply
+another authentication failure - the actual comparison logic itself
+(`printer.agent_key` vs the incoming `agent_key`) is completely
+unchanged.
+
+### Explicitly not touched, per the dev request's own scope limit
+Agent/Claim/Lease architecture, the atomic `_claim_pending_jobs()`
+mechanism, and every other part of the printing engine - none modified.
+
+### Files changed
+`controllers/kds.py` (`_printer_from_key()`'s own hardened
+`try/except`), `models/kds_printer.py`
+(`action_show_agent_key()`'s own restructured message).
+
+### Tests
+5 new tests: confirms `token_urlsafe(24)`'s own stable 32-character
+length (the baseline this round's own analysis depends on); the exact
+`try/except TypeError` pattern now used, directly verified against six
+distinct malformed-input cases (`None`, an int, a list, a dict, bytes,
+and a non-ASCII string) that were all independently confirmed to raise
+`TypeError` from the real `hmac.compare_digest()` before this fix,
+correctly returning `False` after it; a structural source-code check
+confirming the real `_printer_from_key()` genuinely contains the guard
+(honestly scoped - the full HTTP-level integration cannot be safely
+tested from this project's own existing `TransactionCase`-based suite
+without a heavier `HttpCase` this project does not otherwise use, or
+fragile mocking of Odoo's own internal request-context machinery -
+stated plainly, not glossed over); and two existing tests updated for
+the message's own new two-part structure (key first, hint after).
+
+**Total: 407 tests** (up from 403). No database migration required.
+
+**Required before this can be considered closed**: the client's own
+repeat of the live Print Agent test, confirming a freshly-copied key
+(now copied per the improved, clearer message layout) succeeds with
+`ok: True`, and confirming an intentionally invalid/malformed key
+produces the clean error response, never a server error.
+
+---
+
+## v7.19.1 — Rename: "Copy Agent Key" → "Show Agent Key" (naming correction, no behavior change)
+
+**Confirmed live**: "Copy Agent Key" did not actually copy anything to
+the clipboard - it only ever revealed the key in a sticky notification
+for manual selection, exactly as designed in v7.19.0, but the name
+itself was misleading about what it does.
+
+### Client's own explicit choice
+Offered either a rename to "Show Agent Key" or genuine
+`navigator.clipboard` JavaScript, "if it can be done safely without
+adding fragile frontend code." Given this project's own history with
+unverified frontend additions, and the client's own explicit
+acceptance - "Show Agent Key is acceptable as long as the full key can
+be selected and copied manually" (already true, unchanged) - the
+rename is the correct choice here, not new clipboard JavaScript this
+delivery has no way to verify live.
+
+### Fix
+`action_copy_agent_key()` renamed to `action_show_agent_key()`
+(model, view button, and every test reference updated together); button
+label changed from "Copy Agent Key" to "Show Agent Key." The underlying
+mechanism is completely unchanged - the same `sticky: True`
+`display_notification` action, the same
+`groups="flexsys_kds.group_kds_administrator"` restriction, the same
+server-side `AccessError` defense in depth, the same guarantee that
+`agent_key` itself is never written to or regenerated by this action.
+
+### Files changed
+`models/kds_printer.py` (method renamed, docstring rewritten to
+accurately describe "show," not "copy"), `views/kds_printer_views.xml`
+(button `name`/`string` updated), `tests/test_printing.py` (all 5
+existing tests renamed and updated to call `action_show_agent_key()`).
+
+### Tests
+No new tests - the 5 tests from v7.19.0 are renamed
+(`test_copy_agent_key_*` → `test_show_agent_key_*`) and their own
+method calls updated; test coverage and assertions are otherwise
+identical, since the underlying behavior itself did not change.
+
+**Total: 403 tests** (unchanged). No database migration required - no
+field/model changes this round.
+
+---
+
 ## v7.19.0 — Printer form: secure "Copy Agent Key" action, no permanent plain-text exposure
 
 **Confirmed live during actual Print Agent configuration/testing**:

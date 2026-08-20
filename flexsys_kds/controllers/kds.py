@@ -591,9 +591,38 @@ class FlexSysKdsPrintAgentController(http.Controller):
     """
 
     def _printer_from_key(self, printer_id, agent_key):
+        """REAL BUG FIX ("Print Agent Authentication - Live Test
+        Failure"), confirmed live: `hmac.compare_digest()` requires
+        both arguments to be the SAME type (both `str` or both
+        `bytes`-like), and additionally raises `TypeError` if a `str`
+        argument contains any non-ASCII character (a documented CPython
+        constraint on this exact function, not a bug in this codebase's
+        own logic) - a print agent process sending any malformed value
+        for `agent_key` at all (wrong type entirely, e.g. `None`/a
+        number/a list because of a bug on the agent's own side, or a
+        string containing an unexpected non-ASCII byte from a
+        corrupted copy/paste) could therefore raise an UNHANDLED
+        `TypeError` here, surfacing as a raw HTTP 500 server error
+        instead of the same clean `{'ok': False, 'error': 'Invalid
+        printer or agent key'}` response every other authentication
+        failure already correctly returns. Fixed by treating a
+        `TypeError` from the comparison itself as just another
+        authentication failure - "harden hmac.compare_digest() handling
+        so malformed/non-ASCII input returns a normal authentication
+        failure instead of producing a server TypeError," exactly as
+        required. `printer.agent_key` (read from the database) and
+        `agent_key` (the incoming request parameter) are otherwise
+        compared completely unchanged - no change to the actual
+        authentication logic or the Agent/Claim/Lease architecture
+        itself, only to how a malformed comparison input is handled.
+        """
         printer = request.env['kds.printer'].sudo().browse(printer_id).exists()
-        if not printer or not agent_key or not printer.agent_key or \
-                not hmac.compare_digest(printer.agent_key, agent_key):
+        if not printer or not agent_key or not printer.agent_key:
+            return None
+        try:
+            if not hmac.compare_digest(printer.agent_key, agent_key):
+                return None
+        except TypeError:
             return None
         return printer
 

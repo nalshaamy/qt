@@ -1,32 +1,35 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.19.0**
+**Version: 19.0.7.20.0**
 **Status as of this document: code-complete, including everything
-through v7.18.0 (see CHANGELOG.md for the full history), plus a secure
-"Copy Agent Key" action on the printer form - confirmed live during
-actual Print Agent configuration/testing that `agent_key` was correctly
-password-masked but had no way at all to retrieve the real value to
-configure the external print agent process with. New
-`action_copy_agent_key()`, a plain Python server action returning
-Odoo's own standard, officially documented `display_notification`
-client action - no custom JavaScript, no new widget, no
-`navigator.clipboard` dependency. The key is shown once, in a
-`sticky: True` notification (stays until manually dismissed - long
-enough to select and copy), never written back into the form, never
-unmasked in the persistent field, never logged - "Do not display the
-key permanently in plain text" is satisfied exactly, since the field
-itself is completely unaffected. New "Copy Agent Key" button placed
-next to the existing "Regenerate Agent Key," same
-`groups="flexsys_kds.group_kds_administrator"` restriction, backed by
-an explicit server-side access check as genuine defense in depth.
-`action_regenerate_agent_key()` itself is completely untouched - the
-new action never writes to `agent_key` at all, so copying can never
-accidentally change it. Agent authentication, Claim/Ack/Result, and
-every other part of the printing architecture completely untouched,
-per the dev request's own explicit scope limit. 403 automated tests,
-all `py_compile`/XML/JS checks passing, plus a custom AST-based
-undefined-name sweep. No database migration needed - no field/model
-changes this round. Not yet signed off on a live instance — see
+through v7.19.1 (see CHANGELOG.md for the full history), plus a traced,
+confirmed root cause for a live Print Agent authentication failure.
+`/flexsys_kds/print/agent/claim` returned "Invalid printer or agent
+key" despite a valid-looking key. Traced end to end as required
+(Printer form → `agent_key` → `claim` → `_agent_claim_jobs()` →
+`hmac.compare_digest()`) - the stored and compared values were
+confirmed identical at every step, never the actual problem. Root cause
+instead: `secrets.token_urlsafe(24)` directly re-verified to always
+generate exactly 32 characters (50 trials, zero variance); the key
+actually received was 49 characters - a 17-character excess matching
+`len("Print Agent Key: ")` exactly, strongly indicating the sticky
+notification's own title was accidentally selected and copied along
+with the real key, a manual-copy error inherent to the "Show" (not
+automatic clipboard) design the client had explicitly chosen. Fixed by
+restructuring the revealed message - the key alone as the very first
+line, followed by a length-verification hint after a blank line - to
+reduce this specific copy error, and by hardening
+`_printer_from_key()`'s own `hmac.compare_digest()` call with an
+explicit `try/except TypeError`, confirmed directly (six distinct
+malformed-input cases, all independently verified to raise `TypeError`
+from the real function before this fix) so any malformed comparison
+input now returns a clean authentication failure instead of an
+unhandled server error. Agent/Claim/Lease architecture completely
+untouched, per the dev request's own explicit scope limit. 407
+automated tests, all `py_compile`/XML/JS checks passing, plus a custom
+AST-based undefined-name sweep. No database migration needed - no
+field/model changes this round. Not yet signed off on a live instance
+— see
 "What still needs a human" at the end.**
 
 
@@ -1481,7 +1484,7 @@ no printer configured produces no `kds.print.job` and no toast/popup of
 any kind (silent, by design), and that a station WITH a printer
 continues printing normally.
 
-## Printer form: secure "Copy Agent Key" action (v7.19.0)
+## Printer form: secure "Copy Agent Key" action (v7.19.0) — ⚠️ RENAMED IN v7.19.1, LEFT AS A RECORD OF THE ACTUAL INVESTIGATION
 **Confirmed live during actual Print Agent configuration/testing**:
 `agent_key` correctly password-masked, but no way at all to retrieve
 the real value to configure the external print agent process with.
@@ -1505,12 +1508,87 @@ untouched - the new action never writes to `agent_key` at all.
 every other part of the printing architecture, per the dev request's
 own explicit scope limit.
 
-**What still needs a human**: live confirmation that clicking "Copy
-Agent Key" shows the correct, real key in a sticky notification, that
-the text is genuinely selectable/copyable from it, that the button is
-correctly hidden for a non-Administrator user, and that the external
-print agent process can be successfully configured with the copied key
-end to end.
+**⚠️ Confirmed live: the name itself was misleading** - "Copy Agent
+Key" never actually copied anything to the clipboard; it only ever
+revealed the key for manual selection, exactly as designed above. See
+v7.19.1's own section immediately below for the rename to "Show Agent
+Key" - the underlying mechanism described here is otherwise completely
+unchanged.
+
+---
+
+## Rename: "Copy Agent Key" → "Show Agent Key" (v7.19.1)
+**Confirmed live**: the action never performed a real clipboard copy -
+only ever revealed the key in a sticky notification, exactly as
+v7.19.0 designed it, but the name promised more than it delivered.
+
+**Client's own explicit choice**: rename, or genuine
+`navigator.clipboard` JavaScript "if it can be done safely without
+adding fragile frontend code." Given this project's own repeated,
+hard-learned caution about unverified frontend additions, and the
+client's own explicit acceptance - "Show Agent Key is acceptable as
+long as the full key can be selected and copied manually" (already
+true) - the rename is correct here.
+
+**Fix**: `action_copy_agent_key()` → `action_show_agent_key()` (model,
+view button, all 5 existing tests updated together); button label
+"Copy Agent Key" → "Show Agent Key." Mechanism completely unchanged -
+same sticky notification, same access restriction and server-side
+defense in depth, same guarantee the key is never written to or
+regenerated.
+
+**What still needs a human**: live confirmation that clicking "Show
+Agent Key" displays the correct, real key in a sticky notification with
+genuinely selectable/copyable text, that the button is correctly hidden
+for a non-Administrator user, and that the external print agent process
+can be successfully configured with the manually-copied key end to end.
+
+## Print Agent Authentication: confirmed root cause + hmac.compare_digest() hardening (v7.20.0)
+**Confirmed live**: `/flexsys_kds/print/agent/claim` returned "Invalid
+printer or agent key" despite a valid-looking, ASCII, 49-character key.
+
+**Traced end to end, as required**: Printer form → `agent_key` →
+`claim` → `_agent_claim_jobs()` → `hmac.compare_digest()`. The stored
+and compared values are confirmed identical at every step - never the
+actual problem.
+
+**Root cause found instead**: `secrets.token_urlsafe(24)` re-verified
+directly to always produce exactly 32 characters (50 trials, zero
+variance). The received key's 49 characters is a 17-character excess
+matching `len("Print Agent Key: ")` exactly - strongly indicating the
+notification's own title was accidentally selected and copied along
+with the real key, an inherent risk of the "Show" (manual copy) design
+the client had explicitly chosen over automatic clipboard JavaScript.
+
+**Fix 1**: `action_show_agent_key()`'s own message restructured - the
+key alone as the very first line, a length-verification hint after a
+blank line - to reduce this specific copy error.
+
+**Fix 2, explicitly required**: `_printer_from_key()`'s own
+`hmac.compare_digest()` call is now wrapped in `try/except TypeError`.
+Confirmed directly, six distinct malformed-input cases (`None`, an int,
+a list, a dict, bytes, and a non-ASCII string) all independently
+verified to raise `TypeError` from the real function before this fix -
+all now return a clean authentication failure instead.
+
+**Explicitly untouched**: Agent/Claim/Lease architecture and every
+other part of the printing engine.
+
+**Honestly scoped testing**: `_printer_from_key()` depends on
+`odoo.http.request.env`, only populated during a real HTTP request -
+cannot be safely unit-tested from this project's own existing
+`TransactionCase`-based suite without a heavier `HttpCase` this project
+doesn't otherwise use. The hardening pattern itself is verified
+directly (against real, confirmed-`TypeError`-raising inputs) and a
+structural source check confirms the real function genuinely contains
+the guard - stated plainly as the honest limit of what this delivery
+process can verify without live access.
+
+**What still needs a human - required before this can be closed**: the
+client's own repeat of the live Print Agent test - a freshly-copied key
+(via the improved message layout) succeeds with `ok: True`; an
+intentionally invalid/malformed key produces the clean error response,
+never a server error.
 
 ---
 
@@ -1775,7 +1853,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 403 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 407 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

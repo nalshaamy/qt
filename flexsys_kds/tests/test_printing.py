@@ -45,52 +45,87 @@ class TestPrinting(FlexSysKdsTestCommon):
         self.assertNotEqual(self.printer_primary.agent_key, old_key)
 
     # -----------------------------------------------------------------
-    # UI/DATA FIX ("Printing Configuration Gap - Agent Key Access"):
-    # action_copy_agent_key() must retrieve the existing key WITHOUT
-    # ever regenerating/changing it, restricted to KDS Administrator
-    # only, and never write the key back into any persisted field.
+    # UI/DATA FIX ("Printing Configuration Gap - Agent Key Access" /
+    # "Rename/Fix Agent Key Action"): action_show_agent_key() (renamed
+    # from action_copy_agent_key() - that name implied an automatic
+    # clipboard copy the action never actually performed) must retrieve
+    # the existing key WITHOUT ever regenerating/changing it, restricted
+    # to KDS Administrator only, and never write the key back into any
+    # persisted field. The client's own explicit choice: "Show Agent
+    # Key is acceptable as long as the full key can be selected and
+    # copied manually" - satisfied unchanged by the same underlying
+    # sticky-notification mechanism, only the name/label corrected.
     # -----------------------------------------------------------------
-    def test_copy_agent_key_returns_sticky_notification_with_the_real_key(self):
+    def test_show_agent_key_returns_sticky_notification_with_the_real_key(self):
         """Confirms the action returns Odoo's own standard
         display_notification client action, sticky (stays until
-        manually dismissed - long enough to select and copy), with the
-        printer's own real, current agent_key as the message."""
-        result = self.printer_primary.action_copy_agent_key()
+        manually dismissed - long enough to select and copy manually).
+
+        REAL BUG FIX ("Print Agent Authentication - Live Test
+        Failure"): the message's own structure changed - the key is no
+        longer the ENTIRE message, it is now the message's own first
+        line, followed by a verification hint - see this test's own
+        updated assertions below, and action_show_agent_key()'s own
+        docstring for the complete root-cause explanation (a confirmed
+        manual copy error, not a stored/compared value mismatch)."""
+        result = self.printer_primary.action_show_agent_key()
         self.assertEqual(result['type'], 'ir.actions.client')
         self.assertEqual(result['tag'], 'display_notification')
-        self.assertEqual(result['params']['message'], self.printer_primary.agent_key)
+        message = result['params']['message']
+        self.assertTrue(
+            message.startswith(self.printer_primary.agent_key),
+            "The key must be the very first thing in the message - a copy starting "
+            "from the beginning of the message body must never need to skip past "
+            "anything else first.")
         self.assertTrue(result['params']['sticky'])
 
-    def test_copy_agent_key_never_changes_the_key(self):
-        """Required: 'Do not regenerate/change the key when copying.'
-        Directly contrasts with action_regenerate_agent_key() (tested
-        above), which DOES change it."""
+    def test_show_agent_key_message_has_verification_hint_after_key(self):
+        """REAL BUG FIX ("Print Agent Authentication - Live Test
+        Failure"): confirms the message includes a length-verification
+        hint AFTER the key (separated by a blank line), letting the
+        administrator visually confirm they copied the right thing
+        before configuring the external agent with it."""
+        result = self.printer_primary.action_show_agent_key()
+        message = result['params']['message']
+        key = self.printer_primary.agent_key
+        self.assertIn(str(len(key)), message)
+        self.assertIn('\n\n', message, "The key and the hint must be visually separated.")
+        # The hint text itself must never masquerade as part of the key -
+        # it's plain English prose, structurally unmistakable from a
+        # base64 secret even if accidentally included in a copy.
+        self.assertIn('characters', message)
+
+    def test_show_agent_key_never_changes_the_key(self):
+        """Required: 'Do not regenerate/change the key.' Directly
+        contrasts with action_regenerate_agent_key() (tested above),
+        which DOES change it."""
         old_key = self.printer_primary.agent_key
-        self.printer_primary.action_copy_agent_key()
+        self.printer_primary.action_show_agent_key()
         self.printer_primary.invalidate_recordset()
         self.assertEqual(
             self.printer_primary.agent_key, old_key,
-            "Copying the key must never regenerate or otherwise change it - unlike "
+            "Showing the key must never regenerate or otherwise change it - unlike "
             "action_regenerate_agent_key(), which is a completely separate action.")
 
-    def test_copy_agent_key_denied_for_non_administrator(self):
+    def test_show_agent_key_denied_for_non_administrator(self):
         """Required: 'Allow KDS Administrator only.' A KDS Supervisor
         (a real, distinct, lesser role in this project's own access
         hierarchy) must be denied, with an explicit AccessError - not a
         silent no-op or a value leaked despite the restriction."""
         from odoo.exceptions import AccessError
-        supervisor = self._make_kds_user('printer_copy_key_supervisor', self.group_supervisor)
+        supervisor = self._make_kds_user('printer_show_key_supervisor', self.group_supervisor)
         with self.assertRaises(AccessError):
-            self.printer_primary.with_user(supervisor).action_copy_agent_key()
+            self.printer_primary.with_user(supervisor).action_show_agent_key()
 
-    def test_copy_agent_key_allowed_for_administrator(self):
+    def test_show_agent_key_allowed_for_administrator(self):
         """Positive case: a genuine KDS Administrator can successfully
-        call the action and receive the real key."""
-        admin_user = self._make_kds_user('printer_copy_key_admin', self.group_administrator)
-        result = self.printer_primary.with_user(admin_user).action_copy_agent_key()
-        self.assertEqual(result['params']['message'], self.printer_primary.agent_key)
+        call the action and receive the real key as the message's own
+        first line."""
+        admin_user = self._make_kds_user('printer_show_key_admin', self.group_administrator)
+        result = self.printer_primary.with_user(admin_user).action_show_agent_key()
+        self.assertTrue(result['params']['message'].startswith(self.printer_primary.agent_key))
 
-    def test_copy_agent_key_handles_missing_key_gracefully(self):
+    def test_show_agent_key_handles_missing_key_gracefully(self):
         """Defensive: a printer with no agent_key at all (should not
         normally happen, since create() always sets one - but the
         action itself must not raise if it somehow is empty) shows a
@@ -100,7 +135,7 @@ class TestPrinting(FlexSysKdsTestCommon):
             'station_id': self.station_kitchen.id,
         })
         printer_no_key.sudo().agent_key = False
-        result = printer_no_key.action_copy_agent_key()
+        result = printer_no_key.action_show_agent_key()
         self.assertIn('No Print Agent Key', result['params']['message'])
 
     def test_retry_before_falling_back(self):
@@ -889,3 +924,103 @@ class TestPrinting(FlexSysKdsTestCommon):
         self.assertEqual(
             self.env['kds.print.job'].search_count([('order_id', '=', order.id)]),
             3)
+
+    # -----------------------------------------------------------------
+    # REAL BUG FIX ("Print Agent Authentication - Live Test Failure"):
+    # confirmed live that secrets.token_urlsafe(24) always generates
+    # exactly 32 characters (never varying); a key received by an
+    # external agent 17 characters longer than that - matching
+    # len("Print Agent Key: ") exactly - strongly indicated a manual
+    # copy error (the notification's own title accidentally included
+    # alongside the actual key), not a stored/compared value mismatch.
+    # -----------------------------------------------------------------
+    def test_agent_key_generation_length_is_stable(self):
+        """Confirms the exact, stable expected length this round's own
+        root-cause analysis relies on - secrets.token_urlsafe(24) always
+        produces exactly 32 characters, with zero variance across many
+        generations."""
+        import secrets
+        lengths = {len(secrets.token_urlsafe(24)) for _ in range(50)}
+        self.assertEqual(lengths, {32}, "token_urlsafe(24) must always produce exactly 32 "
+                                         "characters - the baseline this round's own fix "
+                                         "and its length-verification hint both depend on.")
+
+    def test_hmac_compare_digest_type_error_handling_pattern(self):
+        """REAL BUG FIX ("Print Agent Authentication - Live Test
+        Failure"), item 2: 'harden hmac.compare_digest() handling so
+        malformed/non-ASCII input returns a normal authentication
+        failure instead of producing a server TypeError.'
+
+        Honest, explicitly-scoped test: controllers/kds.py's own
+        `_printer_from_key()` reads `odoo.http.request.env`, which is
+        only genuinely populated during a real HTTP request - it cannot
+        be safely unit-tested here without either a full HttpCase
+        (a different, heavier test class this project's own test suite
+        does not currently use anywhere) or mocking Odoo's own internal
+        request-context machinery (fragile, version-sensitive, exactly
+        the kind of risk this project has repeatedly and deliberately
+        avoided elsewhere). This test instead directly confirms the
+        core fix - the exact try/except TypeError pattern now wrapping
+        the hmac.compare_digest() call in that method - against the
+        real malformed inputs that motivated it, so the underlying
+        logic itself is verified even though the full HTTP-level
+        integration is not."""
+        import hmac
+
+        def guarded_compare(stored, incoming):
+            """Mirrors _printer_from_key()'s own new try/except
+            structure exactly - not a reimplementation of different
+            logic, the identical pattern."""
+            try:
+                return hmac.compare_digest(stored, incoming)
+            except TypeError:
+                return False
+
+        stored_key = 'Nvg684b52yMKV5GELiVxk53kADQHP-b-'  # a genuine, valid-shaped key
+
+        # A genuinely correct match must still succeed.
+        self.assertTrue(guarded_compare(stored_key, stored_key))
+
+        # An ordinary wrong-value mismatch must return False, not raise.
+        self.assertFalse(guarded_compare(stored_key, 'completely-different-value'))
+
+        # The exact confirmed live scenario: a key with extra characters
+        # prepended (simulating the notification title accidentally
+        # copied alongside the real key) must fail cleanly, not raise.
+        self.assertFalse(guarded_compare(stored_key, 'Print Agent Key: ' + stored_key))
+
+        # A wrong TYPE entirely (a bug on the external agent's own side -
+        # None, an int, a list) must fail cleanly, not propagate a raw
+        # TypeError up to an unhandled HTTP 500.
+        for malformed in (None, 12345, ['not', 'a', 'string'], {'key': stored_key}, b'bytes-not-str'):
+            try:
+                result = guarded_compare(stored_key, malformed)
+            except Exception as e:
+                self.fail(f"guarded_compare() must never raise for malformed input "
+                          f"{malformed!r}, got: {e!r}")
+            self.assertFalse(result, f"Malformed input {malformed!r} must be treated as a "
+                                      f"clean authentication failure.")
+
+        # A string containing non-ASCII characters - the specific
+        # documented CPython constraint on hmac.compare_digest() for str
+        # arguments - must also fail cleanly, not raise.
+        try:
+            result = guarded_compare(stored_key, 'ключ-not-ascii-agent-key-value')
+        except Exception as e:
+            self.fail(f"guarded_compare() must never raise for non-ASCII input, got: {e!r}")
+        self.assertFalse(result)
+
+    def test_printer_from_key_source_uses_the_hardened_pattern(self):
+        """Structural confirmation that controllers/kds.py's own real
+        _printer_from_key() source genuinely contains the try/except
+        TypeError guard around hmac.compare_digest() - not just that an
+        equivalent pattern exists somewhere else, matching the
+        `test_kiosk_template_has_no_toast_mechanism`-style structural
+        check already used elsewhere in this suite for content this
+        Python/Odoo test process cannot otherwise safely exercise."""
+        import inspect
+        from odoo.addons.flexsys_kds.controllers.kds import FlexSysKdsPrintAgentController
+        source = inspect.getsource(FlexSysKdsPrintAgentController._printer_from_key)
+        self.assertIn('try:', source)
+        self.assertIn('except TypeError:', source)
+        self.assertIn('hmac.compare_digest', source)

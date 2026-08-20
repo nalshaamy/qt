@@ -39,18 +39,26 @@
                             class="btn-secondary" groups="flexsys_kds.group_kds_administrator"
                             confirm="This invalidates the current key - the print agent bridge for this printer will need the new key. Continue?"/>
                     <!-- UI/DATA FIX ("Printing Configuration Gap - Agent
-                         Key Access"): a way to actually retrieve the
-                         real agent_key value to configure the external
-                         print agent process with - the field itself
-                         (below, in the "Print Agent" group) stays
-                         password-masked at all other times; this button
-                         reveals the key ONLY as a one-time, sticky
-                         notification the person dismisses manually
-                         after copying it, never written back into the
-                         form and never regenerating/changing the key.
-                         Same access restriction as Regenerate Agent Key,
+                         Key Access" / "Rename/Fix Agent Key Action"): a
+                         way to actually retrieve the real agent_key
+                         value to configure the external print agent
+                         process with - the field itself (below, in the
+                         "Print Agent" group) stays password-masked at
+                         all other times; this button reveals the key
+                         ONLY as a one-time, sticky notification the
+                         person dismisses manually after copying it by
+                         hand, never written back into the form and
+                         never regenerating/changing the key. Renamed
+                         from "Copy Agent Key"/action_copy_agent_key() -
+                         that name implied an automatic clipboard copy
+                         this action never actually performed; "Show
+                         Agent Key" accurately describes the real,
+                         unchanged behavior instead, per the client's
+                         own explicit choice over adding new,
+                         unverified navigator.clipboard JavaScript. Same
+                         access restriction as Regenerate Agent Key,
                          placed directly next to it. -->
-                    <button name="action_copy_agent_key" type="object" string="Copy Agent Key"
+                    <button name="action_show_agent_key" type="object" string="Show Agent Key"
                             class="btn-secondary" groups="flexsys_kds.group_kds_administrator"/>
                 </header>
                 <sheet>
