@@ -41,6 +41,8 @@ from odoo import fields, http
 from odoo.exceptions import UserError
 from odoo.http import request
 
+from .kds import _kds_error
+
 # UX DECISION - see controllers/kds.py's own COMPLETED_GRACE_MINUTES for
 # the full rationale, including the dev request this specific value (5
 # minutes) traces back to. Kept in sync with that constant manually
@@ -373,11 +375,14 @@ class FlexSysKdsKioskController(http.Controller):
             job = env['kds.print.job'].create_reprint(
                 order, station, reason='kitchen_request', bypass_check=True)
         except UserError as e:
-            result = {'ok': False, 'error': str(e)}
-            error_code = getattr(e, 'error_code', None)
-            if error_code:
-                result['error_code'] = error_code
-            return result
+            # UI/DATA FIX ("Printing Cleanup & Job History - Final
+            # Request"): reuses controllers/kds.py's own _kds_error()
+            # (imported above) instead of a second, hand-duplicated
+            # copy of the same error_code-surfacing logic - one single
+            # implementation, matching this route's own established
+            # convention with the backend controller's own /flexsys_kds/
+            # print/reprint route.
+            return _kds_error(e)
         return {'ok': True, 'job_id': job.id}
 
 
@@ -1288,6 +1293,14 @@ async function advanceLine(orderId, lineId, action) {
 
 async function printOrder(orderId) {
   if (!PRINTING_ENABLED) return;
+  // UI/DATA FIX ("Printing Cleanup - Toast + Job Record
+  // Simplification"), decision item 6: reverted to the simple
+  // fire-and-forget form - the Toast requirement this function's own
+  // result-checking existed to support (v7.17.1) is removed entirely
+  // per explicit direction - "No Printer -> No Job is sufficient." The
+  // backend guard that actually matters (no kds.print.job created at
+  // all for a station with no configured printer) lives entirely on
+  // the server side.
   await api('/flexsyskds/public/api/print', {station_code: STATION_CODE, token: TOKEN, order_id: orderId});
 }
 

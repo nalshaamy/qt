@@ -27,7 +27,22 @@
                  لا يعني Reprint Count") is satisfied by keeping these
                  as two distinct, adjacent, clearly-labeled columns
                  rather than ever conflating them into one. -->
-            <list string="Print Jobs" create="false" edit="false">
+            <!-- UI/DATA FIX ("Printing Cleanup - Toast + Job Record
+                 Simplification"), decision item 5: "Improve only the
+                 Print Jobs list presentation/grouping so multiple jobs
+                 for the same order are easy to understand" - the
+                 architecture itself is unchanged (decision items 1-4:
+                 one immutable record per actual Print/Reprint request,
+                 no record reuse) - `default_order` here makes every
+                 job for the same order sort by its own print_number
+                 ascending (1, 2, 3...) rather than the model's own
+                 default create_date desc, so the real print sequence
+                 reads naturally top-to-bottom within each order,
+                 whether grouped or not - see the search view below for
+                 the new default "Group by Order" behavior that makes
+                 this most visible. -->
+            <list string="Print Jobs" create="false" edit="false"
+                  default_order="order_id, print_number">
                 <field name="order_id"/>
                 <field name="station_id"/>
                 <field name="printer_id"/>
@@ -44,12 +59,6 @@
                 <field name="create_date" string="Created On"/>
             </list>
         </field>
-    </record>
-
-    <record id="action_kds_print_job" model="ir.actions.act_window">
-        <field name="name">Print Jobs</field>
-        <field name="res_model">kds.print.job</field>
-        <field name="view_mode">list</field>
     </record>
 
     <record id="view_kds_print_job_search" model="ir.ui.view">
@@ -74,10 +83,37 @@
                 <filter string="Failed" name="filter_failed" domain="[('status', '=', 'failed')]"/>
                 <filter string="Escalated" name="filter_escalated" domain="[('escalated', '=', True)]"/>
                 <separator/>
+                <!-- UI/DATA FIX ("Printing Cleanup - Toast + Job Record
+                     Simplification"), decision item 5: "Order" added
+                     as its own explicit group-by option - set as the
+                     DEFAULT group-by on the action below, so opening
+                     Print Jobs immediately clusters every job for the
+                     same order together (Print #1, Reprint #2, Reprint
+                     #3...) instead of a single flat, chronologically-
+                     interleaved list where jobs from unrelated orders
+                     sit between them. Station/Job Type/Status remain
+                     available as alternative groupings, unchanged. -->
+                <filter string="Order" name="group_order" context="{'group_by': 'order_id'}"/>
                 <filter string="Station" name="group_station" context="{'group_by': 'station_id'}"/>
                 <filter string="Job Type" name="group_display_job_type" context="{'group_by': 'display_job_type'}"/>
                 <filter string="Status" name="group_status" context="{'group_by': 'status'}"/>
             </search>
         </field>
+    </record>
+
+    <record id="action_kds_print_job" model="ir.actions.act_window">
+        <field name="name">Print Jobs</field>
+        <field name="res_model">kds.print.job</field>
+        <field name="view_mode">list</field>
+        <!-- UI/DATA FIX ("Printing Cleanup - Toast + Job Record
+             Simplification"), decision item 5: opens already grouped
+             by Order by default - see the search view's own
+             "group_order" filter above for the full explanation. The
+             search view is referenced explicitly here (rather than
+             left to Odoo's own implicit default) specifically so this
+             default-context wiring is guaranteed to target the correct
+             view. -->
+        <field name="search_view_id" ref="view_kds_print_job_search"/>
+        <field name="context">{'search_default_group_order': 1}</field>
     </record>
 </odoo>

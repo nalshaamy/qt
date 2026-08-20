@@ -174,15 +174,16 @@ export function makeKdsStore() {
     }
 
     async function reprint(orderId, stationId, reason, reasonNote) {
-        // UI/DATA FIX ("Printing Cleanup & Job History - Final
-        // Request"), item 3: the RPC's own result is now returned to
-        // the caller instead of being discarded - the backend can now
-        // genuinely fail this call (no printer configured for the
-        // station), and the caller (kds_app.js's own onPrintClick)
-        // needs the result to show the required Toast rather than
-        // silently doing nothing, which is what happened before this
-        // fix for every failure path here, not just this new one.
-        return await rpc("/flexsys_kds/print/reprint", {
+        // UI/DATA FIX ("Printing Cleanup - Toast + Job Record
+        // Simplification"), decision item 6: reverted to the simple
+        // fire-and-forget form - the Toast requirement this function's
+        // own returned result existed to support (v7.17.0/v7.17.1) is
+        // removed entirely per explicit direction. The backend guard
+        // that actually matters (no kds.print.job created at all for a
+        // station with no configured printer) lives entirely on the
+        // server side and needs nothing from this function's own
+        // return value to keep working correctly.
+        await rpc("/flexsys_kds/print/reprint", {
             order_id: orderId,
             station_id: stationId,
             reason,

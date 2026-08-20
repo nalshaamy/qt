@@ -3,7 +3,6 @@
 import { Component, onWillStart, onMounted, onWillUnmount, useState } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
-import { _t } from "@web/core/l10n/translation";
 import { user } from "@web/core/user";
 import { makeKdsStore } from "./kds_store";
 import { KdsOrderCard } from "./kds_order_card";
@@ -29,14 +28,14 @@ export class FlexSysKdsScreen extends Component {
         this.store = makeKdsStore();
         this.state = useState(this.store.state);
         this.action = useService("action");
-        // UI/DATA FIX ("Printing Cleanup & Job History - Final
-        // Request"), item 3: "اعرض Toast داخل KDS Screen... لا نريد
-        // Popup يحتاج OK." Odoo's own standard notification service -
-        // a non-blocking toast by default (no OK button, auto-
-        // dismisses) - is exactly this requirement; used below in
-        // onPrintClick only, when the backend reports no printer is
-        // configured for the station.
-        this.notification = useService("notification");
+        // UI/DATA FIX ("Printing Cleanup - Toast + Job Record
+        // Simplification"), decision item 6: the notification service
+        // was injected here specifically for the Print/Reprint failure
+        // Toast (v7.17.0/v7.17.1), which is now removed entirely per
+        // explicit direction - "No Printer -> No Job is sufficient."
+        // No other part of this component currently needs the
+        // notification service, so the injection itself is removed
+        // too, rather than left unused.
         this.labels = KDS_LABELS;
         // KDS FULLSCREEN MODE (dev request "V1 Finalization", item 1):
         // deliberately a separate local reactive object, not folded into
@@ -348,35 +347,23 @@ export class FlexSysKdsScreen extends Component {
         this.store.orderAction(orderId, action);
     };
 
-    onPrintClick = async (orderId) => {
+    onPrintClick = (orderId) => {
         // Default reason since the card's print button is a single tap,
         // no reason-picker dialog - 'kitchen_request' reads reasonably
         // as "requested from the station itself" in the audit log.
         //
-        // UI/DATA FIX ("Printing Cleanup & Job History - Final
-        // Request"), item 3: the RPC's own result is now awaited and
-        // checked - previously discarded entirely (kds_store.js's own
-        // reprint() didn't even return it), so a failure here (most
-        // commonly: no printer configured for this station) produced
-        // no feedback of any kind to the person who tapped Print.
-        // Deliberately a plain toast (notification.add's own default
-        // behavior - auto-dismissing, no OK button required), never a
-        // blocking dialog, exactly as required. `error_code ===
-        // 'no_printer'` gets the specific required title/message pair;
-        // any other, less expected failure still gets a generic toast
-        // rather than silently doing nothing, using the backend's own
-        // error message directly.
-        const result = await this.store.reprint(orderId, this.state.currentStationId, "kitchen_request");
-        if (result && result.ok === false) {
-            if (result.error_code === "no_printer") {
-                this.notification.add(
-                    _t("No printer is configured for this station."),
-                    { title: _t("Printing unavailable"), type: "warning" }
-                );
-            } else if (result.error) {
-                this.notification.add(result.error, { type: "danger" });
-            }
-        }
+        // UI/DATA FIX ("Printing Cleanup - Toast + Job Record
+        // Simplification"), decision item 6: the Toast requirement is
+        // removed entirely per explicit direction - "No Printer -> No
+        // Job is sufficient." The backend guard that actually matters
+        // (models/kds_print_job.py's own NoPrinterConfiguredError,
+        // preventing any kds.print.job from ever being created for a
+        // station with no configured printer) is completely unchanged
+        // and still fully in effect; only the UI notification layer
+        // added in v7.17.0/v7.17.1 for this specific requirement is
+        // removed here, reverting to the simple fire-and-forget call
+        // this method always had before that round.
+        this.store.reprint(orderId, this.state.currentStationId, "kitchen_request");
     };
 }
 

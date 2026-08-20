@@ -688,3 +688,145 @@ class TestPrinting(FlexSysKdsTestCommon):
         result = _kds_error(UserError("Some other, ordinary error"))
         self.assertEqual(result['ok'], False)
         self.assertNotIn('error_code', result)
+
+    # -----------------------------------------------------------------
+    # UI/DATA FIX ("Printing Cleanup & Job History - Toast + Job Record
+    # Simplification"), item 1: found a SEPARATE, independent copy of
+    # the exact same "RPC result discarded" bug in the standalone kiosk
+    # page's own printOrder() (controllers/kds_kiosk.py) - a fully
+    # separate HTML/JS surface with no Odoo web client or OWL
+    # notification service reachable at all, which the earlier round's
+    # fix (kds_app.js/kds_store.js) never touched. Fixed with its own,
+    # dependency-free toast mechanism there. These tests confirm the
+    # backend-shared logic (now unified via _kds_error(), no longer
+    # duplicated) and the template's own structural presence - the
+    # actual visual rendering of a toast is genuine browser behavior
+    # this Python/Odoo test suite cannot execute or verify, exactly
+    # like the earlier Offline Send Warning round's own honestly-scoped
+    # tests.
+    # -----------------------------------------------------------------
+    def test_kiosk_print_reuses_shared_kds_error_helper(self):
+        """Confirms kds_kiosk.py's own kiosk_print() now reuses
+        controllers/kds.py's own _kds_error() (imported, not
+        hand-duplicated) - one single implementation of the
+        error_code-surfacing logic, not two copies that could silently
+        drift apart. Unrelated to the Toast requirement itself (removed
+        entirely in a later round - see
+        test_kiosk_template_has_no_toast_mechanism below) - this is
+        the exception-handling/JSON-response-stability fix, which
+        remains necessary regardless of whether any frontend surface
+        displays error_code."""
+        from odoo.addons.flexsys_kds.controllers.kds_kiosk import _kds_error as kiosk_kds_error
+        from odoo.addons.flexsys_kds.controllers.kds import _kds_error as backend_kds_error
+        self.assertIs(
+            kiosk_kds_error, backend_kds_error,
+            "kds_kiosk.py must import and reuse the exact same _kds_error function object, "
+            "not a separate, hand-duplicated copy of its own logic.")
+
+    def test_kiosk_template_has_no_toast_mechanism(self):
+        """UI/DATA FIX ("Printing Cleanup - Toast + Job Record
+        Simplification"), decision item 6: the Toast requirement is
+        removed entirely - "No Printer -> No Job is sufficient."
+        Confirms the toast container/function/CSS added in v7.17.1 for
+        this specific requirement are genuinely gone from the rendered
+        template, not just visually hidden."""
+        import re
+        module_dir = __import__('os').path.dirname(__import__('os').path.dirname(
+            __import__('os').path.abspath(__file__)))
+        kiosk_path = __import__('os').path.join(module_dir, 'controllers', 'kds_kiosk.py')
+        with open(kiosk_path, encoding='utf-8') as f:
+            content = f.read()
+        m = re.search(r'_KIOSK_HTML_TEMPLATE = r"""(.*)"""\s*$', content, re.DOTALL)
+        self.assertIsNotNone(m, "Expected to find _KIOSK_HTML_TEMPLATE in kds_kiosk.py.")
+        template = m.group(1)
+        rendered = template % {
+            'station_name': 'Kitchen', 'branch_name': 'QT01', 'company_name': 'Test Co',
+            'station_code': 'KITCHEN', 'token': 'abc123',
+        }
+        self.assertNotIn('kdsToastStack', rendered)
+        self.assertNotIn('showToast', rendered)
+        self.assertNotIn('kds-toast', rendered)
+
+    # -----------------------------------------------------------------
+    # UI/DATA FIX ("Printing Cleanup - Toast + Job Record
+    # Simplification"), decision item 5: "Improve only the Print Jobs
+    # list presentation/grouping so multiple jobs for the same order
+    # are easy to understand." Architecture itself (decision items
+    # 1-4) is completely unchanged - one immutable kds.print.job record
+    # per actual Print/Reprint request, confirmed already correct by
+    # the earlier round's own tests above (unaffected, still passing).
+    # -----------------------------------------------------------------
+    def test_print_job_action_defaults_to_grouping_by_order(self):
+        """Confirms action_kds_print_job's own context defaults to
+        grouping by Order, so multiple jobs for the same order appear
+        clustered together immediately on opening the screen."""
+        action = self.env.ref('flexsys_kds.action_kds_print_job')
+        context = action.context or '{}'
+        parsed_context = eval(context) if isinstance(context, str) else context
+        self.assertTrue(
+            parsed_context.get('search_default_group_order'),
+            "The Print Jobs action must default to grouping by Order.")
+        self.assertTrue(
+            action.search_view_id,
+            "The action must reference the explicit search view carrying the "
+            "group_order filter.")
+
+    def test_search_view_has_group_by_order_filter(self):
+        """Confirms the search view's own arch genuinely defines a
+        group-by filter on order_id, named exactly 'group_order' -
+        matching what the action's own default context activates."""
+        search_view = self.env.ref('flexsys_kds.view_kds_print_job_search')
+        arch = search_view.arch
+        self.assertIn('name="group_order"', arch)
+        self.assertIn("'group_by': 'order_id'", arch)
+
+    def test_list_view_default_order_groups_print_sequence_naturally(self):
+        """Confirms the list view's own default_order sorts by
+        (order_id, print_number) - so within any given order, jobs read
+        1, 2, 3 top to bottom, the exact readability improvement
+        requested, without touching the model's own default create_date
+        desc ordering used elsewhere."""
+        list_view = self.env.ref('flexsys_kds.view_kds_print_job_list')
+        self.assertEqual(list_view.arch_db.count('default_order='), 1)
+        self.assertIn('default_order="order_id, print_number"', list_view.arch_db)
+
+    def test_multiple_jobs_same_order_sort_correctly_by_default_order(self):
+        """End-to-end confirmation: querying with the list view's own
+        default_order genuinely returns jobs for the same order in the
+        correct 1, 2, 3 sequence, not reversed by create_date."""
+        order = self._order()
+        first = self.env['kds.print.job'].create({
+            'order_id': order.id, 'station_id': self.station_kitchen.id,
+            'printer_id': self.printer_primary.id, 'job_type': 'auto',
+        })
+        second = self.env['kds.print.job'].create_reprint(
+            order, self.station_kitchen, reason='kitchen_request')
+        third = self.env['kds.print.job'].create_reprint(
+            order, self.station_kitchen, reason='lost_ticket')
+
+        ordered_jobs = self.env['kds.print.job'].search(
+            [('order_id', '=', order.id)], order='order_id, print_number')
+        self.assertEqual(ordered_jobs.ids, [first.id, second.id, third.id])
+        self.assertEqual(ordered_jobs.mapped('print_number'), [1, 2, 3])
+
+    def test_architecture_unchanged_no_record_reuse(self):
+        """Explicit non-regression confirming decision items 1-4:
+        immutable one-record-per-request architecture is completely
+        unchanged - three separate, genuinely distinct database records
+        exist for Print #1/Reprint #2/Reprint #3, never a single record
+        updated in place."""
+        order = self._order()
+        first = self.env['kds.print.job'].create({
+            'order_id': order.id, 'station_id': self.station_kitchen.id,
+            'printer_id': self.printer_primary.id, 'job_type': 'auto',
+        })
+        second = self.env['kds.print.job'].create_reprint(
+            order, self.station_kitchen, reason='kitchen_request')
+        third = self.env['kds.print.job'].create_reprint(
+            order, self.station_kitchen, reason='lost_ticket')
+
+        all_ids = {first.id, second.id, third.id}
+        self.assertEqual(len(all_ids), 3, "Three genuinely distinct record ids - no reuse.")
+        self.assertEqual(
+            self.env['kds.print.job'].search_count([('order_id', '=', order.id)]),
+            3)

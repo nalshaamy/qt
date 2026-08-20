@@ -1,37 +1,40 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.17.0**
+**Version: 19.0.7.18.0**
 **Status as of this document: code-complete, including everything
-through v7.16.0 (see CHANGELOG.md for the full history), plus a
-continuation of the same Printing cleanup - no `kds.print.job` is ever
-created without a resolvable printer. Both `create_reprint()` and
-`action_print_full_order()` resolved a printer and passed `.id`
-straight into `create()` without checking whether that search actually
-found anything - a station with no printer configured silently got a
-permanently unexecutable job with `printer_id=False`. Fixed with a new
-`NoPrinterConfiguredError` (a plain `UserError` subclass carrying a
-stable `error_code = 'no_printer'`) raised instead of ever creating
-such a job; `action_print_full_order()` applies this per-station in its
-own loop, so one station's missing printer never blocks printing
-correctly to another station that has one. The already-correct
-physical-failure-then-retry case (`action_mark_failed()` - same job,
-`retry_count` increments, no new row) is confirmed unchanged and now
-explicitly tested. On the KDS Screen frontend
-(`kds_app.js`/`kds_store.js` - this project's own module code within
-`web.assets_backend`, not a patch on any Odoo POS core model, a
-fundamentally lower-risk surface than every `point_of_sale._assets_pos`
-change in this project's history) a non-blocking toast now shows the
-exact required "Printing unavailable" / "No printer is configured for
-this station." message via Odoo's own standard notification service.
-The public kiosk print route, which had zero exception handling around
-this exact call before this fix, now returns a clean JSON error instead
-of an unhandled server error. One explicitly out-of-scope edge case
-(the automatic backup-printer escalation path technically creating a
-"Reprint"-labeled job with no user having asked for one) is documented,
-not fixed, per the dev request's own scope limit. 391 automated tests,
-all `py_compile`/XML/JS checks passing, plus a custom AST-based
-undefined-name sweep. No database migration needed - no new fields this
-round. Not yet signed off on a live instance — see
+through v7.17.1 (see CHANGELOG.md for the full history), plus the
+client's own explicit architectural decision, implemented exactly as
+specified. The immutable `kds.print.job` architecture (one record per
+actual Print/Reprint request, Retry Count inside the same job, every
+explicit user Reprint a separate job with incremented Print #) is
+confirmed kept as-is - no record reuse, no new lifecycle-sharing
+protection added, explicitly avoiding any new race-condition handling
+at this stage. **The Toast requirement (added in v7.17.0/v7.17.1) is
+removed entirely** - "No Printer -> No Job is sufficient" - from both
+the backend KDS Screen (`kds_app.js`/`kds_store.js`, reverted to their
+original fire-and-forget form, unused `notification` service injection
+and `_t` import both removed) and the standalone kiosk page
+(`controllers/kds_kiosk.py`, its own toast CSS/container/function all
+removed). What is explicitly NOT removed, because it isn't the Toast:
+the backend guard itself (`NoPrinterConfiguredError`, still preventing
+any `kds.print.job` from ever being created for a station with no
+configured printer) and the exception-handling/JSON-response-stability
+fixes from v7.17.0/v7.17.1 (`_kds_error()`'s own `error_code`
+surfacing, `kiosk_print()`'s own shared exception handling) - both
+needed regardless of whether any UI displays a toast for them. The one
+genuinely new piece of work: the Print Jobs list now defaults to
+grouping by Order (`search_default_group_order`, a new `group_order`
+search filter) with `default_order="order_id, print_number"` on the
+list view, so every job for the same order clusters together and reads
+1, 2, 3 top to bottom instead of a single flat, chronologically-
+interleaved list. Agent/Claim/Lease/Backup routing architecture
+completely untouched, per the client's own explicit instruction. 398
+automated tests, all `py_compile`/XML/JS checks passing, plus a custom
+AST-based undefined-name sweep. No database migration needed - no
+field/model changes this round. **Goal per the client's own words**:
+"preserve the stable printing engine and proceed to actual printer
+configuration/testing" - achieved. Not yet signed off on a live
+instance — see
 "What still needs a human" at the end.**
 
 
@@ -1375,7 +1378,7 @@ pre-existing print job records after the module update (Odoo's own
 standard automatic recompute-on-upgrade behavior for a newly-added
 stored compute field - not independently re-verified live).
 
-## Printing: no job without a resolvable printer, with a non-blocking KDS Screen Toast (v7.17.0)
+## Printing: no job without a resolvable printer, with a non-blocking KDS Screen Toast (v7.17.0) — ⚠️ THE TOAST HALF WAS REMOVED ENTIRELY IN v7.18.0, LEFT AS A RECORD OF THE ACTUAL INVESTIGATION
 **Continuation of v7.16.0's own Printing cleanup** - items 1, 2, 6
 already delivered; this round adds items 3-5: no `kds.print.job`
 without a resolvable printer.
@@ -1386,27 +1389,30 @@ straight into `create()` without checking whether the search actually
 found anything - a station with none configured silently got a
 permanently unexecutable job with `printer_id=False`.
 
-**Fix**: new `NoPrinterConfiguredError` (a plain `UserError` subclass,
-carrying a stable, non-translated `error_code = 'no_printer'`), raised
-instead of ever creating such a job. `create_reprint()` raises for the
-whole call; `action_print_full_order()` applies the same guard
-per-station in its own loop, so one station's missing printer never
-blocks printing correctly to another station that has one, with a
-clear audit-log event for the skipped station.
+**Fix - kept, unchanged, in every later round**: new
+`NoPrinterConfiguredError` (a plain `UserError` subclass, carrying a
+stable, non-translated `error_code = 'no_printer'`), raised instead of
+ever creating such a job. `create_reprint()` raises for the whole call;
+`action_print_full_order()` applies the same guard per-station in its
+own loop, so one station's missing printer never blocks printing
+correctly to another station that has one, with a clear audit-log
+event for the skipped station.
 
 **Item 4 (physical failure with a valid printer)**: confirmed already
 correct and unmodified - `action_mark_failed()` updates the same job
 row, increments `retry_count`, creates nothing new. Now explicitly
 tested.
 
-**Toast**: `_kds_error()` now automatically includes `error_code` when
-the raised exception defines one (fully backward compatible). The
+**⚠️ Toast (this specific part was removed entirely in v7.18.0)**:
+`_kds_error()` includes `error_code` when the raised exception defines
+one (this part is kept - see v7.17.1/v7.18.0's own sections below). The
 public kiosk's own print route had zero exception handling around this
-call before this fix - a raw server error, not clean JSON - now fixed.
-On the KDS Screen frontend itself (`kds_app.js`/`kds_store.js` -
-`web.assets_backend`, this project's own module code, not a patch on
-any Odoo POS core model) a non-blocking toast (Odoo's own standard
-notification service, no OK button) shows the exact required message.
+call before this fix - a raw server error, not clean JSON - now fixed
+(also kept). On the KDS Screen frontend itself
+(`kds_app.js`/`kds_store.js`) a non-blocking toast originally shown the
+exact required message here - **this specific UI mechanism no longer
+exists**, per the client's own explicit decision in v7.18.0 ("No
+Printer -> No Job is sufficient").
 
 **Honest, explicitly out-of-scope edge case, documented not fixed**:
 the automatic backup-printer escalation after exhausted retries creates
@@ -1414,6 +1420,74 @@ a genuinely new job row that, by this round's own numbering, displays
 as "Reprint" even though no user explicitly requested one. Not part of
 the dev request's own three named scenarios; worth a dedicated look
 later if it proves confusing in practice.
+
+---
+
+## Toast fix: found and fixed a second, independent copy of the same bug in the standalone kiosk page (v7.17.1) — ⚠️ ALSO REMOVED ENTIRELY IN v7.18.0, LEFT AS A RECORD OF THE ACTUAL INVESTIGATION
+**Confirmed live**: v7.17.0's own no-printer job-creation guard worked
+correctly, but the toast still did not appear.
+
+**Root cause - not a bug in v7.17.0's own kds_app.js fix**: re-verified
+line by line against Odoo 19's own official documentation - found
+structurally correct. The real, separate cause: `controllers/kds_kiosk.py`'s
+own standalone kiosk page - a fully independent HTML/CSS/JS surface
+with no Odoo web client and therefore no OWL notification service
+reachable at all - had its own, completely separate `printOrder()`
+function with the exact same "RPC result discarded" bug, never touched
+by the earlier round's fix.
+
+**Fix (later fully removed in v7.18.0)**: a minimal, dependency-free
+toast mechanism added directly to the kiosk page's own template.
+`controllers/kds_kiosk.py`'s own `kiosk_print()` was also updated to
+import and reuse `controllers/kds.py`'s own `_kds_error()` instead of a
+hand-duplicated copy - **this unification is kept**, unrelated to
+whether any toast displays.
+
+**What still needs a human, from this specific round**: superseded -
+see v7.18.0's own section below.
+
+---
+
+## Decision: keep immutable job architecture; Toast removed entirely; Print Jobs grouped by Order (v7.18.0)
+**Client's own explicit architectural decision, implemented exactly as
+specified.**
+
+**Items 1-4 (architecture)**: confirmed kept as-is - one immutable
+`kds.print.job` record per actual Print/Reprint request, no record
+reuse, no new lifecycle-sharing protection added (explicitly avoiding
+new race-condition handling at this stage, per the client's own
+instruction). New `test_architecture_unchanged_no_record_reuse`
+confirms this directly.
+
+**Item 6 - Toast removed entirely**: "No Printer -> No Job is
+sufficient." Removed from both `kds_app.js`/`kds_store.js` (reverted to
+their original fire-and-forget form; the now-unused `notification`
+service injection and `_t` import both removed rather than left dead)
+and the standalone kiosk page (`controllers/kds_kiosk.py` - toast
+CSS/container/function all removed). **Explicitly kept, because it
+isn't the Toast**: `NoPrinterConfiguredError` itself (still preventing
+any `kds.print.job` from ever being created for a station with no
+configured printer) and the exception-handling/JSON-response-stability
+fixes from v7.17.0/v7.17.1.
+
+**Item 5 - the one genuinely new piece of work**: Print Jobs now
+defaults to grouping by Order (`search_default_group_order`, a new
+`group_order` search filter) with `default_order="order_id, print_number"`
+on the list view - every job for the same order clusters together and
+reads 1, 2, 3 top to bottom.
+
+**Item 7**: Agent/Claim/Lease/Backup routing architecture completely
+untouched.
+
+**Goal achieved**: "preserve the stable printing engine and proceed to
+actual printer configuration/testing" - no architectural, engine, or
+routing changes anywhere in this round.
+
+**What still needs a human**: live confirmation that the Print Jobs
+screen genuinely opens grouped by Order by default, that a station with
+no printer configured produces no `kds.print.job` and no toast/popup of
+any kind (silent, by design), and that a station WITH a printer
+continues printing normally.
 
 **What still needs a human**: live confirmation that the toast actually
 renders correctly (non-blocking, correct message) when tapping Print/
@@ -1684,7 +1758,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 391 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 398 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

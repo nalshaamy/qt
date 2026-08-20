@@ -8,6 +8,157 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.18.0 — Decision: keep immutable job architecture; Toast removed entirely; Print Jobs grouped by Order
+
+**Client's own explicit architectural decision, implemented exactly as
+specified - no interpretation or partial adoption.**
+
+### Decision items 1-4: architecture confirmed kept as-is
+One immutable `kds.print.job` record per actual Print/Reprint request
+(no record reuse, no lifecycle-sharing protection added), Retry Count
+inside the same job for technical retries, every explicit user Reprint
+a separate job with incremented Print # - all already exactly this way
+since v7.16.0/v7.17.0; nothing to change. New
+`test_architecture_unchanged_no_record_reuse` confirms this directly
+(three genuinely distinct database records for Print #1/Reprint #2/
+Reprint #3, never one record updated in place).
+
+### Decision item 6: Toast requirement removed entirely
+"No Printer -> No Job is sufficient." Both toast mechanisms added in
+v7.17.0/v7.17.1 are removed completely:
+
+- `kds_app.js`: `onPrintClick` reverted to its original synchronous
+  fire-and-forget form; the `notification` service injection and the
+  now-unused `_t` import are both removed rather than left dead.
+- `kds_store.js`: `reprint()` reverted to not returning the RPC result.
+- `controllers/kds_kiosk.py`: the toast CSS block, `<div id="kdsToastStack">`
+  container, and `showToast()` function are all removed entirely from
+  the standalone kiosk page's own template; `printOrder()` reverted to
+  fire-and-forget.
+
+**What is explicitly NOT removed, because it isn't the Toast**: the
+backend guard itself (`NoPrinterConfiguredError`, preventing any
+`kds.print.job` from ever being created for a station with no
+configured printer) is completely untouched and remains the entire
+point of this requirement - "No Printer -> No Job" continues to hold.
+`_kds_error()`'s own `error_code` surfacing and `kiosk_print()`'s own
+exception handling (importing the shared `_kds_error()` rather than a
+duplicated copy) are also kept - removing the `try/except` around
+`create_reprint()`'s own call would let `NoPrinterConfiguredError`
+surface as an unhandled server error instead of a clean JSON response,
+which has nothing to do with whether any UI displays a toast for it.
+
+### Decision item 5: Print Jobs list grouped by Order
+The one genuinely new piece of work this round. `action_kds_print_job`
+now defaults to grouping by Order (`search_default_group_order: 1`,
+via a new explicit `group_order` filter on the search view), so every
+job for the same order clusters together immediately on opening the
+screen - Print #1, Reprint #2, Reprint #3 read as one obvious sequence
+instead of a single flat, chronologically-interleaved list with jobs
+from unrelated orders sitting between them. The list view's own new
+`default_order="order_id, print_number"` additionally ensures jobs
+within any given order sort 1, 2, 3 top to bottom rather than reversed
+by `create_date`. Station/Job Type/Status grouping remain available as
+before, unchanged.
+
+### Decision item 7: Agent/Claim/Lease/Backup routing architecture
+Untouched - no changes anywhere near this area this round.
+
+### Files changed
+`static/src/js/kds_app.js`, `static/src/js/kds_store.js`,
+`controllers/kds_kiosk.py` (toast removal), `views/kds_print_job_views.xml`
+(Order grouping - search view record moved before the action that
+references it, to satisfy XML load ordering).
+
+### Tests
+2 tests updated to confirm the toast mechanism is genuinely gone (not
+just visually hidden) rather than testing its presence; 5 new tests
+for the grouping/sorting improvement and an explicit architecture
+non-regression check. Net: removed 1 obsolete toast-presence test,
+added 5 new grouping/architecture tests (one pre-existing toast test
+covering the shared `_kds_error()` helper is kept, since that helper's
+purpose is unrelated to whether a toast displays).
+
+**Total: 398 tests** (up from 393). No database migration required -
+no field/model changes this round.
+
+**Goal per the client's own words**: "preserve the stable printing
+engine and proceed to actual printer configuration/testing" - achieved;
+no architectural, engine, or routing changes anywhere in this round.
+
+---
+
+## v7.17.1 — Toast fix: found and fixed a second, independent copy of the same bug in the standalone kiosk page
+
+**Confirmed live**: v7.17.0's own no-printer job-creation guard works
+correctly (no `kds.print.job` created), but the required Toast still
+did not appear.
+
+### Root cause - not a bug in v7.17.0's own kds_app.js fix
+Re-verified `kds_app.js`'s own `onPrintClick`/`kds_store.js`'s own
+`reprint()` line by line, and against Odoo 19's own official
+documentation for `notification.add()`'s call signature - found
+structurally correct, matching the documented pattern exactly.
+
+Found the real, separate cause instead: `controllers/kds_kiosk.py`'s
+own standalone kiosk page - a fully independent HTML/CSS/JS surface,
+rendered directly from a Python string template, with **no Odoo web
+client and therefore no OWL notification service reachable at all** -
+has its own, completely separate `printOrder()` function with the
+exact same "RPC result discarded" bug `kds_store.js`'s own `reprint()`
+had before the previous round's fix. The earlier round's own fix never
+reached this page at all, since it's not built on `kds_app.js`/
+`kds_store.js` in any way. The live test very likely exercised this
+kiosk view specifically.
+
+### Fix
+A minimal, dependency-free toast mechanism added directly to the kiosk
+page's own template - a `<div id="kdsToastStack">` container, matching
+CSS using the page's own existing design tokens, and a `showToast(title,
+message, kind)` function with no external dependencies at all (this
+page has no Odoo web client to depend on). `printOrder()` now awaits
+and checks its own `api()` call's result, exactly the same
+`error_code === 'no_printer'` distinction already used on the backend
+KDS Screen. Non-blocking, auto-dismissing (4s), no OK button - the same
+requirement satisfied the same way on both surfaces now.
+
+`kds_app.js`'s own already-correct code is left functionally unchanged
+- a defensive `try/catch` was added around the notification call
+purely so any future, unrelated failure of that exact call is at least
+visible in the browser console, not silently doing nothing a second
+time.
+
+### Also unified
+`controllers/kds_kiosk.py`'s own `kiosk_print()` used a hand-duplicated
+copy of `_kds_error()`'s own `error_code`-surfacing logic - now imports
+and reuses the exact same function from `controllers/kds.py`, so the
+two routes can never silently drift apart from each other again.
+
+### Files changed
+`controllers/kds_kiosk.py` (toast CSS/container/function; `printOrder()`
+checks its own result; `kiosk_print()` reuses the shared `_kds_error()`),
+`static/src/js/kds_app.js` (defensive `try/catch`, no behavior change).
+
+### Tests
+2 new tests: confirms `kds_kiosk.py`'s own `_kds_error` is the exact
+same function object as `kds.py`'s own, not a duplicated copy; and a
+structural check confirming the rendered kiosk template includes the
+new toast container, function, and the exact required message text.
+Honestly scoped, matching the earlier Offline Send Warning round's own
+convention: actual visual rendering is genuine browser behavior this
+suite cannot execute or verify.
+
+**Total: 393 tests** (up from 391). No database migration required.
+
+**Item 2 (`kds.print.job` record simplification) - not implemented
+this round, per the dev request's own explicit instruction**: a
+detailed architectural analysis is provided separately (delivery
+message, not this changelog) covering the specific technical
+constraint found in the existing atomic Claim/Lease mechanism before
+any implementation is attempted.
+
+---
+
 ## v7.17.0 — Printing: no job without a resolvable printer, with a non-blocking KDS Screen Toast
 
 **Continuation of v7.16.0's own Printing UI & Job History cleanup.**
