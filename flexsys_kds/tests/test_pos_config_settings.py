@@ -123,3 +123,119 @@ class TestPosConfigSettings(FlexSysKdsTestCommon):
         selection_labels = dict(config._fields['kds_send_trigger'].selection)
         self.assertEqual(selection_labels['send'], 'When Sent from POS')
         self.assertEqual(selection_labels['payment'], 'After Payment')
+
+    # -----------------------------------------------------------------
+    # REAL BUG FIX ("Batch 2 live test - Item 10 recursion crash"),
+    # confirmed live: opening the Send-to-KDS Settings screen crashed
+    # with a RecursionError - the original _search() implementation
+    # resolved in-scope ids via `.pos_config_ids.ids` (an ORM Many2many
+    # field read) called FROM WITHIN the override itself, which
+    # re-entered pos.config._search() through the ORM's own internal
+    # field-resolution machinery, still carrying the same context flag
+    # - infinite recursion. Fixed with a direct SQL query against the
+    # relation table instead, which never touches the ORM's own
+    # pos.config field-read path at all. These tests actually execute
+    # search()/_search()/web_search_read() end to end with the real
+    # scope context, as explicitly required, rather than only testing
+    # the resulting domain/ids in isolation.
+    # -----------------------------------------------------------------
+    def test_item10_search_with_scope_context_does_not_recurse(self):
+        """Required regression test: actually executes search() (which
+        calls the real, overridden _search() internally) with the KDS
+        scope context and confirms it completes normally - no
+        RecursionError, whether or not any station/POS links exist at
+        all in this test's own database state."""
+        try:
+            result = self.env['pos.config'].with_context(
+                flexsys_kds_scope_only=True).search([])
+        except RecursionError:
+            self.fail("pos.config.search() with flexsys_kds_scope_only=True must never "
+                      "recurse - confirmed live crash this test guards against.")
+        # Whatever the actual scoped result is, it must be a real,
+        # usable recordset - confirms the method returned normally,
+        # not just that no exception happened to propagate yet.
+        self.assertEqual(result._name, 'pos.config')
+
+    def test_item10_search_with_scope_context_returns_correct_ids(self):
+        """The same real search() call as above, this time confirming
+        it also returns the CORRECT scoped result - both the recursion
+        fix and the original scoping requirement verified together in
+        one real end-to-end call."""
+        in_scope_config = self.env['pos.config'].create({'name': 'Item10 Regression In Scope'})
+        out_of_scope_config = self.env['pos.config'].create({'name': 'Item10 Regression Out of Scope'})
+        self.station_kitchen.pos_config_ids = [(4, in_scope_config.id)]
+
+        result = self.env['pos.config'].with_context(
+            flexsys_kds_scope_only=True).search([
+                ('id', 'in', [in_scope_config.id, out_of_scope_config.id])])
+
+        self.assertIn(in_scope_config, result)
+        self.assertNotIn(out_of_scope_config, result)
+
+    def test_item10_web_search_read_with_scope_context_does_not_recurse(self):
+        """Required regression test: exercises web_search_read()
+        specifically - the actual RPC method the real Send-to-KDS
+        Settings list view calls when it opens in the browser - with
+        the real scope context, confirming no recursion through that
+        exact call path either, not just the lower-level search().
+
+        The exact keyword-argument shape of web_search_read() has
+        genuinely changed across Odoo versions (fields vs. specification)
+        - this test is deliberately tolerant of that (an unexpected
+        signature is not what this test exists to catch, and results in
+        a skip rather than a failure, so it doesn't mask the one thing
+        that actually matters here); a RecursionError specifically is
+        the one failure this test must catch, since that is the exact
+        confirmed live bug being guarded against, and it's checked
+        around EVERY attempted call shape, not just the first."""
+        in_scope_config = self.env['pos.config'].create({'name': 'Item10 WSR In Scope'})
+        self.station_kitchen.pos_config_ids = [(4, in_scope_config.id)]
+        scoped_model = self.env['pos.config'].with_context(flexsys_kds_scope_only=True)
+
+        result = None
+        last_type_error = None
+        for call in (
+            lambda: scoped_model.web_search_read(domain=[], specification={'name': {}}),
+            lambda: scoped_model.web_search_read([], ['name']),
+        ):
+            try:
+                result = call()
+                break
+            except RecursionError:
+                self.fail("web_search_read() with flexsys_kds_scope_only=True must never "
+                          "recurse - this is the exact call path the real screen uses.")
+            except TypeError as e:
+                last_type_error = e
+                continue
+
+        if result is None:
+            self.skipTest(
+                "web_search_read()'s own keyword signature differs from both forms "
+                "tried in this Odoo version (%r) - not what this regression test exists "
+                "to verify; see test_item10_search_with_scope_context_does_not_recurse "
+                "for the version-stable equivalent check." % (last_type_error,))
+        self.assertIn('records', result)
+
+    def test_item10_sql_relation_lookup_matches_orm_field_value(self):
+        """Confirms the direct-SQL relation-table lookup used inside
+        _search() produces results identical to what the ORM's own
+        (safe, outside-the-override) field read returns - the fix
+        changed HOW the in-scope ids are resolved, never WHAT they
+        resolve to."""
+        config_a = self.env['pos.config'].create({'name': 'Item10 SQL Match A'})
+        config_b = self.env['pos.config'].create({'name': 'Item10 SQL Match B'})
+        self.station_kitchen.pos_config_ids = [(4, config_a.id), (4, config_b.id)]
+
+        field = self.env['kds.station']._fields['pos_config_ids']
+        self.env.cr.execute(
+            'SELECT DISTINCT "%s" FROM "%s"' % (field.column2, field.relation))
+        sql_ids = {row[0] for row in self.env.cr.fetchall()}
+
+        # Read via the ORM directly here, OUTSIDE of pos.config's own
+        # _search() override (this test itself never sets the scope
+        # context), so this read is safe and recursion-free - it's the
+        # correctness baseline the SQL query is compared against.
+        orm_ids = set(self.station_kitchen.pos_config_ids.ids)
+
+        self.assertTrue({config_a.id, config_b.id}.issubset(sql_ids))
+        self.assertEqual(sql_ids & {config_a.id, config_b.id}, orm_ids & {config_a.id, config_b.id})

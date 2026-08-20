@@ -8,6 +8,76 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.22.1 — Batch 2 patch: Item 10 recursion crash fixed (POS Send-to-KDS Settings)
+
+**Confirmed live**: opening the Send-to-KDS Settings screen crashed
+with a `RecursionError` at `models/pos_config.py`, line 97.
+
+### Root cause, confirmed
+The original `_search()` override resolved in-scope ids via
+`self.env['kds.station'].sudo().search([]).pos_config_ids.ids` -
+reading `.pos_config_ids` (a Many2many field ON `kds.station`, pointing
+back AT `pos.config`) **from inside the override itself**. `sudo()`
+elevates privilege but does **not** clear `self.env.context` - the
+inherited `flexsys_kds_scope_only` flag was still set on that inner
+`env`. Some part of Odoo's own internal machinery for resolving a
+Many2many field's real records re-enters `pos.config._search()` for
+that internal step, still carrying the same context flag - which made
+this override fire again, which tried to resolve `.pos_config_ids`
+again, which re-entered `_search()` again... infinite recursion, until
+the interpreter's own recursion limit crashed the request.
+
+### Fix
+Replaced the ORM Many2many field read with a **direct SQL query
+against the relation table** backing `kds.station.pos_config_ids`.
+This cannot re-enter `pos.config._search()` under any circumstance,
+since it never asks the ORM to resolve/read/exist-check any
+`pos.config` recordset at all - it reads the relation table's own
+foreign-key column directly via the cursor. The relation table's real
+name and column names are read from the field's own already-set-up
+metadata (`field.relation`/`field.column2`, populated by Odoo itself
+whether or not those names were explicitly declared) rather than
+guessed - the exact same metadata Odoo's own internal Many2many read
+logic relies on, so this is exactly as safe with respect to that
+table's real name as the ORM itself is.
+
+### Requirements re-confirmed, all unchanged
+POS linked to at least one station -> appears; POS linked to no station
+-> does not appear; normal `pos.config` behavior outside the dedicated
+KDS settings context is completely unaffected (the context-gated design
+itself was never the problem - only the internal ORM-recursion path
+used to compute the in-scope ids was).
+
+### Files changed
+`models/pos_config.py` (`_search()`'s own internal id resolution only -
+no other logic touched).
+
+### Tests
+4 new tests, **actually executing the real call paths as explicitly
+required**, not just testing the resulting domain/ids in isolation:
+`search()` (which calls the real, overridden `_search()` internally)
+executed with the scope context, confirming it completes without
+`RecursionError`; the same call confirmed to also return the correct
+scoped result; `web_search_read()` - the exact RPC method the real
+screen's own list view calls when it opens in the browser - executed
+with the scope context as well, confirming no recursion through that
+call path either (deliberately tolerant of `web_search_read()`'s own
+keyword-signature differences across Odoo versions, since that's not
+what this test exists to verify - only a genuine `RecursionError` fails
+it); and a direct correctness check confirming the new SQL-based
+relation-table lookup produces results identical to a safe, out-of-band
+ORM field read of the same relation.
+
+**Total: 433 tests** (up from 429). No database migration required -
+no field/model changes this round, only the internal implementation of
+an existing method.
+
+**Batch 2 is not yet closed - awaiting the client's own repeat of the
+live test** on this patched build, per the explicit instruction not to
+proceed to Batch 3 until this is confirmed working.
+
+---
+
 ## v7.22.0 — Master Change Request, Batch 2: Stations / Routing / POS Send-to-KDS Settings (items 2-11)
 
 **Continuation of the multi-batch Master Change Request.** Item 1

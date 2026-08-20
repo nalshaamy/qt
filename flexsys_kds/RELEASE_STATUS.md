@@ -1,46 +1,27 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.22.0**
+**Version: 19.0.7.22.1**
 **Status as of this document: code-complete, including everything
-through v7.20.0 (see CHANGELOG.md for the full history), plus the
-first two batches of a very large, 37-item master change request. Batch
-1 (item 1, Table Number) is CONFIRMED CLOSED via a passed live test on
-v7.21.0 - a table order sent before payment now correctly gets a
-populated table_number, Direct Sale remains empty, and the separate
-pos_order_id "/"-before-payment / real-reference-after-payment display
-behavior is confirmed unaffected. Required usage-check audits for items
-6, 31, and 37 were also completed and reported in that same round:
-item 6 (Inventory Categories) found genuine backend usage in both
-routing matching and the default-station fallback chain - not dead
-code - so the client's own confirmed decision is to hide it from the
-Routing UI only, keeping the backend fallback and every existing test
-completely unchanged; item 31 (Priority/Urgent/VIP) found genuinely
-wide usage spanning backend models through the live KDS Screen's own
-frontend JavaScript, deferred to its own dedicated removal batch per
-the client's own confirmation; item 37 (Devices) confirmed already
-fully closed with zero code to remove. Batch 2 (items 2-11 - Stations,
-Routing, POS Send-to-KDS Settings) is now implemented and unit-tested,
-exactly scoped as confirmed: Operating Mode-reactive UI, SLA time-value
-display, Description folded into General, a Public Kiosk disable
-toggle plus a dedicated regeneration timestamp, Inventory Categories
-hidden from the Routing UI only per the client's own explicit
-reminder (backend fallback fully preserved), Routing "Sequence" ->
-"Priority" relabeling, a simplified matching-help explanation, six
-not-yet-real Sources archived (not deleted) with a new migration to
-backfill an existing installation, POS Send-to-KDS Settings now
-correctly scoped to only POS configs linked to at least one station
-(this filtering did not exist at all before this fix), and "Send to
-KDS On" -> "Send Order to KDS" naming cleanup - every change either a
-pure UI/label change or a new field, with the underlying Selection
-values, matching logic, and fallback chains all confirmed unchanged
-where the client required it. 429 automated tests, all
-`py_compile`/XML/JS checks passing, plus a custom AST-based
-undefined-name sweep. One database migration required (item 9, source
-tag archiving on an existing install - see
-`migrations/19.0.7.22.0/post-migrate.py`); every other change is either
-a fresh field or view-only. Batch 2 itself has not yet been through a
-live test round - that is the next step, per this project's own
-established per-batch process, before Batch 3 begins.**
+through v7.22.0 (see CHANGELOG.md for the full history), plus a patch
+fixing a live-confirmed `RecursionError` crash in Batch 2's own item 10
+(POS Send-to-KDS Settings scoping). Root cause: the original `_search()`
+override resolved in-scope ids via an ORM Many2many field read
+(`.pos_config_ids.ids`) called from inside the override itself -
+`sudo()` doesn't clear context, so the inherited scope-context flag was
+still present for that inner read, and Odoo's own internal machinery
+for resolving that field re-entered `pos.config._search()` with the
+same flag still set, causing infinite recursion. Fixed with a direct
+SQL query against the relation table instead, which never touches the
+ORM's own `pos.config` field-read path at all - reads the relation
+table's real name/columns from the field's own metadata rather than
+guessing. All of item 10's own original requirements re-confirmed
+unchanged. 433 automated tests, all `py_compile`/XML/JS checks passing,
+plus a custom AST-based undefined-name sweep - including 4 new tests
+that actually execute `search()`/`web_search_read()` with the real
+scope context end to end, as explicitly required, confirming no
+recursion. No database migration needed - internal implementation
+change only. **Batch 2 is not yet closed** - awaiting the client's own
+repeat of the live test on this patched build before Batch 3 begins.**
 
 This document maps directly to that request's own section structure
 (A/B/C/D) and states, for each item, what's actually been verified and
@@ -1696,6 +1677,11 @@ relation table and silently orphaning live links on upgrade. A POS's
 own historical `kds_send_trigger` setting is never touched by entering
 or leaving scope.
 
+⚠️ **CONFIRMED LIVE: this specific implementation crashed with a
+`RecursionError`** when the screen was actually opened - see v7.22.1's
+own section immediately below for the root cause and fix. The
+requirement itself (and every other part of this batch) is unaffected.
+
 **Item 11**: "Send to KDS On" -> "Send Order to KDS"; "On Send to KDS"
 -> "When Sent from POS." Display-label-only - the underlying Selection
 values stored in the database are unchanged.
@@ -1706,9 +1692,53 @@ particular, confirming the Operating Mode-reactive fields/tabs actually
 hide/show correctly in each of the three modes, that a disabled kiosk
 genuinely rejects requests and a re-enabled one immediately works again
 with the same URL, that the POS Send-to-KDS Settings screen genuinely
-only lists in-scope POS configs, and that the source-tag archiving
-migration runs cleanly against a real existing database with this
-module's own prior version installed.
+opens without error and only lists in-scope POS configs (see v7.22.1
+below for the item 10 patch this now depends on), and that the
+source-tag archiving migration runs cleanly against a real existing
+database with this module's own prior version installed.
+
+---
+
+## Batch 2 patch: Item 10 recursion crash fixed (v7.22.1)
+**Confirmed live**: opening the Send-to-KDS Settings screen crashed
+with a `RecursionError` at `models/pos_config.py`, line 97.
+
+**Root cause, confirmed**: the original `_search()` override resolved
+in-scope ids via `.pos_config_ids.ids` - an ORM Many2many field read -
+called from *inside* the override itself. `sudo()` elevates privilege
+but does not clear `self.env.context`; the inherited
+`flexsys_kds_scope_only` flag was still present for that inner read,
+and Odoo's own internal machinery for resolving that field re-entered
+`pos.config._search()` with the same flag still set - infinite
+recursion.
+
+**Fix**: a direct SQL query against the relation table backing
+`kds.station.pos_config_ids`, reading the table's real name/columns
+from the field's own already-set-up metadata (`field.relation`/
+`field.column2`) rather than guessing. This never touches the ORM's own
+`pos.config` field-read path at all, so it cannot re-enter
+`_search()` under any circumstance.
+
+**Every original item 10 requirement re-confirmed unchanged**: POS
+linked to a station -> in scope; POS linked to none -> out of scope;
+normal `pos.config` behavior elsewhere completely unaffected - the
+context-gated design was never the problem, only the internal
+computation inside it.
+
+**Required regression tests, actually executed end to end as
+instructed**: `search()` (calling the real, overridden `_search()`)
+with the scope context, confirmed no `RecursionError` and the correct
+scoped result; `web_search_read()` - the exact call the real screen's
+own list view makes - with the scope context, confirmed no recursion
+through that path either; a direct correctness check confirming the
+new SQL lookup matches a safe, out-of-band ORM read of the same
+relation.
+
+**What still needs a human**: the client's own repeat of the live test
+on this specific patched build - opening the Send-to-KDS Settings
+screen must no longer crash, and must show only in-scope POS configs.
+**Batch 2 remains open until this is confirmed** - Batch 3 does not
+begin until then, per the explicit instruction.
 
 ---
 
@@ -1973,7 +2003,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 429 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 433 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

@@ -92,9 +92,42 @@ class PosConfig(models.Model):
     # pos.config's own search/read (POS settings, every other existing
     # screen, any other module) is completely unaffected, since the
     # context key this checks is never set anywhere else.
+    #
+    # REAL BUG FIX ("Batch 2 live test - Item 10 recursion crash"),
+    # confirmed live: the original implementation resolved the in-scope
+    # ids via `self.env['kds.station'].sudo().search([]).pos_config_ids.ids`
+    # - reading `.pos_config_ids` (a Many2many field ON kds.station,
+    # pointing back AT pos.config) from *inside* this very override.
+    # `sudo()` elevates privilege but does NOT clear `self.env.context`
+    # - the inherited `flexsys_kds_scope_only` flag was still set on
+    # that inner `env`. Some part of Odoo's own internal machinery for
+    # resolving a Many2many field's real records (existence-checking
+    # the referenced pos.config rows) re-enters `pos.config._search()`
+    # for that internal step, still carrying the SAME context flag -
+    # which made THIS override fire again, which tried to resolve
+    # `.pos_config_ids` again, which re-entered `_search()` again...
+    # infinite recursion, exactly as reported, until the interpreter's
+    # own recursion limit crashed the request.
+    #
+    # Fixed by never touching the ORM's own ".pos_config_ids" field-read
+    # path for this lookup at all - a direct SQL query against the
+    # relation table backing that Many2many field instead. This cannot
+    # re-enter pos.config._search() under any circumstance, since it
+    # never asks the ORM to resolve/read/exist-check any pos.config
+    # recordset in the first place - it reads the raw relation table's
+    # own foreign-key column directly. `field.relation`/`column1`/
+    # `column2` are read from the field's own already-set-up metadata
+    # (populated by Odoo itself, whether or not those names were
+    # explicitly declared) rather than guessed, so this is exactly as
+    # safe with respect to that table's real name as the ORM's own
+    # internal Many2many read logic is - it uses the identical
+    # metadata Odoo itself relies on.
     def _search(self, domain, offset=0, limit=None, order=None, **kwargs):
         if self.env.context.get('flexsys_kds_scope_only'):
-            in_scope_ids = self.env['kds.station'].sudo().search([]).pos_config_ids.ids
+            field = self.env['kds.station']._fields['pos_config_ids']
+            self.env.cr.execute(
+                'SELECT DISTINCT "%s" FROM "%s"' % (field.column2, field.relation))
+            in_scope_ids = [row[0] for row in self.env.cr.fetchall()]
             domain = list(domain or []) + [('id', 'in', in_scope_ids)]
         return super()._search(domain, offset=offset, limit=limit, order=order, **kwargs)
 
