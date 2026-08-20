@@ -87,6 +87,18 @@ def _station_from_token(env, station_code, token):
     ], limit=1)
     if not station or not station.kiosk_token or not hmac.compare_digest(station.kiosk_token, token):
         return None
+    # UI/DATA FIX ("Master Change Request", item 5, "Public Kiosk
+    # Configuration Improvement"): "Add Disable Public Access option" -
+    # kiosk_disabled (models/kds_station.py) is checked here, the one
+    # central token-validation function every public kiosk route in
+    # this controller calls - covers every one of them uniformly. A
+    # deliberately separate gate from the token comparison above: this
+    # lets an administrator instantly deny every kiosk request for a
+    # station without regenerating/invalidating the token itself
+    # (useful for temporarily taking a station's kiosk offline without
+    # having to reconfigure every device with a new URL afterward).
+    if station.kiosk_disabled:
+        return None
     return station
 
 

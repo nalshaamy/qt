@@ -24,6 +24,28 @@
         <field name="name">POS Send-to-KDS Settings</field>
         <field name="res_model">pos.config</field>
         <field name="view_mode">list</field>
-        <field name="context">{'create': False}</field>
+        <!-- UI/DATA FIX ("Master Change Request", item 10, "POS
+             Scope"): only a POS linked to at least one FlexSys KDS
+             station is shown here - a POS not linked to any station is
+             correctly out of scope for these settings entirely. If a
+             POS is later removed from every station, it simply
+             disappears from this list on its own next refresh - its
+             own kds_send_trigger value is never touched or reset, so
+             its historical setting is preserved internally exactly as
+             required ("لا يلزم حذف إعداداته التاريخية داخليًا") and
+             reappears correctly if the POS is ever linked to a station
+             again later.
+
+             flexsys_kds_scope_only in context, not a plain XML
+             domain: see pos_config.py's own _search() override for why
+             - the in-scope id list needs to be computed fresh from
+             kds.station.pos_config_ids on every open, which an XML
+             domain can't express without either an unstored field (not
+             queryable) or redefining that field's own existing,
+             unnamed relation table (a real risk to live data). This
+             context key is checked by that override and nowhere else
+             in this codebase, so every other pos.config screen in the
+             system is completely unaffected. -->
+        <field name="context">{'create': False, 'flexsys_kds_scope_only': True}</field>
     </record>
 </odoo>

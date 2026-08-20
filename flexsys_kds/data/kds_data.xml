@@ -86,35 +86,54 @@
         <field name="code">pos</field>
         <field name="sequence">10</field>
     </record>
+    <!-- UI/DATA FIX ("Master Change Request", item 9, "Sources
+         Cleanup"): confirmed by usage check that 'pos' (above) is the
+         ONLY source value ever actually assigned to a kds.order
+         anywhere in this codebase - every source below implies a live
+         integration that doesn't exist yet, and would mislead an
+         administrator setting up routing rules into believing these
+         are real, active channels. Archived (active=False), not
+         deleted - each record itself, and any routing rule that might
+         already reference one, stays completely intact; only its own
+         visibility in normal pickers/filters is affected, exactly
+         Odoo's own standard, reversible mechanism for this. Any of
+         these can be reactivated the moment a real integration for it
+         actually ships, with zero data loss either way. -->
     <record id="order_source_tag_qr" model="kds.order.source.tag">
         <field name="name">QR Order</field>
         <field name="code">qr</field>
         <field name="sequence">20</field>
+        <field name="active">False</field>
     </record>
     <record id="order_source_tag_web" model="kds.order.source.tag">
         <field name="name">Web Order</field>
         <field name="code">web</field>
         <field name="sequence">30</field>
+        <field name="active">False</field>
     </record>
     <record id="order_source_tag_call_center" model="kds.order.source.tag">
         <field name="name">Call Center</field>
         <field name="code">call_center</field>
         <field name="sequence">40</field>
+        <field name="active">False</field>
     </record>
     <record id="order_source_tag_delivery_app" model="kds.order.source.tag">
         <field name="name">Delivery Application</field>
         <field name="code">delivery_app</field>
         <field name="sequence">50</field>
+        <field name="active">False</field>
     </record>
     <record id="order_source_tag_api" model="kds.order.source.tag">
         <field name="name">API</field>
         <field name="code">api</field>
         <field name="sequence">60</field>
+        <field name="active">False</field>
     </record>
     <record id="order_source_tag_flexsys" model="kds.order.source.tag">
         <field name="name">FlexSys Orders</field>
         <field name="code">flexsys</field>
         <field name="sequence">70</field>
+        <field name="active">False</field>
     </record>
 
     <!-- SLA FRESHNESS FIX (audit finding, HIGH) - see

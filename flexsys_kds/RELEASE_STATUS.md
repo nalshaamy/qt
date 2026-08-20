@@ -1,37 +1,46 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.20.0**
+**Version: 19.0.7.22.0**
 **Status as of this document: code-complete, including everything
-through v7.19.1 (see CHANGELOG.md for the full history), plus a traced,
-confirmed root cause for a live Print Agent authentication failure.
-`/flexsys_kds/print/agent/claim` returned "Invalid printer or agent
-key" despite a valid-looking key. Traced end to end as required
-(Printer form → `agent_key` → `claim` → `_agent_claim_jobs()` →
-`hmac.compare_digest()`) - the stored and compared values were
-confirmed identical at every step, never the actual problem. Root cause
-instead: `secrets.token_urlsafe(24)` directly re-verified to always
-generate exactly 32 characters (50 trials, zero variance); the key
-actually received was 49 characters - a 17-character excess matching
-`len("Print Agent Key: ")` exactly, strongly indicating the sticky
-notification's own title was accidentally selected and copied along
-with the real key, a manual-copy error inherent to the "Show" (not
-automatic clipboard) design the client had explicitly chosen. Fixed by
-restructuring the revealed message - the key alone as the very first
-line, followed by a length-verification hint after a blank line - to
-reduce this specific copy error, and by hardening
-`_printer_from_key()`'s own `hmac.compare_digest()` call with an
-explicit `try/except TypeError`, confirmed directly (six distinct
-malformed-input cases, all independently verified to raise `TypeError`
-from the real function before this fix) so any malformed comparison
-input now returns a clean authentication failure instead of an
-unhandled server error. Agent/Claim/Lease architecture completely
-untouched, per the dev request's own explicit scope limit. 407
-automated tests, all `py_compile`/XML/JS checks passing, plus a custom
-AST-based undefined-name sweep. No database migration needed - no
-field/model changes this round. Not yet signed off on a live instance
-— see
-"What still needs a human" at the end.**
-
+through v7.20.0 (see CHANGELOG.md for the full history), plus the
+first two batches of a very large, 37-item master change request. Batch
+1 (item 1, Table Number) is CONFIRMED CLOSED via a passed live test on
+v7.21.0 - a table order sent before payment now correctly gets a
+populated table_number, Direct Sale remains empty, and the separate
+pos_order_id "/"-before-payment / real-reference-after-payment display
+behavior is confirmed unaffected. Required usage-check audits for items
+6, 31, and 37 were also completed and reported in that same round:
+item 6 (Inventory Categories) found genuine backend usage in both
+routing matching and the default-station fallback chain - not dead
+code - so the client's own confirmed decision is to hide it from the
+Routing UI only, keeping the backend fallback and every existing test
+completely unchanged; item 31 (Priority/Urgent/VIP) found genuinely
+wide usage spanning backend models through the live KDS Screen's own
+frontend JavaScript, deferred to its own dedicated removal batch per
+the client's own confirmation; item 37 (Devices) confirmed already
+fully closed with zero code to remove. Batch 2 (items 2-11 - Stations,
+Routing, POS Send-to-KDS Settings) is now implemented and unit-tested,
+exactly scoped as confirmed: Operating Mode-reactive UI, SLA time-value
+display, Description folded into General, a Public Kiosk disable
+toggle plus a dedicated regeneration timestamp, Inventory Categories
+hidden from the Routing UI only per the client's own explicit
+reminder (backend fallback fully preserved), Routing "Sequence" ->
+"Priority" relabeling, a simplified matching-help explanation, six
+not-yet-real Sources archived (not deleted) with a new migration to
+backfill an existing installation, POS Send-to-KDS Settings now
+correctly scoped to only POS configs linked to at least one station
+(this filtering did not exist at all before this fix), and "Send to
+KDS On" -> "Send Order to KDS" naming cleanup - every change either a
+pure UI/label change or a new field, with the underlying Selection
+values, matching logic, and fallback chains all confirmed unchanged
+where the client required it. 429 automated tests, all
+`py_compile`/XML/JS checks passing, plus a custom AST-based
+undefined-name sweep. One database migration required (item 9, source
+tag archiving on an existing install - see
+`migrations/19.0.7.22.0/post-migrate.py`); every other change is either
+a fresh field or view-only. Batch 2 itself has not yet been through a
+live test round - that is the next step, per this project's own
+established per-batch process, before Batch 3 begins.**
 
 This document maps directly to that request's own section structure
 (A/B/C/D) and states, for each item, what's actually been verified and
@@ -1590,6 +1599,117 @@ client's own repeat of the live Print Agent test - a freshly-copied key
 intentionally invalid/malformed key produces the clean error response,
 never a server error.
 
+## Master Change Request, Batch 1: Table Number fix + required usage-check audits (v7.21.0) — ✅ CONFIRMED CLOSED VIA LIVE TEST
+**First batch of a very large, 37-item master change request** -
+implemented item 1 (fully specified, clear acceptance criteria) plus
+the three required "usage check before deleting anything" audits
+(items 6, 31, 37) that gate later batches.
+
+**Item 1, Table Number - root cause found directly**: `kds.order.table_number`
+was defined but never actually written to anywhere - confirmed via a
+full-codebase search, the single production `kds.order` creation entry
+point (`_flexsys_kds_create()`) never included it. Fixed with a new
+`_pos_table_number()` helper, called at that exact point - the first
+moment a POS order becomes a `kds.order` at all - guaranteeing the
+table number is present before payment, not only afterward.
+`table_id.table_number` (an Integer) used as the primary source, not
+`table_id.name`, confirmed directly from Odoo's own official forum that
+starting in Odoo 18 "tables can only be numbered." Direct Sale
+correctly resolves to `''` with no special-case branch needed.
+
+**✅ LIVE TEST RESULT (client-confirmed)**: all four required
+acceptance points passed - table order before payment gets a correctly
+populated table_number; Direct Sale remains empty; POS Order stays "/"
+before payment; after payment, POS Order reference updates normally
+and table_number remains intact. **Item 1 is CLOSED.**
+
+**Usage-check audit findings** (client-confirmed, decisions locked in
+for Batch 2 and beyond):
+- **Item 6 (Inventory Categories)**: genuinely used in real routing
+  matching logic AND the default-station fallback chain - not dead
+  code. Decision: hide from Routing UI only, keep the backend fallback
+  and its own tests completely unchanged. Any future removal of the
+  fallback itself is its own, separate change request.
+- **Item 31 (Priority/Urgent/VIP)**: usage spans backend models through
+  the live KDS Screen's own frontend JavaScript - genuinely wide,
+  cross-cutting. Decision: its own dedicated removal batch, not rushed
+  alongside other items.
+- **Item 37 (Devices)**: confirmed zero `kds.device` model, view,
+  controller, or route anywhere in this codebase. Already fully
+  closed - no action required.
+
+---
+
+## Master Change Request, Batch 2: Stations / Routing / POS Send-to-KDS Settings (v7.22.0)
+**Second batch, items 2-11**, scoped exactly as confirmed by the
+client after Batch 1's own live test passed.
+
+**Item 2**: `operating_mode`-reactive UI - printing-related
+fields/tabs hidden for KDS Only, KDS-Screen/kiosk-related fields/tabs
+hidden for Printer Only. Pure view logic, zero change to
+`operating_mode`'s own actual behavior.
+
+**Item 3**: two new computed display fields show the actual time value
+(minutes) each SLA percentage represents, right next to it. The raw
+fields and their own existing validation are unchanged.
+
+**Item 4**: `description` (confirmed unused by any other logic) folded
+into General, no longer a standalone notebook tab.
+
+**Item 5**: `kiosk_disabled` (instant access denial without token
+rotation) and `kiosk_token_regenerated_at` (a dedicated timestamp -
+neither existing magic field was precise enough for this specific
+question), both checked/set at the one central token-validation
+function every public kiosk route already calls.
+
+**Item 6**: hidden from the Routing UI only, per the client's own
+explicit reminder - the field and every bit of its own backend
+matching/fallback logic, and every existing test for it, are completely
+unchanged.
+
+**Item 7**: `sequence`'s own view label -> "Priority," with help text
+stating "lower number = higher priority" and "first match wins"
+plainly. Display-only - the underlying field name and stored values are
+unchanged.
+
+**Item 8**: a new, explicit help block on the routing rule form states
+the three matching facts an administrator needs plainly (empty =
+matches everything; same-criterion values are OR'd; different criteria
+are AND'd).
+
+**Item 9**: confirmed `'pos'` is the only source value ever actually
+assigned anywhere in this codebase - the other six seeded sources
+implied integrations that don't exist yet. New `active` field added to
+`kds.order.source.tag`; the six archived (not deleted) in the seed data
+for a fresh install, **plus a new migration**
+(`migrations/19.0.7.22.0/post-migrate.py`) to backfill the same
+archiving onto an existing installation's already-loaded copies, since
+the seed data file is `noupdate="1"`.
+
+**Item 10**: confirmed this filtering did not exist at all before this
+fix - every `pos.config` in the database was shown regardless of
+station linkage. Implemented via a `_search()` override gated behind an
+explicit context key set only by this one screen's own action -
+deliberately not a stored reverse-M2M field, to avoid any risk of
+redefining `kds.station.pos_config_ids`'s own existing, unnamed
+relation table and silently orphaning live links on upgrade. A POS's
+own historical `kds_send_trigger` setting is never touched by entering
+or leaving scope.
+
+**Item 11**: "Send to KDS On" -> "Send Order to KDS"; "On Send to KDS"
+-> "When Sent from POS." Display-label-only - the underlying Selection
+values stored in the database are unchanged.
+
+**What still needs a human**: a live test round on this batch, matching
+the same process Batch 1 went through, before Batch 3 begins - in
+particular, confirming the Operating Mode-reactive fields/tabs actually
+hide/show correctly in each of the three modes, that a disabled kiosk
+genuinely rejects requests and a re-enabled one immediately works again
+with the same URL, that the POS Send-to-KDS Settings screen genuinely
+only lists in-scope POS configs, and that the source-tag archiving
+migration runs cleanly against a real existing database with this
+module's own prior version installed.
+
 ---
 
 ## What still needs a human
@@ -1853,7 +1973,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 407 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 429 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

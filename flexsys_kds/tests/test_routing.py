@@ -354,3 +354,90 @@ class TestRouting(FlexSysKdsTestCommon):
             'qty': 1,
         })
         self.assertEqual(line.station_id, self.station_kitchen)
+
+    # -----------------------------------------------------------------
+    # UI/DATA FIX ("Master Change Request", Batch 2, items 6-9).
+    # -----------------------------------------------------------------
+    def test_item6_product_categ_ids_backend_fallback_still_works(self):
+        """Item 6: explicit decision - 'KEEP the existing backend
+        product.categ_id fallback and related tests completely
+        unchanged.' Confirms the inventory-category fallback level in
+        route_product() still works exactly as before, unaffected by
+        the field being hidden from the Routing UI."""
+        categ = self.env['product.category'].create({'name': 'Test Inventory Category'})
+        categ.kds_station_id = self.station_kitchen
+        self.product_burger.categ_id = categ.id
+        # No product/POS-category default, no matching rule - only the
+        # inventory-category fallback can resolve this.
+        self.product_burger.kds_station_id = False
+
+        station = self.env['kds.routing.rule'].route_product(
+            self.product_burger, order_type='dine_in', source='pos')
+
+        self.assertEqual(station, self.station_kitchen)
+
+    def test_item6_product_categ_ids_matching_still_works(self):
+        """Item 6: confirms an explicit routing rule using
+        product_categ_ids in its own _matches() condition still
+        correctly matches - the field's own backend logic is completely
+        unchanged, only its own Routing UI visibility changed."""
+        categ = self.env['product.category'].create({'name': 'Test Inventory Category 2'})
+        self.product_burger.categ_id = categ.id
+        rule = self.env['kds.routing.rule'].create({
+            'name': 'Inventory category rule',
+            'product_categ_ids': [(6, 0, [categ.id])],
+            'station_id': self.station_kitchen.id,
+        })
+        self.assertTrue(rule._matches(self.product_burger, 'dine_in', 'pos', None))
+
+    def test_item7_sequence_field_still_controls_rule_order(self):
+        """Item 7: display-label-only rename ('Sequence' -> 'Priority')
+        - confirms the underlying sequence field's own real ordering
+        behavior (first matching rule wins, lower number checked first)
+        is completely unaffected."""
+        station_other = self.env['kds.station'].create({'name': 'Other', 'code': 'OTHER_R7'})
+        rule_a = self.env['kds.routing.rule'].create({
+            'name': 'A', 'sequence': 5, 'product_ids': [(6, 0, [self.product_burger.id])],
+            'station_id': self.station_kitchen.id,
+        })
+        self.env['kds.routing.rule'].create({
+            'name': 'B', 'sequence': 10, 'product_ids': [(6, 0, [self.product_burger.id])],
+            'station_id': station_other.id,
+        })
+        station = self.env['kds.routing.rule'].route_product(
+            self.product_burger, order_type='dine_in', source='pos')
+        self.assertEqual(station, self.station_kitchen,
+                          "Lower sequence (now labeled Priority) must still be checked first.")
+        rule_a.unlink()
+
+    def test_item9_only_pos_source_tag_active_by_default(self):
+        """Item 9: confirms only the genuinely-used 'pos' source tag is
+        active by default - every other seeded source (not yet backed
+        by a real integration anywhere in this codebase) is archived,
+        not deleted."""
+        pos_tag = self.env.ref('flexsys_kds.order_source_tag_pos')
+        self.assertTrue(pos_tag.active)
+
+        for xml_id in ('order_source_tag_qr', 'order_source_tag_web',
+                        'order_source_tag_call_center', 'order_source_tag_delivery_app',
+                        'order_source_tag_api', 'order_source_tag_flexsys'):
+            tag = self.env.ref('flexsys_kds.%s' % xml_id)
+            self.assertFalse(
+                tag.active,
+                "%s must be archived (active=False) - not a real, backed integration "
+                "anywhere in this codebase yet." % xml_id)
+            # Confirms the record itself is NOT deleted - just archived,
+            # exactly as required ("Archived, not deleted").
+            self.assertTrue(tag.exists())
+
+    def test_item9_archived_source_tags_hidden_from_default_search(self):
+        """Confirms Odoo's own standard archiving mechanism correctly
+        hides these from a default (active-only) search, while an
+        explicit active_test=False search still finds them - proving
+        they're genuinely archived, not deleted."""
+        default_search = self.env['kds.order.source.tag'].search([('code', '=', 'qr')])
+        self.assertFalse(default_search)
+
+        with_inactive = self.env['kds.order.source.tag'].with_context(
+            active_test=False).search([('code', '=', 'qr')])
+        self.assertTrue(with_inactive)

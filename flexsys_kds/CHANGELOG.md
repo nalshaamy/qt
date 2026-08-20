@@ -8,6 +8,156 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.22.0 — Master Change Request, Batch 2: Stations / Routing / POS Send-to-KDS Settings (items 2-11)
+
+**Continuation of the multi-batch Master Change Request.** Item 1
+(Table Number) confirmed CLOSED via live test in v7.21.0. This batch
+covers items 2-11 exactly, per the client's own explicit scope
+confirmation - no architectural changes, no work on any later batch's
+own items (12+).
+
+### Item 2 - Operating Mode reactivity
+`auto_print` and the Printers tab hidden when `operating_mode ==
+'kds_only'`; `auto_accept_orders`, `is_expeditor`, the SLA tab, the
+Users tab, and the Public Kiosk tab hidden when `operating_mode ==
+'printer_only'` - each genuinely irrelevant to its own opposite mode,
+not merely inconvenient. Pure `invisible=` view logic - zero change to
+`operating_mode`'s own underlying behavior or any other field's
+default/validation.
+
+### Item 3 - Station SLA Display
+Two new computed, unstored display fields -
+`warning_threshold_minutes` and `late_threshold_minutes` - show the
+actual resulting time (e.g. "Target: 10 min, Warning: 8.0 min, Late:
+10.0 min") right next to each percentage field, so an administrator
+doesn't have to do the arithmetic themselves. `target_prep_time`/
+`warning_threshold_pct`/`late_threshold_pct` and their own existing
+`_check_sla_config()` validation are completely unchanged.
+
+### Item 4 - Description Tab
+Confirmed by usage check: `description` is a plain optional text field,
+never read by any other logic anywhere in this codebase. Folded into a
+plain group right after the main field groups, outside the notebook -
+no longer a standalone tab. Same field, same data, same behavior.
+
+### Item 5 - Public Kiosk
+Two new fields: `kiosk_disabled` (instantly denies every public kiosk
+request for a station without regenerating/invalidating the token
+itself - useful for temporarily taking a kiosk offline for maintenance
+without reconfiguring every device afterward) and
+`kiosk_token_regenerated_at` (a dedicated timestamp - neither
+`create_date` (never updates again) nor `write_date` (changes on ANY
+field edit, not just a genuine regeneration) was precise enough for
+"Token Created / Last Regenerated" specifically). Both checked/set at
+the single, central `_station_from_token()` function every public
+kiosk route in `controllers/kds_kiosk.py` already calls - covers all
+four kiosk routes uniformly. No change to the underlying kiosk-token
+auth architecture itself.
+
+### Item 6 - Inventory Categories hidden from Routing UI only
+**Confirmed usage check finding, explicitly reaffirmed by the client**:
+`product_categ_ids` is genuinely used in real matching logic
+(`_matches()`) AND the default-station fallback chain
+(`route_product()`'s own inventory-category-level fallback) - never
+dead code. Per the explicit decision, hidden from the Routing UI only
+(list column picker entirely removed; form field `invisible="1"`, not
+deleted, so an administrator in Developer Mode can still reach it for
+a genuine legacy rule) - the field itself and every bit of its own
+backend logic, and every existing test for it, are completely
+untouched. Any future decision to remove the fallback itself is its
+own, separate change request, per the client's own explicit note.
+
+### Item 7 - Routing Priority naming
+Display-label-only: `sequence`'s own view `string` is now "Priority"
+(list and form), with help text stating both required facts plainly -
+"Lower number = higher priority" and "the first matching rule wins."
+The underlying field name and its stored integer values are completely
+unchanged.
+
+### Item 8 - Routing Matching Help
+A new, explicit `alert-info` block on the routing rule form states the
+three facts an administrator actually needs, in plain language: an
+empty criterion matches everything; multiple values within the same
+criterion are OR'd; every criterion that IS set must all match (AND).
+
+### Item 9 - Sources cleanup
+**Confirmed by usage check**: `'pos'` is the only source value this
+codebase ever actually assigns to a `kds.order` anywhere
+(`_flexsys_kds_create()`, the single production entry point) - the
+other six seeded sources (QR, Web, Call Center, Delivery Application,
+API, FlexSys Orders) implied live integrations that don't exist yet.
+`active` (a field that did not exist on `kds.order.source.tag` before
+this fix) added, and the six not-yet-real sources archived
+(`active=False`) in `data/kds_data.xml` for a fresh install - **plus a
+new migration** (`migrations/19.0.7.22.0/post-migrate.py`) that applies
+the same archiving directly to an EXISTING installation's already-
+loaded copies of these six records, since that data file is
+`noupdate="1"` (deliberately, to never silently overwrite a genuine
+future customization) and would otherwise never pick up this fix on
+upgrade alone. Archived, never deleted - any existing routing rule
+referencing one historically stays completely intact, and any of these
+can be reactivated instantly the moment a real integration for it
+actually ships.
+
+### Item 10 - POS Scope
+**Confirmed by direct inspection: this filtering did not exist at
+all before this fix** - the Send-to-KDS Settings screen showed every
+`pos.config` in the entire database, in-scope or not. Implemented via
+a `_search()` override on `pos.config`, gated behind an explicit
+`flexsys_kds_scope_only` context key set only by this one screen's own
+action - every other `pos.config` search anywhere else in the system
+(POS settings, any other screen, any other module) is completely
+unaffected. Deliberately NOT solved with a stored reverse-M2M field: 
+`kds.station.pos_config_ids` has no explicitly-named relation table, so
+declaring a "matching" field on `pos.config` risked either guessing
+Odoo's own auto-generated table name wrong or - far more dangerously -
+redefining that EXISTING field's own relation table, which would have
+silently orphaned every station's own existing links on upgrade without
+a migration; neither risk was acceptable for live data. A POS's own
+`kds_send_trigger` setting is never touched when it enters/leaves scope
+- preserved internally exactly as required, and correctly reappears if
+the POS is linked to a station again later.
+
+### Item 11 - Naming cleanup
+`kds_send_trigger`'s own field `string`: "Send to KDS On" -> "Send
+Order to KDS." The `'send'` option's own label: "On Send to KDS" ->
+"When Sent from POS." The underlying Selection VALUES (`'payment'`/
+`'send'`) stored in the database are completely unchanged - purely a
+display-text change, exactly as required.
+
+### Files changed
+`models/pos_config.py` (item 11 relabeling; item 10's `kds_station_ids`
++ `_search()` override), `models/kds_station.py` (items 3, 5 - new
+fields/computes), `models/kds_order_source_tag.py` (item 9 - `active`
+field), `controllers/kds_kiosk.py` (item 5 - `kiosk_disabled` check),
+`views/kds_station_views.xml` (items 2, 3, 4, 5), `views/kds_routing_rule_views.xml`
+(items 6, 7, 8), `views/kds_pos_config_views.xml` (item 10's own new
+action), `data/kds_data.xml` (item 9 - fresh-install seeding),
+`migrations/19.0.7.22.0/post-migrate.py` (item 9 - existing-install
+backfill).
+
+### Tests
+20 new tests across `test_routing.py` (items 6, 7, 9), `test_station_kpi.py`
+(items 3, 5), and a new `test_pos_config_settings.py` (items 10, 11) -
+covering every acceptance point named in the request for this batch,
+plus explicit non-regression checks (item 6's own backend fallback/
+matching still works; item 7's own real ordering behavior still works;
+item 11's own stored Selection values unchanged; item 10's own scope
+context never leaks into an ordinary, unrelated `pos.config` search).
+
+**Total: 429 tests** (up from 410). Database migration required for
+item 9 on an existing installation - see `migrations/19.0.7.22.0/post-migrate.py`
+above; every other change is either a new field (auto-backfilled
+correctly by its own `default`/`create()` logic) or a view-only change
+needing no migration.
+
+**Batch 2 acceptance**: reported here as implemented and unit-tested;
+per the established process for this project, a live test round on a
+real Odoo 19 instance is the next step before Batch 3 begins, matching
+exactly how Batch 1 (Table Number) was closed.
+
+---
+
 ## v7.21.0 — Master Change Request, Batch 1: Table Number fix + required usage-check audits (items 1, 6, 31, 37)
 
 **This is Batch 1 of a very large, 37-item master change request.**

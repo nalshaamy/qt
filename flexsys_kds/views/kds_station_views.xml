@@ -28,7 +28,8 @@
                 <sheet>
                     <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger" invisible="active"/>
                     <div class="oe_button_box" name="button_box">
-                        <button class="oe_stat_button" type="object" name="action_view_printers" icon="fa-print">
+                        <button class="oe_stat_button" type="object" name="action_view_printers" icon="fa-print"
+                                invisible="operating_mode == 'kds_only'">
                             <field name="printer_count" widget="statinfo" string="Printers"/>
                         </button>
                     </div>
@@ -38,27 +39,70 @@
                             <field name="code"/>
                             <field name="company_id"/>
                             <field name="active"/>
-                            <field name="is_expeditor"/>
+                            <!-- UI/DATA FIX ("Master Change Request",
+                                 item 2, "Operating Mode Behavior"): is_expeditor
+                                 (the KDS Screen's own final-assembly/
+                                 packing-stage flag) is meaningless for a
+                                 Printer Only station - hidden, not
+                                 disabled, since it has no bearing at all
+                                 on that mode's own actual behavior. -->
+                            <field name="is_expeditor" invisible="operating_mode == 'printer_only'"/>
                         </group>
                         <group>
                             <field name="operating_mode"/>
                             <field name="pos_config_ids" widget="many2many_tags"/>
-                            <field name="auto_accept_orders"/>
-                            <field name="auto_print"/>
+                            <!-- UI/DATA FIX ("Master Change Request",
+                                 item 2): auto_accept_orders only affects
+                                 the live KDS Screen's own order workflow
+                                 - no effect at all in Printer Only mode,
+                                 where there is no KDS Screen for this
+                                 station. auto_print only affects the
+                                 printing engine - no effect at all in
+                                 KDS Only mode, where this station never
+                                 prints anything. Both hidden, not
+                                 disabled - genuinely irrelevant settings
+                                 for their own respective modes, not
+                                 merely inconvenient ones; the underlying
+                                 fields, defaults, and every bit of their
+                                 own backend logic are completely
+                                 unchanged either way. -->
+                            <field name="auto_accept_orders" invisible="operating_mode == 'printer_only'"/>
+                            <field name="auto_print" invisible="operating_mode == 'kds_only'"/>
                         </group>
                     </group>
+                    <!-- UI/DATA FIX ("Master Change Request", item 4,
+                         "Description Field Cleanup"): confirmed by
+                         usage check - description is a plain optional
+                         text field, not read or referenced by any other
+                         logic anywhere in this codebase (KDS Screen,
+                         kiosk, printing, routing, or otherwise). A
+                         dedicated, standalone notebook page for one
+                         optional free-text field overstated its own
+                         importance; folded into General instead, right
+                         below the two main field groups above - same
+                         field, same data, same behavior, just better
+                         organized. No separate page for it anymore. -->
+                    <group string="Description">
+                        <field name="description" nolabel="1"/>
+                    </group>
                     <notebook>
-                        <page string="SLA">
+                        <page string="SLA" invisible="operating_mode == 'printer_only'">
                             <group>
                                 <field name="target_prep_time"/>
-                                <field name="warning_threshold_pct"/>
-                                <field name="late_threshold_pct"/>
+                                <group string="Warning">
+                                    <field name="warning_threshold_pct"/>
+                                    <field name="warning_threshold_minutes" readonly="1" widget="float_time"/>
+                                </group>
+                                <group string="Late">
+                                    <field name="late_threshold_pct"/>
+                                    <field name="late_threshold_minutes" readonly="1" widget="float_time"/>
+                                </group>
                             </group>
                         </page>
-                        <page string="Users">
+                        <page string="Users" invisible="operating_mode == 'printer_only'">
                             <field name="user_ids" widget="many2many_tags"/>
                         </page>
-                        <page string="Printers">
+                        <page string="Printers" invisible="operating_mode == 'kds_only'">
                             <field name="printer_ids">
                                 <list editable="bottom">
                                     <field name="name"/>
@@ -70,9 +114,12 @@
                                 </list>
                             </field>
                         </page>
-                        <page string="Description">
-                            <field name="description"/>
-                        </page>
+                        <!-- UI/DATA FIX ("Master Change Request", item
+                             4, "Description Field Cleanup"): the
+                             standalone "Description" page is removed -
+                             see the "Description" group added above,
+                             right after the main field groups, outside
+                             the notebook entirely. -->
                         <page string="Public Kiosk" groups="flexsys_kds.group_kds_administrator">
                             <div class="alert alert-warning" role="alert">
                                 Anyone with this URL can view and operate this station's
@@ -82,6 +129,16 @@
                             </div>
                             <group>
                                 <field name="kiosk_url" readonly="1"/>
+                                <!-- UI/DATA FIX ("Master Change
+                                     Request", item 5): the two new
+                                     fields requested - a way to
+                                     instantly deny public kiosk access
+                                     without rotating the token, and the
+                                     token's own creation/last-
+                                     regeneration timestamp, shown right
+                                     alongside the URL it belongs to. -->
+                                <field name="kiosk_disabled"/>
+                                <field name="kiosk_token_regenerated_at" readonly="1"/>
                             </group>
                             <button name="action_regenerate_kiosk_token" type="object"
                                     string="Regenerate Kiosk Token" class="btn-secondary"

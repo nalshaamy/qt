@@ -21,13 +21,37 @@
                  correctly opens the real form (below) rather than
                  editing inline - standard Odoo list->form navigation. -->
             <list string="Routing Rules">
-                <field name="sequence" widget="handle"/>
+                <field name="sequence" widget="handle" string="Priority"/>
                 <field name="name"/>
                 <field name="company_id" optional="show"/>
                 <field name="pos_config_ids" widget="many2many_tags" optional="show"/>
                 <field name="product_ids" widget="many2many_tags"/>
                 <field name="pos_categ_ids" widget="many2many_tags"/>
-                <field name="product_categ_ids" widget="many2many_tags" optional="hide"/>
+                <!-- UI/DATA FIX ("Master Change Request", item 6,
+                     "Inventory Category Cleanup"): confirmed by usage
+                     check ("Usage Check أوضحت أن Inventory Category
+                     ليست مجرد Routing UI field، بل تدخل أيضًا كـ legacy
+                     fallback في routing resolution") - product_categ_ids
+                     is genuinely used in real matching logic
+                     (KdsRoutingRule._matches()) AND the default-station
+                     fallback chain (route_product()'s own inventory-
+                     category-level fallback, models/kds_routing_rule.py)
+                     - never dead code, so the field itself and every
+                     bit of its own backend logic are completely
+                     unchanged. Per the explicit decision ("Remove/Hide
+                     Inventory Categories from Routing UI only. KEEP the
+                     existing backend product.categ_id fallback and
+                     related tests completely unchanged"): hidden from
+                     this list ONLY - optional="hide" already made it
+                     opt-in/hidden by default before this change; this
+                     removes it from the column picker entirely, so it
+                     can never be shown here again by anyone toggling
+                     the column-visibility menu. Any future decision to
+                     remove the fallback itself is its own, separate
+                     change request, per the client's own explicit
+                     note ("أي قرار لإزالة هذا fallback سيكون Change
+                     Request مستقل بعد تحليل أثره") - not attempted
+                     here. -->
                 <field name="order_type_ids" widget="many2many_tags"/>
                 <field name="source_ids" widget="many2many_tags"/>
                 <field name="station_id"/>
@@ -46,7 +70,22 @@
                     <group>
                         <group>
                             <field name="name"/>
-                            <field name="sequence"/>
+                            <!-- UI/DATA FIX ("Master Change Request",
+                                 item 7, "Routing Priority Naming"):
+                                 display label only - "Sequence" ->
+                                 "Priority", with a help note stating
+                                 both required facts plainly ("Lower
+                                 number = higher priority", "the first
+                                 matching rule wins"). The underlying
+                                 field name (sequence) and its stored
+                                 integer values are completely
+                                 unchanged - this is a label/help-text
+                                 change only, exactly matching item 11's
+                                 own "لا تغيير على المنطق الحالي"
+                                 principle applied here to Routing
+                                 instead of POS settings. -->
+                            <field name="sequence" string="Priority"
+                                   help="Lower number = higher priority. Rules are checked in this order, and the FIRST rule that matches wins - later rules are never checked once one has already matched."/>
                             <field name="active"/>
                         </group>
                         <group>
@@ -54,11 +93,40 @@
                             <field name="pos_config_ids" widget="many2many_tags"/>
                         </group>
                     </group>
+                    <!-- UI/DATA FIX ("Master Change Request", item 8,
+                         "Routing Matching Explanation"): simplified,
+                         explicit help text replacing the earlier
+                         group-string-only note - states plainly, in
+                         order, the three facts an administrator setting
+                         up a rule actually needs: an empty criterion
+                         matches everything, multiple values within the
+                         SAME criterion are OR'd together, and every
+                         criterion that IS set must all match at once
+                         (AND) for the rule as a whole to match. -->
+                    <div class="alert alert-info" role="alert">
+                        <strong>How matching works:</strong> leave a criterion empty to match every value for it.
+                        Selecting several values in the <em>same</em> criterion (e.g. two POS Categories) matches
+                        <em>any</em> of them. Every criterion that IS set below must all match at the same time
+                        for this rule to apply.
+                    </div>
                     <group string="Match on (empty = matches everything for that criterion)">
                         <group>
                             <field name="product_ids" widget="many2many_tags"/>
                             <field name="pos_categ_ids" widget="many2many_tags"/>
-                            <field name="product_categ_ids" widget="many2many_tags"/>
+                            <!-- UI/DATA FIX ("Master Change Request",
+                                 item 6): hidden from the Routing UI
+                                 only, per the explicit decision - the
+                                 field itself and its own backend
+                                 matching/fallback logic are completely
+                                 unchanged (see kds_routing_rule.py's own
+                                 matching comment). invisible="1", not a
+                                 removed field entirely, so an
+                                 administrator in Developer Mode can
+                                 still reach it directly if genuinely
+                                 needed for an existing legacy rule,
+                                 without reintroducing it to the normal
+                                 day-to-day UI. -->
+                            <field name="product_categ_ids" widget="many2many_tags" invisible="1"/>
                         </group>
                         <group>
                             <field name="order_type_ids" widget="many2many_tags"/>

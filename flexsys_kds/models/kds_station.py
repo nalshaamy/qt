@@ -95,6 +95,34 @@ class KdsStation(models.Model):
 
     description = fields.Text()
 
+    # UI/DATA FIX ("Master Change Request", item 3, "Station SLA
+    # Display Improvement"): the three raw fields above
+    # (target_prep_time, warning_threshold_pct, late_threshold_pct)
+    # are kept completely unchanged - same architecture, same
+    # validation - these two are purely computed DISPLAY helpers,
+    # showing the actual resulting TIME value alongside the percentage
+    # an administrator is actually configuring, so they don't have to
+    # do the percentage math themselves to understand when a Warning or
+    # Late status will actually trigger. Not stored: cheap arithmetic
+    # on three integers already on the same record, no reason to
+    # persist.
+    warning_threshold_minutes = fields.Float(
+        string='Warning At (min)', compute='_compute_sla_threshold_minutes',
+        help="The actual time this Warning Threshold percentage represents, "
+             "given this station's own Target Preparation Time.")
+    late_threshold_minutes = fields.Float(
+        string='Late At (min)', compute='_compute_sla_threshold_minutes',
+        help="The actual time this Late Threshold percentage represents, "
+             "given this station's own Target Preparation Time.")
+
+    @api.depends('target_prep_time', 'warning_threshold_pct', 'late_threshold_pct')
+    def _compute_sla_threshold_minutes(self):
+        for station in self:
+            station.warning_threshold_minutes = (
+                station.target_prep_time * station.warning_threshold_pct / 100.0)
+            station.late_threshold_minutes = (
+                station.target_prep_time * station.late_threshold_pct / 100.0)
+
     # ---------------------------------------------------------------
     # Public, unauthenticated kiosk access. A device visiting
     # /flexsyskds/public/<code>/<kiosk_token> gets the KDS screen for
@@ -119,16 +147,52 @@ class KdsStation(models.Model):
         string='Public Kiosk URL', compute='_compute_kiosk_url',
         groups='flexsys_kds.group_kds_administrator',
     )
+    # UI/DATA FIX ("Master Change Request", item 5, "Public Kiosk
+    # Configuration Improvement"): "Add Disable Public Access option"
+    # and "show Token Created/Last Regenerated if easily available."
+    # No change whatsoever to the underlying kiosk_token auth
+    # architecture itself (still the exact same possession-of-URL
+    # credential, same hmac-free direct comparison in
+    # controllers/kds_kiosk.py's own _station_from_token()) - this is
+    # purely an additional, independent gate an administrator can flip
+    # to instantly deny every kiosk request for this station without
+    # having to regenerate/rotate the token itself (useful for e.g.
+    # temporarily taking a station's kiosk offline for maintenance
+    # without invalidating the URL every connected device already has
+    # configured).
+    kiosk_disabled = fields.Boolean(
+        string='Disable Public Kiosk Access', default=False,
+        groups='flexsys_kds.group_kds_administrator',
+        help="When enabled, every public kiosk request for this station is "
+             "rejected, even with a correct token - without regenerating/"
+             "invalidating the token itself. Turn back off to restore access "
+             "immediately with the same URL every device already has.")
+    # kiosk_token_regenerated_at, not create_date/write_date: neither
+    # existing magic field is precise enough for "Last Regenerated"
+    # specifically - create_date never changes again after the initial
+    # insert (useless for a later regeneration), and write_date changes
+    # on ANY field write to this record at all (renaming the station,
+    # toggling kiosk_disabled, anything), so it would silently claim a
+    # "regeneration" happened when none actually did. A dedicated field,
+    # set only at create() and inside action_regenerate_kiosk_token()
+    # below, is the only way to answer this specific question
+    # correctly.
+    kiosk_token_regenerated_at = fields.Datetime(
+        string='Token Created / Last Regenerated', copy=False,
+        groups='flexsys_kds.group_kds_administrator', readonly=True,
+    )
 
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
             vals.setdefault('kiosk_token', secrets.token_urlsafe(24))
+            vals.setdefault('kiosk_token_regenerated_at', fields.Datetime.now())
         return super().create(vals_list)
 
     def action_regenerate_kiosk_token(self):
         for station in self:
             station.kiosk_token = secrets.token_urlsafe(24)
+            station.kiosk_token_regenerated_at = fields.Datetime.now()
 
     def _compute_kiosk_url(self):
         base_url = self.env['ir.config_parameter'].sudo().get_param('web.base.url', '')
