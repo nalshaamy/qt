@@ -8,6 +8,63 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.19.0 — Printer form: secure "Copy Agent Key" action, no permanent plain-text exposure
+
+**Confirmed live during actual Print Agent configuration/testing**:
+`agent_key` is correctly password-masked on the printer form, but there
+was no way at all to retrieve the real value to configure the external
+print agent process with.
+
+### Fix - deliberately the lowest-risk possible design
+New `action_copy_agent_key()`, a plain Python server action returning
+Odoo's own standard, officially documented `ir.actions.client` /
+`display_notification` mechanism - no custom JavaScript, no new
+widget, no dependency on `navigator.clipboard` (which requires a secure
+context and explicit browser permission this delivery has no way to
+verify live). The key is shown once, in a `sticky: True` notification
+that stays on screen until manually dismissed - long enough to select
+and copy the text (Ctrl+C) - never written back into the form, never
+rendered unmasked in the persistent `agent_key` field, never logged.
+"Do not display the key permanently in plain text" is satisfied exactly
+- the field itself is completely unaffected and stays password-masked
+at all other times; this is a deliberate, one-time reveal-to-copy
+action, not a silent or permanent exposure.
+
+New "Copy Agent Key" button placed directly next to the existing
+"Regenerate Agent Key" in the printer form's own header, with the exact
+same `groups="flexsys_kds.group_kds_administrator"` restriction. Access
+is also enforced server-side (`self.env.user.has_group(...)`, raising
+`AccessError` otherwise) as genuine defense in depth - the view-level
+`groups` attribute alone only hides the button in the UI, it is not a
+real access boundary on its own, matching `agent_key` field's own
+already-existing `groups=` restriction at the ORM level.
+
+### Explicitly unchanged
+`action_regenerate_agent_key()` itself - the new action never writes to
+`agent_key` at all, so copying the key can never accidentally change
+it. Agent authentication, Claim/Ack/Result, and every other part of the
+printing architecture are completely untouched, per the dev request's
+own explicit scope limit.
+
+### Files changed
+`models/kds_printer.py` (`action_copy_agent_key()`),
+`views/kds_printer_views.xml` ("Copy Agent Key" button).
+
+### Tests
+6 new tests: the action returns the correct sticky notification shape
+carrying the printer's own real, current key; copying never changes
+the key (directly contrasted with `action_regenerate_agent_key()`,
+which does); a KDS Supervisor (a real, distinct, lesser role) is
+correctly denied with an explicit `AccessError`; a genuine KDS
+Administrator succeeds; and a defensive edge case (a printer somehow
+missing its own key entirely) shows a clear message rather than a
+blank or broken notification.
+
+**Total: 403 tests** (up from 398). No database migration required -
+no field/model changes this round.
+
+---
+
 ## v7.18.0 — Decision: keep immutable job architecture; Toast removed entirely; Print Jobs grouped by Order
 
 **Client's own explicit architectural decision, implemented exactly as

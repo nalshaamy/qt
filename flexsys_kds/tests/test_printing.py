@@ -44,6 +44,65 @@ class TestPrinting(FlexSysKdsTestCommon):
         self.printer_primary.action_regenerate_agent_key()
         self.assertNotEqual(self.printer_primary.agent_key, old_key)
 
+    # -----------------------------------------------------------------
+    # UI/DATA FIX ("Printing Configuration Gap - Agent Key Access"):
+    # action_copy_agent_key() must retrieve the existing key WITHOUT
+    # ever regenerating/changing it, restricted to KDS Administrator
+    # only, and never write the key back into any persisted field.
+    # -----------------------------------------------------------------
+    def test_copy_agent_key_returns_sticky_notification_with_the_real_key(self):
+        """Confirms the action returns Odoo's own standard
+        display_notification client action, sticky (stays until
+        manually dismissed - long enough to select and copy), with the
+        printer's own real, current agent_key as the message."""
+        result = self.printer_primary.action_copy_agent_key()
+        self.assertEqual(result['type'], 'ir.actions.client')
+        self.assertEqual(result['tag'], 'display_notification')
+        self.assertEqual(result['params']['message'], self.printer_primary.agent_key)
+        self.assertTrue(result['params']['sticky'])
+
+    def test_copy_agent_key_never_changes_the_key(self):
+        """Required: 'Do not regenerate/change the key when copying.'
+        Directly contrasts with action_regenerate_agent_key() (tested
+        above), which DOES change it."""
+        old_key = self.printer_primary.agent_key
+        self.printer_primary.action_copy_agent_key()
+        self.printer_primary.invalidate_recordset()
+        self.assertEqual(
+            self.printer_primary.agent_key, old_key,
+            "Copying the key must never regenerate or otherwise change it - unlike "
+            "action_regenerate_agent_key(), which is a completely separate action.")
+
+    def test_copy_agent_key_denied_for_non_administrator(self):
+        """Required: 'Allow KDS Administrator only.' A KDS Supervisor
+        (a real, distinct, lesser role in this project's own access
+        hierarchy) must be denied, with an explicit AccessError - not a
+        silent no-op or a value leaked despite the restriction."""
+        from odoo.exceptions import AccessError
+        supervisor = self._make_kds_user('printer_copy_key_supervisor', self.group_supervisor)
+        with self.assertRaises(AccessError):
+            self.printer_primary.with_user(supervisor).action_copy_agent_key()
+
+    def test_copy_agent_key_allowed_for_administrator(self):
+        """Positive case: a genuine KDS Administrator can successfully
+        call the action and receive the real key."""
+        admin_user = self._make_kds_user('printer_copy_key_admin', self.group_administrator)
+        result = self.printer_primary.with_user(admin_user).action_copy_agent_key()
+        self.assertEqual(result['params']['message'], self.printer_primary.agent_key)
+
+    def test_copy_agent_key_handles_missing_key_gracefully(self):
+        """Defensive: a printer with no agent_key at all (should not
+        normally happen, since create() always sets one - but the
+        action itself must not raise if it somehow is empty) shows a
+        clear message instead of a blank/broken notification."""
+        printer_no_key = self.env['kds.printer'].create({
+            'name': 'Printer With No Key (edge case)',
+            'station_id': self.station_kitchen.id,
+        })
+        printer_no_key.sudo().agent_key = False
+        result = printer_no_key.action_copy_agent_key()
+        self.assertIn('No Print Agent Key', result['params']['message'])
+
     def test_retry_before_falling_back(self):
         order = self._order()
         job = self.env['kds.print.job'].create({

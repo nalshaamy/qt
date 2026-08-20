@@ -1,40 +1,32 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.18.0**
+**Version: 19.0.7.19.0**
 **Status as of this document: code-complete, including everything
-through v7.17.1 (see CHANGELOG.md for the full history), plus the
-client's own explicit architectural decision, implemented exactly as
-specified. The immutable `kds.print.job` architecture (one record per
-actual Print/Reprint request, Retry Count inside the same job, every
-explicit user Reprint a separate job with incremented Print #) is
-confirmed kept as-is - no record reuse, no new lifecycle-sharing
-protection added, explicitly avoiding any new race-condition handling
-at this stage. **The Toast requirement (added in v7.17.0/v7.17.1) is
-removed entirely** - "No Printer -> No Job is sufficient" - from both
-the backend KDS Screen (`kds_app.js`/`kds_store.js`, reverted to their
-original fire-and-forget form, unused `notification` service injection
-and `_t` import both removed) and the standalone kiosk page
-(`controllers/kds_kiosk.py`, its own toast CSS/container/function all
-removed). What is explicitly NOT removed, because it isn't the Toast:
-the backend guard itself (`NoPrinterConfiguredError`, still preventing
-any `kds.print.job` from ever being created for a station with no
-configured printer) and the exception-handling/JSON-response-stability
-fixes from v7.17.0/v7.17.1 (`_kds_error()`'s own `error_code`
-surfacing, `kiosk_print()`'s own shared exception handling) - both
-needed regardless of whether any UI displays a toast for them. The one
-genuinely new piece of work: the Print Jobs list now defaults to
-grouping by Order (`search_default_group_order`, a new `group_order`
-search filter) with `default_order="order_id, print_number"` on the
-list view, so every job for the same order clusters together and reads
-1, 2, 3 top to bottom instead of a single flat, chronologically-
-interleaved list. Agent/Claim/Lease/Backup routing architecture
-completely untouched, per the client's own explicit instruction. 398
-automated tests, all `py_compile`/XML/JS checks passing, plus a custom
-AST-based undefined-name sweep. No database migration needed - no
-field/model changes this round. **Goal per the client's own words**:
-"preserve the stable printing engine and proceed to actual printer
-configuration/testing" - achieved. Not yet signed off on a live
-instance — see
+through v7.18.0 (see CHANGELOG.md for the full history), plus a secure
+"Copy Agent Key" action on the printer form - confirmed live during
+actual Print Agent configuration/testing that `agent_key` was correctly
+password-masked but had no way at all to retrieve the real value to
+configure the external print agent process with. New
+`action_copy_agent_key()`, a plain Python server action returning
+Odoo's own standard, officially documented `display_notification`
+client action - no custom JavaScript, no new widget, no
+`navigator.clipboard` dependency. The key is shown once, in a
+`sticky: True` notification (stays until manually dismissed - long
+enough to select and copy), never written back into the form, never
+unmasked in the persistent field, never logged - "Do not display the
+key permanently in plain text" is satisfied exactly, since the field
+itself is completely unaffected. New "Copy Agent Key" button placed
+next to the existing "Regenerate Agent Key," same
+`groups="flexsys_kds.group_kds_administrator"` restriction, backed by
+an explicit server-side access check as genuine defense in depth.
+`action_regenerate_agent_key()` itself is completely untouched - the
+new action never writes to `agent_key` at all, so copying can never
+accidentally change it. Agent authentication, Claim/Ack/Result, and
+every other part of the printing architecture completely untouched,
+per the dev request's own explicit scope limit. 403 automated tests,
+all `py_compile`/XML/JS checks passing, plus a custom AST-based
+undefined-name sweep. No database migration needed - no field/model
+changes this round. Not yet signed off on a live instance — see
 "What still needs a human" at the end.**
 
 
@@ -1489,11 +1481,36 @@ no printer configured produces no `kds.print.job` and no toast/popup of
 any kind (silent, by design), and that a station WITH a printer
 continues printing normally.
 
-**What still needs a human**: live confirmation that the toast actually
-renders correctly (non-blocking, correct message) when tapping Print/
-Reprint on a station with no printer configured, both from the backend
-KDS Screen and the public kiosk view; and that a station WITH a printer
-still prints normally, unaffected by this round's own changes.
+## Printer form: secure "Copy Agent Key" action (v7.19.0)
+**Confirmed live during actual Print Agent configuration/testing**:
+`agent_key` correctly password-masked, but no way at all to retrieve
+the real value to configure the external print agent process with.
+
+**Fix**: new `action_copy_agent_key()` - a plain Python server action
+returning Odoo's own standard, officially documented
+`display_notification` client action. No custom JavaScript, no new
+widget, no `navigator.clipboard` dependency. The key is shown once, in
+a `sticky: True` notification (stays until manually dismissed - long
+enough to select and copy), never written back into the form, never
+unmasked in the persistent field, never logged.
+
+New "Copy Agent Key" button next to the existing "Regenerate Agent
+Key," same `groups="flexsys_kds.group_kds_administrator"` restriction,
+backed by an explicit server-side access check (`AccessError` if not a
+KDS Administrator) as genuine defense in depth, not just a UI-level
+hidden button. `action_regenerate_agent_key()` itself is completely
+untouched - the new action never writes to `agent_key` at all.
+
+**Explicitly untouched**: Agent authentication, Claim/Ack/Result, and
+every other part of the printing architecture, per the dev request's
+own explicit scope limit.
+
+**What still needs a human**: live confirmation that clicking "Copy
+Agent Key" shows the correct, real key in a sticky notification, that
+the text is genuinely selectable/copyable from it, that the button is
+correctly hidden for a non-Administrator user, and that the external
+print agent process can be successfully configured with the copied key
+end to end.
 
 ---
 
@@ -1758,7 +1775,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 398 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 403 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |
