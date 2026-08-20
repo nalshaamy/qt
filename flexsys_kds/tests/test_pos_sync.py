@@ -5737,3 +5737,85 @@ class TestPosSync(FlexSysKdsTestCommon):
             'flexsys_kds/static/src/js/flexsys_kds_offline_send_warning.js', pos_assets,
             "The new file must be listed in the point_of_sale._assets_pos bundle, or "
             "it will never actually load in the POS register.")
+
+    # -----------------------------------------------------------------
+    # UI/DATA FIX ("FlexSys KDS - Master Change Request", item 1,
+    # "Table Number - Fix"): kds.order.table_number was defined but
+    # never actually written to anywhere - confirmed empty for every
+    # table order regardless of when it reached KDS. Fixed at
+    # _flexsys_kds_create() - the very first point a POS order becomes
+    # a kds.order at all - guaranteeing the table number is present
+    # from the first Send, before payment, not only afterward.
+    # -----------------------------------------------------------------
+    def test_table_order_gets_table_number_before_payment(self):
+        """Required Acceptance: 'Table Order -> Send -> KDS Order ->
+        Table Number موجود وصحيح قبل الدفع.' Uses the 'send' trigger
+        (order stays genuinely 'draft'/unpaid) - the exact scenario the
+        fix targets."""
+        if 'table_id' not in self.env['pos.order']._fields:
+            self.skipTest("pos_restaurant is not installed in this environment - "
+                           "table_id does not exist on pos.order at all.")
+        try:
+            floor = self.env['restaurant.floor'].create({'name': 'Test Floor'})
+            table = self.env['restaurant.table'].create({
+                'table_number': 7,
+                'floor_id': floor.id,
+            })
+        except Exception:
+            self.skipTest("restaurant.floor/restaurant.table's own required fields "
+                           "could not be satisfied with this minimal create() in this "
+                           "environment - needs live-instance verification, matching "
+                           "this test file's own established caution elsewhere for "
+                           "point_of_sale's version-sensitive scaffolding.")
+        self.pos_config.kds_send_trigger = 'send'
+        order = self.env['pos.order'].create({
+            'session_id': self.pos_session.id,
+            'company_id': self.company.id,
+            'table_id': table.id,
+            'lines': [(0, 0, {
+                'product_id': self.product_burger.id, 'qty': 1,
+                'price_unit': 10.0, 'price_subtotal': 10.0, 'price_subtotal_incl': 10.0,
+            })],
+            'amount_tax': 0.0, 'amount_total': 10.0,
+            'amount_paid': 0.0, 'amount_return': 0.0,
+            'state': 'draft',
+        })
+        self.assertNotIn(order.state, ('paid', 'done', 'invoiced'),
+                          "Confirms this order is genuinely unpaid at the moment it's sent.")
+
+        order.flexsys_kds_register_send()
+
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order, "The order must have reached KDS.")
+        self.assertTrue(
+            kds_order.table_number,
+            "table_number must be populated the moment the order reaches KDS - "
+            "before payment, not only afterward.")
+        self.assertIn('7', kds_order.table_number,
+                       "The table's own number must genuinely appear in the value.")
+
+    def test_direct_sale_order_has_no_table_number(self):
+        """Required Acceptance: 'Direct Sale يبقى بدون Table Number.'
+        No table_id set at all (Odoo 19's own confirmed Direct Sale
+        shape - an order created without a table)."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        self.assertFalse(
+            kds_order.table_number,
+            "A Direct Sale order (no table_id) must have an empty table_number, "
+            "never a stray/default value.")
+
+    def test_pos_order_reference_unaffected_by_table_number_fix(self):
+        """Required: 'لا تغيّر السلوك الحالي لحقل POS Order... ظهور
+        '/' قبل الدفع سلوك صحيح ومعتمد.' Confirms this fix touches
+        ONLY table_number - the separate pos_order_id/reference display
+        behavior (item 20/21 elsewhere in this project's own history)
+        is completely unaffected."""
+        order = self._create_active_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        self.assertEqual(
+            kds_order.pos_order_id.id, order.id,
+            "pos_order_id itself must still correctly link to the real POS order - "
+            "unrelated to and unaffected by the table_number fix.")

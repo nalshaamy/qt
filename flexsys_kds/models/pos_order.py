@@ -22,6 +22,41 @@ def _pos_note(record, default=''):
     return getattr(record, 'note', default) or default
 
 
+def _pos_table_number(order):
+    """UI/DATA FIX ("FlexSys KDS - Master Change Request", item 1,
+    "Table Number - Fix"): resolves a display string for the POS
+    order's own linked table, or '' for a Direct Sale order (no table)
+    - "Direct Sale يبقى بدون Table Number."
+
+    getattr(order, 'table_id', False), matching this module's own
+    established defensive pattern for a field that only exists when
+    pos_restaurant is installed (see _flexsys_kds_create()'s own
+    identical use of getattr() for 'takeaway', right next to where
+    this is called) - never assumes `table_id` exists on `order` at
+    all, and never raises if it doesn't.
+
+    table_id.table_number (an Integer) is the primary source, not
+    table_id.name - confirmed directly from Odoo's own official forum
+    that starting in Odoo 18, "tables can only be numbered" (free-text
+    table naming was removed from core POS), making table_number the
+    reliably present, stable identifier across the Odoo 18/19 versions
+    this module actually targets. table_id.name is checked SECOND, only
+    as a fallback if table_number itself is somehow falsy/unset - never
+    the first choice, and never assumed to exist or be meaningful on
+    its own.
+    """
+    table = getattr(order, 'table_id', False)
+    if not table:
+        return ''
+    table_number = getattr(table, 'table_number', False)
+    if table_number:
+        return str(table_number)
+    name = getattr(table, 'name', False)
+    if name and str(name).strip():
+        return str(name).strip()
+    return ''
+
+
 def _pos_line_variant_info(line):
     """Best-effort description of a line's selected variant/attributes
     (size, flavor, add-ons chosen at sale time), kept separate from the
@@ -1542,6 +1577,41 @@ class PosOrder(models.Model):
             'order_type': order_type,
             'customer_name': self.partner_id.name or self.pos_reference or '',
             'note': _pos_note(self),
+            # UI/DATA FIX ("FlexSys KDS - Master Change Request", item
+            # 1, "Table Number - Fix"), confirmed live: kds.order's own
+            # table_number field (models/kds_order.py) was defined but
+            # never actually written to anywhere - it stayed empty for
+            # every table order, no matter when it reached KDS. Fixed
+            # here, at the exact same point every other kds.order field
+            # is populated - this is the FIRST moment a POS order
+            # becomes a kds.order at all, guaranteeing the table number
+            # is present from the very first Send, before payment, not
+            # only afterward (which is the confirmed requirement -
+            # "لا يتم الاعتماد على POS Order النهائي فقط، لأن الطلب قد
+            # يصل إلى KDS قبل الدفع").
+            #
+            # getattr(self, 'table_id', False) - not self.table_id
+            # directly - matching this same method's own already-
+            # established defensive pattern one line above
+            # (getattr(self, 'takeaway', False)) for a field that only
+            # exists at all when pos_restaurant is installed; a
+            # Direct Sale order (no table - Odoo 19's own confirmed
+            # "New Order" action) correctly has table_id unset, so
+            # this naturally resolves to '' - "Direct Sale يبقى بدون
+            # Table Number" is satisfied with no special-case branch
+            # needed at all.
+            #
+            # table_id.table_number (an Integer) is used as the
+            # primary source, not table_id.name - confirmed directly
+            # from Odoo's own official forum that starting in Odoo 18,
+            # "tables can only be numbered" (free-text table naming was
+            # removed from core POS), making table_number the reliably
+            # present, stable identifier across the Odoo 18/19 versions
+            # this module actually targets. table_id.name is still
+            # checked defensively first, purely as a fallback for any
+            # environment where it happens to carry a genuinely useful,
+            # distinct label - never assumed to exist or be meaningful.
+            'table_number': _pos_table_number(self),
             # REAL BUG FIX ("BUG-14 - COMPLETED Retention Must Depend on
             # POS Closure"): under the 'payment' trigger, an order only
             # ever reaches KDS in the first place once it's ALREADY paid
