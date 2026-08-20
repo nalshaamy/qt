@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_kds_printer_hub_form" model="ir.ui.view">
+        <field name="type">form</field>
+        <field name="name">kds.printer.hub.form</field>
+        <field name="model">kds.printer.hub</field>
+        <field name="arch" type="xml">
+            <!-- create/edit/delete/duplicate all false (dev request,
+                 item 1): this is a navigation/dashboard page, not an
+                 editable database record - suppresses the generic "New"
+                 button and other record-management controls that made
+                 it look like one. -->
+            <form string="Printing" create="false" edit="false" delete="false" duplicate="false">
+                <sheet>
+                    <div class="o_kds_hub_header mb-4">
+                        <h1 class="mb-1">Printing</h1>
+                        <p class="text-muted mb-0">Printers and the full print job history - print and reprint - each has its own page.</p>
+                    </div>
+                    <!-- UI/DATA FIX ("Printing UI & Job History - Final
+                         Cleanup Before Testing"), items 1 & 2: the
+                         separate Reprints card/destination is removed
+                         entirely - Print Jobs (below) now covers both,
+                         since both were always the exact same
+                         kds.print.job model and list view underneath.
+                         Two even columns (col-md-6) replace the
+                         original three (col-md-4) now that only two
+                         cards remain. -->
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <div class="card o_kds_hub_block h-100">
+                                <div class="card-body d-flex flex-column">
+                                    <div class="o_kds_hub_icon mb-3"><i class="fa fa-print" role="img" aria-label="Printers"/></div>
+                                    <h5 class="card-title">Printers</h5>
+                                    <p class="card-text text-muted flex-grow-1">
+                                        The physical printers assigned to each station - default/backup roles, connection status.
+                                    </p>
+                                    <button name="%(action_kds_printer)d" type="action"
+                                            string="Open Printers" class="btn btn-primary o_kds_hub_btn"/>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="card o_kds_hub_block h-100">
+                                <div class="card-body d-flex flex-column">
+                                    <div class="o_kds_hub_icon mb-3"><i class="fa fa-list-alt" role="img" aria-label="Print Jobs"/></div>
+                                    <h5 class="card-title">Print Jobs</h5>
+                                    <p class="card-text text-muted flex-grow-1">
+                                        The full print history - every job's status, retries, and any escalation to a backup printer - first prints and reprints together, each clearly labeled and numbered.
+                                    </p>
+                                    <button name="%(action_kds_print_job)d" type="action"
+                                            string="Open Print Jobs" class="btn btn-primary o_kds_hub_btn"/>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_kds_printer_hub" model="ir.actions.act_window">
+        <field name="name">Printers</field>
+        <field name="res_model">kds.printer.hub</field>
+        <field name="view_mode">form</field>
+        <field name="target">current</field>
+    </record>
+</odoo>

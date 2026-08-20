@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_kds_print_job_list" model="ir.ui.view">
+        <field name="type">list</field>
+        <field name="name">kds.print.job.list</field>
+        <field name="model">kds.print.job</field>
+        <field name="arch" type="xml">
+            <!-- UI/DATA FIX ("Printing UI & Job History - Final Cleanup
+                 Before Testing"), items 1, 2, 7: Print Jobs and
+                 Reprints are now a single screen - the separate
+                 Reprints action/menu entry is removed entirely (see
+                 kds_printer_hub_views.xml's own matching change), since
+                 both were always backed by this exact same
+                 kds.print.job model and this exact same list view; the
+                 model already carries everything a "reprint trail"
+                 needs (display_job_type/print_number/reason). Column
+                 set and order matches the dev request's own item 7
+                 exactly: Order | Station | Printer | Job Type | Print #
+                 | Scope | Reprint Reason | Status | Retry Count |
+                 Escalated | User | Created On - "Job Type" here is
+                 display_job_type (the simplified Print/Reprint label -
+                 see that field's own docstring in kds_print_job.py for
+                 why it's a separate field from the technical, unchanged
+                 job_type auto/manual/reprint value), and "Retry Count"
+                 stays its own, clearly separate column right next to
+                 it - item 5's own explicit requirement ("Retry Count
+                 لا يعني Reprint Count") is satisfied by keeping these
+                 as two distinct, adjacent, clearly-labeled columns
+                 rather than ever conflating them into one. -->
+            <!-- UI/DATA FIX ("Printing Cleanup - Toast + Job Record
+                 Simplification"), decision item 5: "Improve only the
+                 Print Jobs list presentation/grouping so multiple jobs
+                 for the same order are easy to understand" - the
+                 architecture itself is unchanged (decision items 1-4:
+                 one immutable record per actual Print/Reprint request,
+                 no record reuse) - `default_order` here makes every
+                 job for the same order sort by its own print_number
+                 ascending (1, 2, 3...) rather than the model's own
+                 default create_date desc, so the real print sequence
+                 reads naturally top-to-bottom within each order,
+                 whether grouped or not - see the search view below for
+                 the new default "Group by Order" behavior that makes
+                 this most visible. -->
+            <list string="Print Jobs" create="false" edit="false"
+                  default_order="order_id, print_number">
+                <field name="order_id"/>
+                <field name="station_id"/>
+                <field name="printer_id"/>
+                <field name="display_job_type" string="Job Type" widget="badge"
+                       decoration-info="display_job_type == 'print'"
+                       decoration-warning="display_job_type == 'reprint'"/>
+                <field name="print_number" string="Print #"/>
+                <field name="scope"/>
+                <field name="reason" string="Reprint Reason"/>
+                <field name="status" decoration-success="status == 'printed'" decoration-danger="status == 'failed'" decoration-warning="status in ('pending','dispatched')" widget="badge"/>
+                <field name="retry_count"/>
+                <field name="escalated" widget="boolean_toggle"/>
+                <field name="user_id"/>
+                <field name="create_date" string="Created On"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_kds_print_job_search" model="ir.ui.view">
+        <field name="type">search</field>
+        <field name="name">kds.print.job.search</field>
+        <field name="model">kds.print.job</field>
+        <field name="arch" type="xml">
+            <!-- UI/DATA FIX ("Printing UI & Job History"): with Print
+                 Jobs and Reprints now a single screen, these two
+                 filters replace the separate "Reprints" destination
+                 that used to exist for exactly this purpose - a quick
+                 way to look at just the reprint trail, or just the
+                 first-print jobs, without leaving this one screen. -->
+            <search>
+                <field name="order_id"/>
+                <field name="station_id"/>
+                <field name="printer_id"/>
+                <field name="user_id"/>
+                <filter string="Print (first)" name="filter_print" domain="[('display_job_type', '=', 'print')]"/>
+                <filter string="Reprint" name="filter_reprint" domain="[('display_job_type', '=', 'reprint')]"/>
+                <separator/>
+                <filter string="Failed" name="filter_failed" domain="[('status', '=', 'failed')]"/>
+                <filter string="Escalated" name="filter_escalated" domain="[('escalated', '=', True)]"/>
+                <separator/>
+                <!-- UI/DATA FIX ("Printing Cleanup - Toast + Job Record
+                     Simplification"), decision item 5: "Order" added
+                     as its own explicit group-by option - set as the
+                     DEFAULT group-by on the action below, so opening
+                     Print Jobs immediately clusters every job for the
+                     same order together (Print #1, Reprint #2, Reprint
+                     #3...) instead of a single flat, chronologically-
+                     interleaved list where jobs from unrelated orders
+                     sit between them. Station/Job Type/Status remain
+                     available as alternative groupings, unchanged. -->
+                <filter string="Order" name="group_order" context="{'group_by': 'order_id'}"/>
+                <filter string="Station" name="group_station" context="{'group_by': 'station_id'}"/>
+                <filter string="Job Type" name="group_display_job_type" context="{'group_by': 'display_job_type'}"/>
+                <filter string="Status" name="group_status" context="{'group_by': 'status'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_kds_print_job" model="ir.actions.act_window">
+        <field name="name">Print Jobs</field>
+        <field name="res_model">kds.print.job</field>
+        <field name="view_mode">list</field>
+        <!-- UI/DATA FIX ("Printing Cleanup - Toast + Job Record
+             Simplification"), decision item 5: opens already grouped
+             by Order by default - see the search view's own
+             "group_order" filter above for the full explanation. The
+             search view is referenced explicitly here (rather than
+             left to Odoo's own implicit default) specifically so this
+             default-context wiring is guaranteed to target the correct
+             view. -->
+        <field name="search_view_id" ref="view_kds_print_job_search"/>
+        <field name="context">{'search_default_group_order': 1}</field>
+    </record>
+</odoo>

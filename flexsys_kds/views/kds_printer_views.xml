@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_kds_printer_list" model="ir.ui.view">
+        <field name="type">list</field>
+        <field name="name">kds.printer.list</field>
+        <field name="model">kds.printer</field>
+        <field name="arch" type="xml">
+            <!-- create=false (dev request, item 2): printer creation is
+                 handled elsewhere (a station's own "Printers" tab, with
+                 station_id set contextually) - the generic "New" button
+                 here would create an orphaned printer with no station,
+                 so it's removed entirely rather than relabeled. Editing
+                 an existing printer's config from this flat list stays
+                 fully available. -->
+            <list string="Printers" create="false">
+                <field name="name"/>
+                <field name="station_id"/>
+                <field name="printer_type"/>
+                <field name="ip_address"/>
+                <field name="is_default"/>
+                <field name="is_backup"/>
+                <field name="status" decoration-success="status == 'online'" decoration-danger="status == 'error'" decoration-muted="status == 'offline'" widget="badge"/>
+                <field name="last_seen"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_kds_printer_form" model="ir.ui.view">
+        <field name="type">form</field>
+        <field name="name">kds.printer.form</field>
+        <field name="model">kds.printer</field>
+        <field name="arch" type="xml">
+            <form string="Printer" create="false">
+                <header>
+                    <button name="action_test_connection" type="object" string="Mark as Online (No Real Connectivity Check)" class="btn-secondary"/>
+                    <button name="action_set_default" type="object" string="Set as Default" class="btn-secondary"/>
+                    <button name="action_set_backup" type="object" string="Set as Backup" class="btn-secondary"/>
+                    <button name="action_regenerate_agent_key" type="object" string="Regenerate Agent Key"
+                            class="btn-secondary" groups="flexsys_kds.group_kds_administrator"
+                            confirm="This invalidates the current key - the print agent bridge for this printer will need the new key. Continue?"/>
+                    <!-- UI/DATA FIX ("Printing Configuration Gap - Agent
+                         Key Access" / "Rename/Fix Agent Key Action"): a
+                         way to actually retrieve the real agent_key
+                         value to configure the external print agent
+                         process with - the field itself (below, in the
+                         "Print Agent" group) stays password-masked at
+                         all other times; this button reveals the key
+                         ONLY as a one-time, sticky notification the
+                         person dismisses manually after copying it by
+                         hand, never written back into the form and
+                         never regenerating/changing the key. Renamed
+                         from "Copy Agent Key"/action_copy_agent_key() -
+                         that name implied an automatic clipboard copy
+                         this action never actually performed; "Show
+                         Agent Key" accurately describes the real,
+                         unchanged behavior instead, per the client's
+                         own explicit choice over adding new,
+                         unverified navigator.clipboard JavaScript. Same
+                         access restriction as Regenerate Agent Key,
+                         placed directly next to it. -->
+                    <button name="action_show_agent_key" type="object" string="Show Agent Key"
+                            class="btn-secondary" groups="flexsys_kds.group_kds_administrator"/>
+                </header>
+                <sheet>
+                    <div class="alert alert-info" role="alert">
+                        Odoo manages Print Jobs, the atomic Claim/Lease queue, and the
+                        print payload contract here - it does not talk to a physical
+                        printer directly. Actual printer communication (ESC/POS,
+                        network, etc.) is performed by the external Print Agent
+                        process, which polls <code>/flexsys_kds/print/agent/*</code>.
+                        The button above only marks this record Online for
+                        testing/demo purposes; it does not verify a real connection.
+                    </div>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="station_id"/>
+                            <field name="printer_type"/>
+                            <field name="active"/>
+                        </group>
+                        <group>
+                            <field name="ip_address" invisible="printer_type != 'network'"/>
+                            <field name="port" invisible="printer_type != 'network'"/>
+                            <field name="usb_identifier" invisible="printer_type == 'network'"/>
+                            <field name="model"/>
+                            <field name="serial_number"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="is_default"/>
+                        <field name="is_backup"/>
+                        <field name="status"/>
+                        <field name="last_seen"/>
+                    </group>
+                    <group string="Print Agent" groups="flexsys_kds.group_kds_administrator">
+                        <field name="agent_key" password="True"/>
+                        <div class="text-muted" colspan="2">
+                            Shared secret for the local print agent/bridge process polling
+                            /flexsys_kds/print/agent/* on behalf of this printer. Do not share it
+                            outside the agent process configuration.
+                        </div>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_kds_printer" model="ir.actions.act_window">
+        <field name="name">Printers</field>
+        <field name="res_model">kds.printer</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>
