@@ -199,6 +199,22 @@ class KdsOrder(models.Model):
     # real formatted value once there is. Not stored: cheap to compute
     # from a field on the same record, no reason to persist and keep in
     # sync with every write to total_fulfillment_minutes.
+    #
+    # REAL BUG FIX ("Batch 4 Fix #2 - Total Fulfillment Time
+    # Display"), confirmed live: the Order form's own Timing tab was
+    # still showing the raw decimal minute count as text (e.g.
+    # "1095.8") - genuinely a Char/display fix at the time (no longer
+    # the misleading "0.00" item 24 fixed), but not yet the actual
+    # human-readable duration this field's own purpose calls for.
+    # Reformatted below to "Xh Ym"/"Xm" - the exact same format already
+    # unified everywhere else this project displays a duration
+    # (current_elapsed_display just below, kds_order_card.js's own
+    # elapsedLabel, controllers/kds_kiosk.py's own elapsed()) - "1095.8"
+    # now reads "18h 16m", matching the client's own worked example
+    # exactly. total_fulfillment_minutes itself (the real, stored,
+    # summable Float) is completely unchanged - this is display-only,
+    # exactly as required ("Do not change timing calculations or
+    # stored values; UI/display only").
     total_fulfillment_display = fields.Char(compute='_compute_total_fulfillment_display')
     # UI/DATA FIX ("Master Change Request", item 24): "إضافة: Current
     # Elapsed Time للطلبات النشطة فقط." A genuinely new piece of
@@ -365,10 +381,32 @@ class KdsOrder(models.Model):
     @api.depends('total_fulfillment_minutes', 'completion_time')
     def _compute_total_fulfillment_display(self):
         for order in self:
-            if order.completion_time:
-                order.total_fulfillment_display = '%.1f' % order.total_fulfillment_minutes
-            else:
+            if not order.completion_time:
                 order.total_fulfillment_display = '-'
+                continue
+            # REAL BUG FIX ("Batch 4 Fix #2 - Total Fulfillment Time
+            # Display"), confirmed live: this used to just format the
+            # raw decimal minute count as text ('%.1f' - e.g.
+            # "1095.8"), never actually converting it to the
+            # human-readable "Xh Ym" format this field's own purpose
+            # calls for. round() (not int()/floor division, unlike
+            # current_elapsed_display just below - that field
+            # deliberately truncates a LIVE, still-changing elapsed
+            # time so it never rounds UP to a minute that hasn't fully
+            # passed yet; this field's own total_fulfillment_minutes is
+            # instead a final, already-fixed value once completed, so
+            # rounding to the nearest whole minute is both correct and
+            # exactly what the client's own worked example confirms:
+            # 1095.8 -> 1096 -> 18h 16m, not 18h 15m) on the total
+            # minute count first, matching that exact example.
+            total_minutes = round(order.total_fulfillment_minutes)
+            hours, minutes = divmod(total_minutes, 60)
+            # Same "Xh Ym"/"Xm" format already unified everywhere else
+            # this project displays a duration - current_elapsed_display
+            # just below, kds_order_card.js's own elapsedLabel,
+            # controllers/kds_kiosk.py's own elapsed().
+            order.total_fulfillment_display = (
+                '%dh %dm' % (hours, minutes) if hours > 0 else '%dm' % minutes)
 
     @api.depends('created_time', 'state')
     def _compute_current_elapsed_display(self):

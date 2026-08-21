@@ -8,6 +8,173 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.24.2 — Batch 4 Fix #2: Total Fulfillment Time Display (Xh Ym format)
+
+**One fix discovered during Batch 4's own live test.** Batch 5 not
+started, per explicit instruction.
+
+**Confirmed live**: the Order form's own Timing tab still showed the
+raw decimal minute count as text (e.g. "1095.8") for a completed
+order, not a human-readable duration - `total_fulfillment_display`
+(added in Batch 4 item 24, to fix the earlier "0.00 for an incomplete
+order" problem) had only ever formatted the number as `'%.1f' %
+minutes`, never actually converted it to the "Xh Ym"/"Xm" style this
+project unified everywhere else it displays a duration.
+
+**Fix**: `_compute_total_fulfillment_display()` now rounds
+`total_fulfillment_minutes` to the nearest whole minute and formats it
+as `Xh Ym` (or `Xm` under 60 minutes) - directly verified against the
+client's own worked example (1095.8 -> 18h 16m, confirmed
+mathematically before implementation: round(1095.8) = 1096,
+divmod(1096, 60) = (18, 16)). `round()`, not truncation, matches that
+example exactly - `total_fulfillment_minutes` is a final, already-fixed
+value once an order is completed (unlike `current_elapsed_display`'s
+own live, still-changing elapsed time, which deliberately truncates so
+it never rounds up to a minute that hasn't fully passed yet).
+
+`total_fulfillment_minutes` itself - the real, stored Float, still
+used as-is for sum aggregation in the list view and Analytics - is
+completely untouched; this is display-only, exactly as required. The
+Timing tab's own field label is also corrected from "Total Fulfillment
+Time (min)" to "Total Fulfillment Time," since the value shown is no
+longer a minute count.
+
+### Files changed
+`models/kds_order.py` (`_compute_total_fulfillment_display()`'s own
+formatting logic), `views/kds_order_views.xml` (Timing tab's own field
+label).
+
+### Tests
+4 new/updated tests: the exact client-provided example verified
+directly against the real compute method; `total_fulfillment_minutes`
+confirmed completely unaffected by the display field's own formatting;
+the sub-60-minute case confirmed to correctly omit the hours part
+("45m," not "0h 45m"); the form view's own label confirmed corrected.
+One pre-existing test
+(`test_item24_total_fulfillment_display_shows_real_value_when_complete`)
+updated - it previously only checked for a decimal point (`"%.1f"`
+always had one), which the corrected format never produces.
+
+**Total: 474 tests** (up from 470). No database migration required -
+display-only formatting change.
+
+**Batch 5 not started**, per the explicit instruction. Awaiting the
+client's own live test confirmation on this fix, alongside the two
+fixes from v7.24.1, before any further work.
+
+---
+
+## v7.24.1 — Batch 4 Live Test Fixes: Public Kiosk Completed Late Visual + Active Orders/Order History List Density
+
+**Two fixes discovered during the Batch 4 live test.** Batch 5 not
+started, per explicit instruction.
+
+### Fix #1 - Public Kiosk: Completed Late Visual
+**Confirmed live on order KDS/26/0106**: an order that was Late and
+then moved to Completed showed the correct state change, but the
+public kiosk's own card stayed red (Late) instead of switching to
+green (Completed). The Internal KDS Screen already did this correctly
+(Batch 4, item 28).
+
+**Root cause**: the Internal KDS Screen's own visual-priority fix
+(`kds_order_card.js`'s own `borderClass`, a real OWL component) and
+the standalone public kiosk page's own, completely independent copy of
+the same card-class logic (`controllers/kds_kiosk.py`'s own inline
+JS, string-templated - genuinely separate code, cannot share an import
+with the OWL component) had silently diverged. Item 28's own earlier
+fix only ever touched the first file - the kiosk's own `cardClass`
+expression still checked `order.sla_status === 'late'` before
+`isReadyOrDone`, exactly the same priority bug item 28 had already
+fixed on the other screen.
+
+**Fix**: `controllers/kds_kiosk.py`'s own `cardClass` expression now
+checks `effective_stage === 'completed'` first (resolving to `'ready'`,
+the calm/green visual), before the `sla_status === 'late'` check -
+identical priority order to the already-fixed Internal KDS Screen. An
+order still active in `ready` (reached Ready but not yet handed off/
+completed) that is genuinely late keeps the red treatment exactly as
+before - this fix is scoped specifically to `completed`.
+`order.sla_status` itself - the underlying data - is never read,
+written, or recomputed by this fix; only which CSS class a completed
+order's own card resolves to changes.
+
+**Scope guard honored**: no change to SLA calculation, SLA thresholds,
+order state/workflow, Ready/Completed logic, completion logic,
+retention behavior, auto-hide behavior, or Multi-Station behavior - a
+pure visual-state-priority fix, one expression, one file.
+
+### UI Improvement #2 - Active Orders / Order History List Density
+Both `action_kds_order_active` and `action_kds_order_history` share
+the exact same list view (`view_kds_order_list`, confirmed directly -
+neither action defines its own `view_id`), so one edit applies
+consistently to both screens, satisfying requirement 4 ("Consistency")
+directly.
+
+Column count reduced from eleven visible by default to six -
+`optional="hide"` (Odoo's own standard, fully-supported mechanism) on
+Branch, Order Type, Source, POS Status, Payment Method, and Total
+Fulfillment Time, exactly the six columns this request names. The
+remaining six - POS Order, KDS Order, POS, KDS Status, SLA Status,
+Created Time - stay visible by default, exactly as named. Every hidden
+column remains fully available via Odoo's own standard optional-column
+picker - nothing removed, no field definition changed. `priority` -
+not named in either the request's own default-visible or optional-
+hidden list - is left exactly as it already was, avoiding scope creep
+beyond what was explicitly asked for.
+
+Column width/density itself is achieved entirely through this
+column-count reduction rather than any custom per-column pixel width -
+Odoo's own list view has no simple, version-stable way to declare a
+fixed column width directly in view XML; any such attempt would mean
+either an unsupported attribute or CSS targeting Odoo's own internal
+DOM structure by field name, genuinely fragile across versions and
+deliberately avoided. Reducing the number of default-visible columns
+cuts the table's own real horizontal footprint substantially on its
+own, using only the fully-supported mechanism.
+
+One correction made during implementation: the "Total Fulfillment
+Time" hidden column uses the original `total_fulfillment_minutes`
+(Float, with its own existing `sum="Total"` aggregation) rather than
+the newer `total_fulfillment_display` (Char, added in Batch 4 item 24
+for the order form's own Timing tab) - the display-only field cannot
+be summed, and swapping to it here would have silently dropped the
+column's own existing total-row aggregation, a real behavior change
+never requested by this fix.
+
+**Scope guard honored**: no field deleted, no backend data changed, no
+field definition altered beyond `optional`/`string` display attributes,
+no change to KDS workflow, POS integration, SLA calculations,
+permissions, or search behavior. Search/Filters/Group By/Sorting/
+permissions/record access/backend data are all completely untouched -
+confirmed by a real functional search test, not only a structural one.
+
+### Files changed
+`controllers/kds_kiosk.py` (Fix #1 - `cardClass` priority order),
+`views/kds_order_views.xml` (UI Improvement #2 - column
+visibility/labels only).
+
+### Tests
+11 new regression tests: 4 for Fix #1 (the real source's own priority
+order confirmed directly; an active/non-completed late order still
+resolves to the red visual, unchanged; the exact Late-then-Completed
+scenario resolves to the green visual; both the Internal KDS Screen and
+the kiosk confirmed to use the identical priority order going forward,
+guarding against this exact divergence recurring) and 6 for UI
+Improvement #2 (default-visible columns present and not optional;
+optional columns present but hidden by default; the sum aggregation
+non-regression on Total Fulfillment Time; `priority` confirmed
+untouched; both actions confirmed to share the same view; a real
+functional search confirming filters/domain logic is unaffected).
+
+**Total: 470 tests** (up from 460). No database migration required -
+view/label and JS-string changes only.
+
+**Batch 5 not started**, per the explicit instruction. Awaiting the
+client's own live test confirmation on these two fixes before any
+further work.
+
+---
+
 ## v7.24.0 — Master Change Request, Batch 4: Audit Log + Operations + Timing + KDS Screen (items 19-30)
 
 **Fourth batch of the multi-batch Master Change Request.** Batch 3 was

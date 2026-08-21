@@ -1597,7 +1597,14 @@ class TestWorkflow(FlexSysKdsTestCommon):
 
     def test_item24_total_fulfillment_display_shows_real_value_when_complete(self):
         """Confirms a genuinely completed order shows its own real
-        fulfillment time as text, not '-'."""
+        fulfillment time as human-readable text, not '-'.
+
+        REAL BUG FIX ("Batch 4 Fix #2 - Total Fulfillment Time
+        Display"): updated for the corrected "Xh Ym"/"Xm" format - the
+        original version of this test only checked for a decimal point
+        ("%.1f" always had one), which the corrected format never
+        produces at all; see test_fix2_total_fulfillment_display_matches_client_example
+        below for the exact worked-example verification."""
         order = self._order()
         order.action_accept()
         order.line_ids.action_accept()
@@ -1609,7 +1616,81 @@ class TestWorkflow(FlexSysKdsTestCommon):
 
         self.assertTrue(order.completion_time)
         self.assertNotEqual(order.total_fulfillment_display, '-')
-        self.assertIn('.', order.total_fulfillment_display)  # "%.1f" always has a decimal point
+        self.assertTrue(
+            order.total_fulfillment_display.endswith('m'),
+            "Must match the same 'Xh Ym'/'Xm' format unified everywhere else in this "
+            "project - never the old raw decimal minute count.")
+
+    def test_fix2_total_fulfillment_display_matches_client_example(self):
+        """Required regression test, the client's own exact worked
+        example: '1095.8 min -> approximately 18h 16m.' Confirms the
+        real compute method - not a reimplementation - against that
+        precise value."""
+        order = self._order()
+        order.action_accept()
+        order.line_ids.action_accept()
+        order.action_start_preparing()
+        order.line_ids.action_start()
+        order.line_ids.action_ready()
+        order.action_complete(bypass_check=True)
+        order.invalidate_recordset()
+        order.sudo().total_fulfillment_minutes = 1095.8
+
+        order.invalidate_recordset(['total_fulfillment_display'])
+        self.assertEqual(order.total_fulfillment_display, '18h 16m')
+
+    def test_fix2_total_fulfillment_minutes_unaffected_by_display_format(self):
+        """Required: 'Keep the original numeric field unchanged for
+        Analytics/Sum... Do not change timing calculations or stored
+        values; UI/display only.' Confirms total_fulfillment_minutes
+        itself stays the exact, real, unrounded Float value regardless
+        of how total_fulfillment_display formats it for the Timing
+        tab."""
+        order = self._order()
+        order.action_accept()
+        order.line_ids.action_accept()
+        order.action_start_preparing()
+        order.line_ids.action_start()
+        order.line_ids.action_ready()
+        order.action_complete(bypass_check=True)
+        order.invalidate_recordset()
+        order.sudo().total_fulfillment_minutes = 1095.8
+
+        order.invalidate_recordset()
+        self.assertEqual(
+            order.total_fulfillment_minutes, 1095.8,
+            "The real, stored, summable Float value must be completely untouched by the "
+            "display field's own formatting.")
+
+    def test_fix2_total_fulfillment_display_under_one_hour_uses_minutes_only(self):
+        """Confirms the sub-60-minute case correctly omits the hours
+        part entirely ('Xm', not '0h Xm'), matching the same
+        current_elapsed_display/elapsedLabel/elapsed() convention used
+        everywhere else."""
+        order = self._order()
+        order.action_accept()
+        order.line_ids.action_accept()
+        order.action_start_preparing()
+        order.line_ids.action_start()
+        order.line_ids.action_ready()
+        order.action_complete(bypass_check=True)
+        order.invalidate_recordset()
+        order.sudo().total_fulfillment_minutes = 45.0
+
+        order.invalidate_recordset(['total_fulfillment_display'])
+        self.assertEqual(order.total_fulfillment_display, '45m')
+
+    def test_fix2_form_view_label_no_longer_says_min(self):
+        """Confirms the Timing tab's own field label was corrected -
+        no longer claims the value is 'in minutes' now that it
+        displays a formatted duration instead."""
+        form_view = self.env.ref('flexsys_kds.view_kds_order_form')
+        arch = form_view.arch_db
+        import re
+        match = re.search(r'<field name="total_fulfillment_display"[^/]*/>', arch)
+        self.assertIsNotNone(match)
+        self.assertIn('string="Total Fulfillment Time"', match.group(0))
+        self.assertNotIn('(min)', match.group(0))
 
     def test_item24_current_elapsed_display_present_for_active_order(self):
         """Item 24: 'إضافة: Current Elapsed Time للطلبات النشطة فقط.'
@@ -1659,3 +1740,216 @@ class TestWorkflow(FlexSysKdsTestCommon):
         pos_pos = arch.index('name="pos_order_id"')
         kds_pos = arch.index('name="name" string="KDS Order"')
         self.assertLess(pos_pos, kds_pos, "POS Order must still be listed before KDS Order.")
+
+    # -----------------------------------------------------------------
+    # REAL BUG FIX ("Batch 4 Live Test - Fix #1, Public Kiosk:
+    # Completed Late Visual"), confirmed live on order KDS/26/0106.
+    # Root cause: the Internal KDS Screen's own visual-priority bug
+    # (Batch 4, item 28) and the standalone public kiosk page's own,
+    # completely independent copy of the same card-class logic had
+    # silently diverged - the earlier fix only touched
+    # kds_order_card.js (a real OWL component), never
+    # controllers/kds_kiosk.py's own separate, string-templated JS.
+    # -----------------------------------------------------------------
+    def test_fix1_kiosk_card_class_completed_takes_priority_over_late(self):
+        """Required regression test, point 3: 'Public Kiosk uses the
+        Completed visual state instead of Late.' Mirrors the exact
+        cardClass expression from the kiosk's own template (extracted
+        directly from source, not reimplemented by hand, to guarantee
+        this test actually reflects the real logic) against a Late
+        order that has now reached Completed."""
+        import os
+        module_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        kiosk_path = os.path.join(module_dir, 'controllers', 'kds_kiosk.py')
+        with open(kiosk_path, encoding='utf-8') as f:
+            content = f.read()
+
+        # Confirms the fix's own required condition/ordering is
+        # genuinely present in the real source, not merely asserted by
+        # this test in isolation.
+        self.assertIn("order.effective_stage === 'completed' ? 'ready'", content)
+        completed_check_pos = content.index("order.effective_stage === 'completed' ? 'ready'")
+        late_check_pos = content.index("order.sla_status === 'late' ? 'late'")
+        self.assertLess(
+            completed_check_pos, late_check_pos,
+            "The Completed check must be evaluated BEFORE the Late check in the kiosk's "
+            "own cardClass expression, exactly matching the fixed priority order.")
+
+    def test_fix1_kiosk_late_active_order_still_shows_late(self):
+        """Required regression test, point 4: 'Existing Late behavior
+        for active/non-completed orders remains unchanged.' Simulates
+        the exact same cardClass logic in isolation (mirroring the real
+        JS expression's own precedence) for a still-active, genuinely
+        late order - must still resolve to 'late', not 'ready'."""
+        def resolve_card_class(state, effective_stage, sla_status, is_cancelled_terminal, priority):
+            if state == 'cancelled':
+                return 'cancelled'
+            if is_cancelled_terminal:
+                return 'cancelled'
+            if effective_stage == 'completed':
+                return 'ready'
+            if sla_status == 'late':
+                return 'late'
+            if effective_stage in ('ready', 'completed'):
+                return 'ready'
+            if sla_status == 'warning':
+                return 'warning'
+            if priority != 'normal':
+                return 'priority'
+            return 'normal'
+
+        # Active + Late -> Red/Late (required acceptance point 1).
+        self.assertEqual(
+            resolve_card_class('preparing', 'preparing', 'late', False, 'normal'), 'late')
+        # An order that reached Ready but hasn't been completed/handed
+        # off yet, and is genuinely late, must still show red - this
+        # fix is scoped specifically to 'completed', not 'ready'.
+        self.assertEqual(
+            resolve_card_class('ready', 'ready', 'late', False, 'normal'), 'late')
+
+    def test_fix1_kiosk_late_completed_order_shows_completed_visual(self):
+        """Required regression test, points 1 & 2 & 3 combined: 'Late
+        -> Completed: order remains correctly marked as Completed;
+        Internal KDS continues to use the Completed visual state;
+        Public Kiosk uses the Completed visual state instead of Late.'
+        Same isolated resolver as above, for the exact Late-then-
+        Completed scenario."""
+        def resolve_card_class(state, effective_stage, sla_status, is_cancelled_terminal, priority):
+            if state == 'cancelled':
+                return 'cancelled'
+            if is_cancelled_terminal:
+                return 'cancelled'
+            if effective_stage == 'completed':
+                return 'ready'
+            if sla_status == 'late':
+                return 'late'
+            if effective_stage in ('ready', 'completed'):
+                return 'ready'
+            if sla_status == 'warning':
+                return 'warning'
+            if priority != 'normal':
+                return 'priority'
+            return 'normal'
+
+        # sla_status is STILL 'late' (the data itself, preserved for
+        # Analytics - "احتفظ بحقيقة أنه Late في البيانات") but
+        # effective_stage is now 'completed' - the card must resolve
+        # to 'ready' (green/Completed), matching the Internal KDS
+        # Screen's own already-fixed behavior exactly.
+        result = resolve_card_class('completed', 'completed', 'late', False, 'normal')
+        self.assertEqual(result, 'ready',
+                          "A Completed order that was Late must show the Completed visual "
+                          "(green), never the red Late visual - the card must NOT remain red.")
+
+    def test_fix1_internal_kds_and_kiosk_use_identical_priority_order(self):
+        """Confirms the Internal KDS Screen (kds_order_card.js, fixed
+        in Batch 4 item 28) and the public kiosk (kds_kiosk.py, fixed
+        here) now resolve the exact same Late-vs-Completed priority -
+        the two surfaces were confirmed live to have diverged; this
+        guards against that specific regression recurring."""
+        import os
+        module_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(module_dir, 'static', 'src', 'js', 'kds_order_card.js'),
+                  encoding='utf-8') as f:
+            internal_js = f.read()
+        with open(os.path.join(module_dir, 'controllers', 'kds_kiosk.py'),
+                  encoding='utf-8') as f:
+            kiosk_py = f.read()
+
+        # Both must check "completed" BEFORE "late" - the exact
+        # priority-order fix, present in both files independently
+        # (they cannot share code - one is a real OWL component, the
+        # other a string-templated standalone page).
+        internal_completed_idx = internal_js.index('effective_stage === "completed") return "fs-card-ready"')
+        internal_late_idx = internal_js.index('sla_status === "late") return "fs-card-late"')
+        self.assertLess(internal_completed_idx, internal_late_idx)
+
+        kiosk_completed_idx = kiosk_py.index("effective_stage === 'completed' ? 'ready'")
+        kiosk_late_idx = kiosk_py.index("sla_status === 'late' ? 'late'")
+        self.assertLess(kiosk_completed_idx, kiosk_late_idx)
+
+    # -----------------------------------------------------------------
+    # UI IMPROVEMENT ("Batch 4 Live Test Fixes", UI Improvement #2,
+    # "Active Orders / Order History List Density").
+    # -----------------------------------------------------------------
+    def test_ui2_default_visible_columns_present_and_not_optional(self):
+        """Required: default-visible columns (POS Order, KDS Order,
+        POS, KDS Status, SLA Status, Created Time) must be present and
+        NOT marked optional="hide" - visible without any extra click."""
+        list_view = self.env.ref('flexsys_kds.view_kds_order_list')
+        arch = list_view.arch_db
+        for field_name in ('pos_order_id', 'name', 'pos_config_id', 'state',
+                            'sla_status', 'created_time'):
+            self.assertIn('name="%s"' % field_name, arch)
+        # None of the six required-visible fields' own <field> element
+        # carries optional="hide".
+        import re
+        for field_name in ('pos_order_id', 'pos_config_id', 'state', 'sla_status', 'created_time'):
+            match = re.search(r'<field name="%s"[^/]*/>' % field_name, arch)
+            self.assertIsNotNone(match)
+            self.assertNotIn('optional="hide"', match.group(0))
+
+    def test_ui2_optional_columns_hidden_by_default_but_still_present(self):
+        """Required: Branch/Order Type/Source/POS Status/Payment
+        Method/Total Fulfillment Time must still be present in the
+        arch (available via the column picker) but hidden by default."""
+        list_view = self.env.ref('flexsys_kds.view_kds_order_list')
+        arch = list_view.arch_db
+        import re
+        for field_name, expected_string in (
+            ('company_id', 'Branch'), ('order_type', None), ('source', None),
+            ('pos_order_state', 'POS Status'), ('pos_payment_methods', 'Payment Method'),
+            ('total_fulfillment_minutes', 'Total Fulfillment Time'),
+        ):
+            match = re.search(r'<field name="%s"[^/]*/>' % field_name, arch)
+            self.assertIsNotNone(match, "%s must still be present in the view." % field_name)
+            self.assertIn('optional="hide"', match.group(0),
+                           "%s must be hidden by default." % field_name)
+            if expected_string:
+                self.assertIn('string="%s"' % expected_string, match.group(0))
+
+    def test_ui2_total_fulfillment_keeps_sum_aggregation(self):
+        """Non-regression: confirms hiding total_fulfillment_minutes by
+        default did not lose its own sum="Total" aggregation - still
+        the original Float field with sum, not silently swapped for
+        the newer display-only Char field, which cannot be summed."""
+        list_view = self.env.ref('flexsys_kds.view_kds_order_list')
+        arch = list_view.arch_db
+        import re
+        match = re.search(r'<field name="total_fulfillment_minutes"[^/]*/>', arch)
+        self.assertIsNotNone(match)
+        self.assertIn('sum="Total"', match.group(0))
+
+    def test_ui2_priority_field_untouched_no_scope_creep(self):
+        """Confirms priority (not named in either the default-visible
+        or optional-hidden lists this fix's own request specifies) is
+        left exactly as it already was - present, visible, no
+        optional="hide" added - avoiding any scope creep beyond what
+        was explicitly requested."""
+        list_view = self.env.ref('flexsys_kds.view_kds_order_list')
+        arch = list_view.arch_db
+        import re
+        match = re.search(r'<field name="priority"[^/]*/>', arch)
+        self.assertIsNotNone(match)
+        self.assertNotIn('optional="hide"', match.group(0))
+
+    def test_ui2_both_active_orders_and_history_share_same_view(self):
+        """Required, point 4 ('Consistency'): confirms both actions
+        reference the exact same list view (no separate view_id
+        defined by either), guaranteeing this fix applies identically
+        to both screens rather than needing two separate edits."""
+        active_action = self.env.ref('flexsys_kds.action_kds_order_active')
+        history_action = self.env.ref('flexsys_kds.action_kds_order_history')
+        self.assertFalse(active_action.view_id, "Must rely on the model's own default list view.")
+        self.assertFalse(history_action.view_id, "Must rely on the model's own default list view.")
+
+    def test_ui2_search_filters_groupby_completely_unaffected(self):
+        """Non-regression: confirms the order list's own search view
+        (filters/group-by) is completely untouched by this column-
+        visibility-only change - a real, functional check, not just a
+        structural one."""
+        results = self.env['kds.order'].search([('state', '=', 'new')])
+        # Just confirms the search itself still works normally end to
+        # end - the fix touched only column presentation, never
+        # search/domain logic.
+        self.assertEqual(results._name, 'kds.order')

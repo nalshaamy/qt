@@ -1,42 +1,30 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.24.0**
+**Version: 19.0.7.24.2**
 **Status as of this document: code-complete, including everything
-through v7.23.0 (see CHANGELOG.md for the full history). Batch 3 (items
-12-18, Printing UI Cleanup) is CONFIRMED fully live-tested and
-approved. Batch 4 (items 19-30, Audit Log + Operations + Timing + KDS
-Screen) is now implemented and unit-tested, scoped exactly as
-confirmed - no change anywhere to the core KDS Workflow (New ->
-Preparing -> Ready -> Completed), the Routing Engine, the Printing
-Engine, Multi-Station completion, READY-only-after-last-station
-gating, or Completed retention. Two clearer Audit Log event types
-(`print_retry`/`printer_fallback`) replace the generic `override` at
-the specific printing-retry/fallback call sites this batch names; the
-"New" button is removed from Active Orders/Order History (both action
-context and view level); `action_print_full_order()` now logs a
-success event, not only its own pre-existing failure path;
-`is_expeditor_ready`/`packing_time` are now hidden when no
-Expeditor/Packing station is configured at all (their own real,
-unchanged computed values keep working for the workflow logic that
-already depends on them); the Notes tab is now "Internal Notes" with
-help text; "Total Fulfillment Minutes" gains a separate, purely-display
-field showing "-" instead of a misleading "0.0" for an incomplete
-order, alongside a new "Current Elapsed Time" for active orders only;
-POS Order Number confirmed unchanged and now regression-tested; the
-internal KDS Screen's own elapsed-time format is unified with the
-public kiosk's own clearer `Xh Ym`/`Xm` style, replacing an ambiguous
-`H:MM` display; and a genuinely completed order's own card no longer
-keeps a red "late" visual forever, while `sla_status` itself stays
-completely untouched for Analytics. **One requirement (item 19's own
-"System"/"Print Agent" user labeling for automated events) was found
-architecturally blocked - `kds.event.user_id` can only ever hold a real
-Odoo user record, never a free-text label - reported per the scope
-guard rather than worked around, awaiting the client's own decision on
-how to resolve it.** 460 automated tests, all `py_compile`/XML/JS
-checks passing, plus a custom AST-based undefined-name sweep. No
-database migration needed - new fields are computed only. **Batch 4 is
-not yet closed** - awaiting the client's own live test round before
-Batch 5 (Priority/Urgent/VIP removal) begins.**
+through v7.24.1 (see CHANGELOG.md for the full history). Batch 4 (items
+19-30) is currently in its own live test round on Odoo.sh - three
+issues total have now been found during that testing and are fixed
+across v7.24.1/v7.24.2; Batch 4 itself remains open pending the
+client's own re-confirmation, and Batch 5 has not started, per explicit
+instruction. This version's own fix: the Order form's own Timing tab
+was still showing the raw decimal minute count as text (e.g. "1095.8")
+for a completed order, not a human-readable duration -
+`total_fulfillment_display` (added in Batch 4 item 24) had only ever
+formatted the number with `'%.1f'`, never actually converting it.
+Reformatted to "Xh Ym"/"Xm" - directly verified against the client's
+own worked example (1095.8 -> 18h 16m, confirmed mathematically:
+round(1095.8) = 1096, divmod(1096, 60) = (18, 16)) - matching the same
+duration format already unified everywhere else in this project.
+`total_fulfillment_minutes` itself - the real, stored Float still used
+for sum aggregation in the list view/Analytics - is completely
+untouched; this is display-only. The Timing tab's own field label is
+also corrected from "Total Fulfillment Time (min)" to "Total
+Fulfillment Time," since the value shown is no longer a minute count.
+474 automated tests, all `py_compile`/XML/JS checks passing, plus a
+custom AST-based undefined-name sweep. No database migration needed -
+display-only formatting change. **Batch 5 not started**, awaiting the
+client's own live test confirmation on all three fixes found so far.**
 
 This document maps directly to that request's own section structure
 (A/B/C/D) and states, for each item, what's actually been verified and
@@ -1898,6 +1886,89 @@ active and completed orders, the KDS Screen's own timer format now
 matches the kiosk, and a completed order that was previously late no
 longer shows the red card treatment.
 
+⚠️ **Live test in progress on this batch found two issues - see
+v7.24.1's own section immediately below for both fixes.**
+
+---
+
+## Batch 4 Live Test Fixes: Public Kiosk Completed Late Visual + Active Orders/Order History List Density (v7.24.1)
+**Two fixes found during Batch 4's own live test on Odoo.sh.** Batch 5
+not started, per explicit instruction.
+
+**Fix #1 - confirmed live on order KDS/26/0106**: the public kiosk's
+own card stayed red (Late) after an order reached Completed, while the
+Internal KDS Screen already showed the correct green Completed visual
+(item 28's own earlier fix).
+
+**Root cause**: item 28's fix only ever touched `kds_order_card.js` (a
+real OWL component) - it never reached `controllers/kds_kiosk.py`'s
+own standalone, string-templated copy of the same card-class logic,
+which had silently diverged and still checked Late before Completed.
+
+**Fix**: `effective_stage === 'completed'` now checked first in the
+kiosk's own `cardClass` expression, resolving to the calm/green
+`'ready'` class - identical priority to the already-fixed Internal
+Screen. An active `ready` order (not yet completed) that's genuinely
+late keeps the red treatment unchanged; `sla_status` itself is never
+touched.
+
+**Scope guard honored**: no change to SLA calculation, thresholds,
+workflow, Ready/Completed/completion logic, retention, auto-hide, or
+Multi-Station behavior - one expression, one file.
+
+**UI Improvement #2**: Active Orders/Order History (confirmed to share
+one list view) reduced from 11 to 6 default-visible columns (POS
+Order, KDS Order, POS, KDS Status, SLA Status, Created Time); Branch/
+Order Type/Source/POS Status/Payment Method/Total Fulfillment Time
+hidden by default via `optional="hide"` - still fully available via
+the column picker, nothing removed. `priority` left untouched (not
+named in the request). One correction made mid-implementation: the
+hidden Total Fulfillment Time column kept using the original Float
+field with its own `sum="Total"`, not the newer display-only Char
+field (which cannot be summed) - preserving the existing total-row
+behavior exactly.
+
+**Scope guard honored**: no field deleted, no backend data changed, no
+field definition altered beyond display attributes, no change to
+workflow/POS integration/SLA calculations/permissions/search - a real
+functional search test confirms filters/domain logic is unaffected,
+not just structural checks.
+
+**What still needs a human**: the client's own live re-test of these
+two specific fixes - confirming a Late-then-Completed order's card
+turns green on the public kiosk (not just internally), and that Active
+Orders/Order History now render as a more compact six-column table by
+default with every hidden column still reachable via the column
+picker.
+
+⚠️ **A third issue was found in the same live test round - see
+v7.24.2's own section immediately below.**
+
+---
+
+## Batch 4 Fix #2: Total Fulfillment Time Display (v7.24.2)
+**One more fix found during the same Batch 4 live test round.** Batch
+5 not started.
+
+**Confirmed live**: the Order form's own Timing tab still showed the
+raw decimal minute count as text (e.g. "1095.8") for a completed
+order - `total_fulfillment_display` (Batch 4, item 24) had only ever
+formatted the raw number, never actually converted it to a
+human-readable duration.
+
+**Fix**: reformatted to "Xh Ym"/"Xm" - verified directly against the
+client's own worked example (1095.8 -> 18h 16m, confirmed
+mathematically before implementation). `total_fulfillment_minutes`
+itself - the real, stored Float still used for sum aggregation in the
+list view/Analytics - is completely untouched; display-only. The
+Timing tab's own label corrected from "Total Fulfillment Time (min)"
+to "Total Fulfillment Time," since the value is no longer a minute
+count.
+
+**What still needs a human**: the client's own live re-test confirming
+a completed order's own Timing tab now shows a readable duration like
+"18h 16m" instead of a raw decimal number.
+
 ---
 
 ## What still needs a human
@@ -2161,7 +2232,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 460 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 474 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

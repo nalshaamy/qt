@@ -1178,8 +1178,29 @@ function render() {
       : isCancelledTerminal ? `CANCELLED (was ${stageLabel[lifecycle.lastStage]})`
       : stageLabel[order.effective_stage] || 'PREPARING';
     const isReadyOrDone = order.effective_stage === 'ready' || order.effective_stage === 'completed';
+    // REAL BUG FIX ("Batch 4 Live Test - Fix #1, Public Kiosk:
+    // Completed Late Visual"), confirmed live on order KDS/26/0106: an
+    // order that was Late and then reached Completed correctly changed
+    // state, but this card kept its red 'late' visual forever - the
+    // Internal KDS Screen (kds_order_card.js's own borderClass) had
+    // already been fixed for the exact same underlying priority bug in
+    // an earlier round (Batch 4, item 28), but that fix lived in a
+    // completely separate file (a real OWL component's own JS) and
+    // never touched this standalone kiosk page's own independent copy
+    // of the same card-class logic - the two surfaces' own visual
+    // priority had silently diverged. Fixed identically here: checked
+    // BEFORE order.sla_status === 'late' below, but ONLY for
+    // effective_stage === 'completed' specifically - not 'ready' (an
+    // order that reached Ready but hasn't been handed off/completed yet
+    // is still an active state, and a genuinely late one there
+    // correctly keeps the red urgency exactly as before, unchanged).
+    // order.sla_status itself is never read, written, or recomputed
+    // here - only which CSS class a COMPLETED order's own card resolves
+    // to changes; the underlying SLA data stays fully intact for
+    // Analytics, exactly as required.
     const cardClass = order.state === 'cancelled' ? 'cancelled'
       : isCancelledTerminal ? 'cancelled'
+      : order.effective_stage === 'completed' ? 'ready'
       : order.sla_status === 'late' ? 'late'
       : isReadyOrDone ? 'ready'
       : order.sla_status === 'warning' ? 'warning'
