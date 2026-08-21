@@ -4,9 +4,46 @@
 job queue, an atomic claim mechanism, and a versioned payload contract -
 actually talking to a physical printer (ESC/POS, network socket, IoT
 box, etc.) is the job of a separate process you build and deploy
-against the protocol below. The printer form's "Mark as Online" button
-in the Odoo UI does not verify a real connection; only your agent, once
-built and connected, can do that.
+against the protocol below.
+
+## Architecture at a glance
+
+UI/DATA FIX ("Master Change Request", item 14, "Printer Form Cleanup"):
+moved here from the Printer form's own long-form on-screen explanation,
+which is now a short, purely operational note instead - this document
+is the right place for the full technical picture, not a form an
+administrator opens dozens of times a day just to configure a printer's
+IP address.
+
+Odoo's role is limited to managing Print Jobs, the atomic Claim/Lease
+queue, and the versioned print payload contract (see
+`kds.print.job._claim_pending_jobs()`/`._print_payload()`) - it does
+not talk to a physical printer directly at any point. Actual printer
+communication happens entirely in your own external Print Agent
+process, which polls `/flexsys_kds/print/agent/*` on this printer's
+own behalf, using its own `agent_key` to authenticate (see
+"Authentication" below).
+
+### What "Status: Online" actually means
+
+UI/DATA FIX ("Master Change Request", item 13, "Printers List
+Naming"): `kds.printer.status` reflects your own agent's own heartbeat
+- specifically, it is set to `online` by `/flexsys_kds/print/agent/result`
+whenever your agent successfully reports a completed print job for
+this printer. It has never verified, and does not verify, that the
+physical printer itself is powered on, has paper, or is genuinely
+reachable at this exact moment - only that your agent process was
+recently able to talk to Odoo about this printer. An earlier on-screen
+"Mark as Online" button (`action_test_connection()` in
+`models/kds_printer.py`) let anyone flip this to `online` manually,
+with no connectivity check of any kind - that button is removed from
+the Printer form's own UI as of this fix, precisely because it made
+`status` an unreliable mix of "a real agent genuinely reported success"
+and "someone clicked a button." The underlying method itself still
+exists in the codebase (unused by any current view) rather than being
+deleted outright, in case a future testing/demo scenario genuinely
+needs it again - but it is no longer part of the normal, day-to-day
+production UI.
 
 ## Why a separate agent
 

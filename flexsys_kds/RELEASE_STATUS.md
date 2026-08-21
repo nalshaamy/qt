@@ -1,27 +1,38 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.22.1**
+**Version: 19.0.7.23.0**
 **Status as of this document: code-complete, including everything
-through v7.22.0 (see CHANGELOG.md for the full history), plus a patch
-fixing a live-confirmed `RecursionError` crash in Batch 2's own item 10
-(POS Send-to-KDS Settings scoping). Root cause: the original `_search()`
-override resolved in-scope ids via an ORM Many2many field read
-(`.pos_config_ids.ids`) called from inside the override itself -
-`sudo()` doesn't clear context, so the inherited scope-context flag was
-still present for that inner read, and Odoo's own internal machinery
-for resolving that field re-entered `pos.config._search()` with the
-same flag still set, causing infinite recursion. Fixed with a direct
-SQL query against the relation table instead, which never touches the
-ORM's own `pos.config` field-read path at all - reads the relation
-table's real name/columns from the field's own metadata rather than
-guessing. All of item 10's own original requirements re-confirmed
-unchanged. 433 automated tests, all `py_compile`/XML/JS checks passing,
-plus a custom AST-based undefined-name sweep - including 4 new tests
-that actually execute `search()`/`web_search_read()` with the real
-scope context end to end, as explicitly required, confirming no
-recursion. No database migration needed - internal implementation
-change only. **Batch 2 is not yet closed** - awaiting the client's own
-repeat of the live test on this patched build before Batch 3 begins.**
+through v7.22.1 (see CHANGELOG.md for the full history). Batch 2 (items
+2-11) is CONFIRMED fully live-tested and approved, including the item
+10 recursion fix and bidirectional scope filtering. Batch 3 (items
+12-18, Printing UI Cleanup) is now implemented and unit-tested, scoped
+exactly as confirmed - no change anywhere to Claim/Lease/Agent/Retry/
+Failover/Dispatch behavior. The "Mark as Online" button (no real
+connectivity check) is removed from the printer form's production UI
+entirely, making the corrected "Agent Online"/"Agent Offline" labels
+genuinely accurate (status is now set only by a real agent's own
+successful report); the long Claim/Lease/Agent architecture explanation
+that used to sit on that same form is relocated to
+`docs/PRINT_AGENT.md`. `is_default`/`is_backup` are now read-only on
+the printer form, closing a gap where directly ticking the old
+checkboxes bypassed the two action buttons' own existing "only one per
+station" enforcement. Print Jobs gained three new status filters
+(Pending/Dispatched/Printed), a corrected default sort reconciling
+"newest first" with an earlier round's own within-order sequencing fix,
+and - for the first time - a read-only detail form view surfacing
+Agent/Lease/Failure/Failover information the engine already tracked but
+never had any view for, including an explicit "escalated to backup
+printer" message satisfying the Failover Visibility requirement, all
+without touching how the underlying escalation logic itself creates
+its own separate job records. **One requirement (item 16's own
+audit-logging for key regeneration) was found architecturally blocked
+- `kds.event.order_id` is required, and a key regeneration has no
+associated order - reported per the scope guard rather than worked
+around, awaiting the client's own decision on how to resolve it.** 443
+automated tests, all `py_compile`/XML/JS checks passing, plus a custom
+AST-based undefined-name sweep. No database migration needed - views/
+labels/documentation only this round. **Batch 3 is not yet closed** -
+awaiting the client's own live test round before Batch 4 begins.**
 
 This document maps directly to that request's own section structure
 (A/B/C/D) and states, for each item, what's actually been verified and
@@ -1737,11 +1748,70 @@ relation.
 **What still needs a human**: the client's own repeat of the live test
 on this specific patched build - opening the Send-to-KDS Settings
 screen must no longer crash, and must show only in-scope POS configs.
-**Batch 2 remains open until this is confirmed** - Batch 3 does not
-begin until then, per the explicit instruction.
+
+✅ **CONFIRMED**: the client's own live test round passed - Batch 2
+(items 2-11, including this patch) is fully approved. See v7.23.0's own
+section below for Batch 3.
 
 ---
 
+## Master Change Request, Batch 3: Printing UI Cleanup (v7.23.0)
+**Third batch, items 12-18**, begun only after Batch 2's own live test
+passed and was confirmed by the client. Scoped exactly as instructed -
+no change anywhere to Claim/Lease/Agent/Retry/Failover/Dispatch
+behavior.
+
+**Item 12**: shortened the Printing landing page's own header and card
+text.
+
+**Item 13**: "Backup / Fallback Printer" -> "Backup Printer";
+"Online"/"Offline" -> "Agent Online"/"Agent Offline" - `status`
+reflects the external Print Agent's own heartbeat, never a verified
+physical connection. Display-label-only.
+
+**Item 14**: the "Mark as Online (No Real Connectivity Check)" button
+is removed from the printer form entirely (the method itself is kept,
+unused, in the codebase) - this is what makes item 13's own corrected
+labels genuinely accurate. The long Claim/Lease/Agent architecture
+explanation that used to sit on this form is relocated to
+`docs/PRINT_AGENT.md`'s own new sections.
+
+**Item 15**: `is_default`/`is_backup` are now read-only on the printer
+form - `Set as Default`/`Set as Backup` (the existing buttons, which
+already correctly enforce one-per-station) are the only way to change
+either role now, closing a gap where the old, directly-editable
+checkboxes could bypass that enforcement.
+
+**Item 16**: the Regenerate confirmation dialog already states the key
+is invalidated and the agent needs updating - nothing to change. **The
+audit-logging half of this item is architecturally blocked and left
+unimplemented, reported rather than worked around**: `kds.event.order_id`
+is required, and a key regeneration has no associated order.
+
+**Item 17**: three new filters (Pending/Dispatched/Printed); default
+sort corrected to reconcile "newest first" with each order's own
+internal print sequence; a read-only detail form view now exists for
+`kds.print.job` (there was only ever a list before), surfacing Agent/
+Lease/Failure information the engine already tracked with no view for
+it.
+
+**Item 18**: the new form view states "Escalated to a backup printer"
+plainly whenever a job was escalated, without changing how the
+underlying logic creates its own separate backup-printer job record.
+
+**What was found in use and kept**: `action_test_connection()` itself
+(method kept, only its own UI button removed); every part of the
+printing engine's own Claim/Lease/Retry/Failover/Dispatch logic (none
+touched, confirmed by non-regression tests).
+
+**What still needs a human**: the client's own live test round on this
+batch - confirming the button removal/relabeling reads correctly,
+`is_default`/`is_backup` are genuinely no longer directly editable, the
+new filters and sort order work as expected, and the new Print Job
+detail form renders correctly including the failover message for an
+actually-escalated job.
+
+---
 ## What still needs a human
 
 Everything above that says "still needs a human" or "cannot be
@@ -2003,7 +2073,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 433 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 443 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

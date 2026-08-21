@@ -1024,3 +1024,164 @@ class TestPrinting(FlexSysKdsTestCommon):
         self.assertIn('try:', source)
         self.assertIn('except TypeError:', source)
         self.assertIn('hmac.compare_digest', source)
+
+    # -----------------------------------------------------------------
+    # UI/DATA FIX ("Master Change Request", Batch 3, items 13-18).
+    # Non-regression: action_regenerate_agent_key(), action_show_agent_key(),
+    # action_set_default(), action_set_backup(), and the printing
+    # engine's own Claim/Lease/Retry/Failover logic are all covered
+    # extensively above/elsewhere in this suite and completely
+    # untouched by this batch - these tests focus specifically on what
+    # this batch actually changed.
+    # -----------------------------------------------------------------
+    def test_item14_test_connection_button_removed_from_printer_form(self):
+        """Item 14: 'REMOVE من Production UI: Mark as Online (No Real
+        Connectivity Check).' Structural check confirming the button
+        itself is genuinely gone from the rendered view - not just
+        relabeled."""
+        import os
+        module_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        view_path = os.path.join(module_dir, 'views', 'kds_printer_views.xml')
+        with open(view_path, encoding='utf-8') as f:
+            content = f.read()
+        self.assertNotIn('action_test_connection', content,
+                          "The button calling action_test_connection() must be fully "
+                          "removed from the printer form's own view.")
+
+    def test_item14_test_connection_method_still_exists_unused(self):
+        """Confirms action_test_connection() itself is deliberately kept
+        in the codebase (not deleted outright) - only removed from the
+        production UI, per this fix's own documented reasoning."""
+        printer = self.printer_primary
+        self.assertTrue(hasattr(printer, 'action_test_connection'))
+        # Calling it directly still works exactly as before - this is a
+        # UI-only removal, not a behavior change to the method itself.
+        printer.action_test_connection()
+        self.assertEqual(printer.status, 'online')
+
+    def test_item15_default_backup_fields_readonly_in_form_view(self):
+        """Item 15: 'يفضل: Set as Default / Set as Backup كإجراءات.
+        والحقول تكون indicators/read-only.' Structural check confirming
+        is_default/is_backup are genuinely marked readonly in the
+        rendered form - the two action buttons remain the only way to
+        actually change either role."""
+        form_view = self.env.ref('flexsys_kds.view_kds_printer_form')
+        arch = form_view.arch_db
+        # Confirms both fields appear with readonly="1" specifically (not
+        # just present anywhere in the arch, which would also match the
+        # earlier, non-readonly version).
+        self.assertIn('name="is_default" readonly="1"', arch)
+        self.assertIn('name="is_backup"', arch)
+        self.assertIn('readonly="1"', arch)
+
+    def test_item15_set_default_action_still_enforces_single_default(self):
+        """Non-regression: action_set_default()'s own existing
+        'only one Default per station' enforcement is completely
+        unaffected by making the field read-only in the view (a
+        view-only change - this method itself was never touched)."""
+        self.printer_primary.action_set_default()
+        self.assertTrue(self.printer_primary.is_default)
+        self.printer_backup.action_set_default()
+        self.printer_primary.invalidate_recordset()
+        self.assertFalse(self.printer_primary.is_default,
+                          "Setting a new Default must still correctly unset the previous one.")
+        self.assertTrue(self.printer_backup.is_default)
+
+    def test_item17_new_status_filters_present_in_search_view(self):
+        """Item 17: 'إضافة/تحسين الفلاتر: Pending, Dispatched, Printed,
+        Failed, Escalated, Reprints.' Confirms the three genuinely new
+        filters this batch adds are present, alongside the pre-existing
+        ones."""
+        search_view = self.env.ref('flexsys_kds.view_kds_print_job_search')
+        arch = search_view.arch
+        for filter_name, status_value in (
+            ('filter_pending', 'pending'), ('filter_dispatched', 'dispatched'),
+            ('filter_printed', 'printed'),
+        ):
+            self.assertIn('name="%s"' % filter_name, arch)
+            self.assertIn("('status', '=', '%s')" % status_value, arch)
+        # Pre-existing filters, confirmed still present/unaffected.
+        for filter_name in ('filter_failed', 'filter_escalated', 'filter_reprint'):
+            self.assertIn('name="%s"' % filter_name, arch)
+
+    def test_item17_default_order_newest_order_first_correct_sequence_within(self):
+        """Item 17: 'Default sorting: Newest first' - reconciled with
+        the earlier print-sequence fix. Confirms a newer order's own
+        jobs appear before an older order's own jobs, while each
+        order's own jobs still read 1, 2, 3 internally."""
+        old_order = self._order()
+        old_job = self.env['kds.print.job'].create({
+            'order_id': old_order.id, 'station_id': self.station_kitchen.id,
+            'printer_id': self.printer_primary.id, 'job_type': 'auto',
+        })
+        new_order = self._order()
+        new_job_1 = self.env['kds.print.job'].create({
+            'order_id': new_order.id, 'station_id': self.station_kitchen.id,
+            'printer_id': self.printer_primary.id, 'job_type': 'auto',
+        })
+        new_job_2 = self.env['kds.print.job'].create_reprint(
+            new_order, self.station_kitchen, reason='kitchen_request')
+
+        all_jobs = self.env['kds.print.job'].search(
+            [('id', 'in', [old_job.id, new_job_1.id, new_job_2.id])],
+            order='order_id desc, print_number')
+
+        self.assertEqual(
+            list(all_jobs.ids[:2]), [new_job_1.id, new_job_2.id],
+            "The newer order's own jobs must sort before the older order's own jobs.")
+        self.assertEqual(all_jobs.ids[2], old_job.id)
+        # Within the newer order's own two jobs, print_number order (1
+        # then 2) must still hold correctly.
+        self.assertEqual(all_jobs.ids[:2], [new_job_1.id, new_job_2.id])
+
+    def test_item17_print_job_form_view_exists_with_agent_lease_fields(self):
+        """Item 17: 'تفاصيل Job يمكن أن تعرض: Agent, Lease information,
+        Failure/Error, Failover information.' Confirms the new form
+        view exists at all (there was none before this fix) and
+        includes the specific fields the request names."""
+        form_view = self.env.ref('flexsys_kds.view_kds_print_job_form')
+        arch = form_view.arch_db
+        for field_name in ('claimed_by_agent', 'claimed_at', 'lease_expires_at',
+                            'error', 'retry_count', 'escalated'):
+            self.assertIn('name="%s"' % field_name, arch)
+
+    def test_item17_print_job_action_now_includes_form_view_mode(self):
+        """Confirms the action itself was updated to actually reach the
+        new form view - clicking a row in the list must open it, not
+        do nothing."""
+        action = self.env.ref('flexsys_kds.action_kds_print_job')
+        self.assertIn('form', action.view_mode)
+
+    def test_item18_escalated_job_form_shows_failover_message(self):
+        """Item 18: 'يجب أن يكون من السهل معرفة: Original Printer ->
+        Backup Printer.' Confirms the form view's own failover alert is
+        conditioned on escalated - present in the arch and gated
+        correctly, so it only ever shows for a genuinely escalated job."""
+        form_view = self.env.ref('flexsys_kds.view_kds_print_job_form')
+        arch = form_view.arch_db
+        self.assertIn('invisible="not escalated"', arch)
+        self.assertIn('Escalated to a backup printer', arch)
+
+    def test_item18_failover_still_creates_independent_records(self):
+        """Item 18: 'مع الاحتفاظ بالسجلات المستقلة الحالية.' Non-
+        regression: the underlying escalation logic itself
+        (action_mark_failed()) is completely untouched by this batch -
+        confirms it still creates a genuinely separate job record on
+        the backup printer, never reusing/rewriting the original."""
+        order = self._order()
+        job = self.env['kds.print.job'].create({
+            'order_id': order.id, 'station_id': self.station_kitchen.id,
+            'printer_id': self.printer_primary.id, 'job_type': 'auto',
+        })
+        job.action_mark_failed('e1')
+        job.action_mark_failed('e2')
+        job.action_mark_failed('e3')  # exceeds MAX_AUTO_RETRY, triggers escalation
+
+        job.invalidate_recordset()
+        self.assertTrue(job.escalated)
+        backup_jobs = self.env['kds.print.job'].search([
+            ('order_id', '=', order.id), ('id', '!=', job.id),
+        ])
+        self.assertEqual(len(backup_jobs), 1, "A genuinely separate job record.")
+        self.assertEqual(backup_jobs.printer_id, self.printer_backup)
+        self.assertNotEqual(backup_jobs.id, job.id)

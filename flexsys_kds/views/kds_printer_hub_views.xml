@@ -14,7 +14,12 @@
                 <sheet>
                     <div class="o_kds_hub_header mb-4">
                         <h1 class="mb-1">Printing</h1>
-                        <p class="text-muted mb-0">Printers and the full print job history - print and reprint - each has its own page.</p>
+                        <!-- UI/DATA FIX ("Master Change Request", item
+                             12, "Printing Landing"): shortened - the
+                             card descriptions below already say what
+                             each destination is for; this line doesn't
+                             need to repeat it. -->
+                        <p class="text-muted mb-0">Printers and print job history.</p>
                     </div>
                     <!-- UI/DATA FIX ("Printing UI & Job History - Final
                          Cleanup Before Testing"), items 1 & 2: the
@@ -31,8 +36,16 @@
                                 <div class="card-body d-flex flex-column">
                                     <div class="o_kds_hub_icon mb-3"><i class="fa fa-print" role="img" aria-label="Printers"/></div>
                                     <h5 class="card-title">Printers</h5>
+                                    <!-- UI/DATA FIX ("Master Change
+                                         Request", item 12): shortened,
+                                         and "connection status" ->
+                                         "agent status" - matching item
+                                         13's own naming fix (this
+                                         reflects the Print Agent's own
+                                         heartbeat, never a verified
+                                         physical connection). -->
                                     <p class="card-text text-muted flex-grow-1">
-                                        The physical printers assigned to each station - default/backup roles, connection status.
+                                        Printer setup per station - default/backup roles, agent status.
                                     </p>
                                     <button name="%(action_kds_printer)d" type="action"
                                             string="Open Printers" class="btn btn-primary o_kds_hub_btn"/>
@@ -44,8 +57,13 @@
                                 <div class="card-body d-flex flex-column">
                                     <div class="o_kds_hub_icon mb-3"><i class="fa fa-list-alt" role="img" aria-label="Print Jobs"/></div>
                                     <h5 class="card-title">Print Jobs</h5>
+                                    <!-- UI/DATA FIX ("Master Change
+                                         Request", item 12): shortened -
+                                         the screen's own column
+                                         headers and filters already
+                                         make this clear once opened. -->
                                     <p class="card-text text-muted flex-grow-1">
-                                        The full print history - every job's status, retries, and any escalation to a backup printer - first prints and reprints together, each clearly labeled and numbered.
+                                        Print and reprint job history, including status and any escalation.
                                     </p>
                                     <button name="%(action_kds_print_job)d" type="action"
                                             string="Open Print Jobs" class="btn btn-primary o_kds_hub_btn"/>

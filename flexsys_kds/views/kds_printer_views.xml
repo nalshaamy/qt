@@ -18,9 +18,28 @@
                 <field name="printer_type"/>
                 <field name="ip_address"/>
                 <field name="is_default"/>
-                <field name="is_backup"/>
-                <field name="status" decoration-success="status == 'online'" decoration-danger="status == 'error'" decoration-muted="status == 'offline'" widget="badge"/>
-                <field name="last_seen"/>
+                <!-- UI/DATA FIX ("Master Change Request", item 13,
+                     "Printers List Naming"): "Backup / Fallback
+                     Printer" -> "Backup Printer" - matches the field's
+                     own already-simplified string below on the form;
+                     purely a display-label change, the underlying
+                     is_backup field name/value is unaffected. -->
+                <field name="is_backup" string="Backup Printer"/>
+                <!-- UI/DATA FIX ("Master Change Request", item 13):
+                     "Online"/"Offline" -> "Agent Online"/"Agent
+                     Offline" - see docs/PRINT_AGENT.md's own "What
+                     'Status: Online' actually means" section for the
+                     full reasoning: this field reflects the external
+                     Print Agent's own reported heartbeat, never a
+                     verified physical connection to the printer
+                     itself - the label now says exactly that, rather
+                     than implying more than it actually confirms.
+                     Selection VALUES ('online'/'offline'/'error')
+                     stored in the database are completely unchanged -
+                     display labels only. -->
+                <field name="status" string="Agent Status"
+                       decoration-success="status == 'online'" decoration-danger="status == 'error'" decoration-muted="status == 'offline'" widget="badge"/>
+                <field name="last_seen" string="Agent Last Seen"/>
             </list>
         </field>
     </record>
@@ -32,7 +51,24 @@
         <field name="arch" type="xml">
             <form string="Printer" create="false">
                 <header>
-                    <button name="action_test_connection" type="object" string="Mark as Online (No Real Connectivity Check)" class="btn-secondary"/>
+                    <!-- UI/DATA FIX ("Master Change Request", item 14,
+                         "Printer Form Cleanup"): "REMOVE من Production
+                         UI: Mark as Online (No Real Connectivity
+                         Check)" - the button that called
+                         action_test_connection() (kds_printer.py) is
+                         removed entirely from this form. The method
+                         itself is kept, unused, in the codebase - see
+                         its own updated docstring - for a possible
+                         future testing/demo need, but is no longer
+                         reachable from normal day-to-day use. This
+                         directly resolves item 13's own concern: with
+                         this button gone, `status` is set ONLY by a
+                         real agent's own successful job report
+                         (controllers/kds.py's own agent_result()),
+                         making "Agent Online"/"Agent Offline" (list
+                         view, above) an accurate label rather than a
+                         misleading mix of "verified" and "someone
+                         clicked a button." -->
                     <button name="action_set_default" type="object" string="Set as Default" class="btn-secondary"/>
                     <button name="action_set_backup" type="object" string="Set as Backup" class="btn-secondary"/>
                     <button name="action_regenerate_agent_key" type="object" string="Regenerate Agent Key"
@@ -62,14 +98,22 @@
                             class="btn-secondary" groups="flexsys_kds.group_kds_administrator"/>
                 </header>
                 <sheet>
+                    <!-- UI/DATA FIX ("Master Change Request", item 14):
+                         the long technical explanation of the Claim/
+                         Lease/Agent architecture that used to sit here
+                         is moved to docs/PRINT_AGENT.md's own new
+                         "Architecture at a glance" section - this form
+                         is opened dozens of times a day just to
+                         configure a printer's own IP/station/role; a
+                         short, purely operational note belongs here
+                         instead, with a pointer to the full technical
+                         picture for whoever actually needs it (usually
+                         once, while building the external agent
+                         itself, not on every visit to this form). -->
                     <div class="alert alert-info" role="alert">
-                        Odoo manages Print Jobs, the atomic Claim/Lease queue, and the
-                        print payload contract here - it does not talk to a physical
-                        printer directly. Actual printer communication (ESC/POS,
-                        network, etc.) is performed by the external Print Agent
-                        process, which polls <code>/flexsys_kds/print/agent/*</code>.
-                        The button above only marks this record Online for
-                        testing/demo purposes; it does not verify a real connection.
+                        This module manages the print queue - it does not talk to a physical printer
+                        directly. A separate Print Agent process handles that; see
+                        <code>docs/PRINT_AGENT.md</code> for the full protocol.
                     </div>
                     <group>
                         <group>
@@ -86,11 +130,33 @@
                             <field name="serial_number"/>
                         </group>
                     </group>
+                    <!-- UI/DATA FIX ("Master Change Request", item 15,
+                         "Default/Backup UI"): "تجنب وجود طريقتين
+                         متعارضتين لتحديد الدور... يفضل: Set as Default
+                         / Set as Backup كإجراءات. والحقول تكون
+                         indicators/read-only." Confirmed live: these
+                         two fields were previously plain, directly-
+                         editable checkboxes sitting right alongside the
+                         two buttons above that already correctly
+                         enforce "only one Default/Backup per station"
+                         (action_set_default()/action_set_backup(),
+                         kds_printer.py) - ticking a checkbox by hand
+                         here bypassed that enforcement entirely,
+                         letting a station end up with more than one
+                         Default or Backup printer, silently. readonly="1"
+                         makes these two fields pure indicators now -
+                         the buttons in the header are the only way to
+                         actually change either role, guaranteeing the
+                         single source of truth their own logic already
+                         assumed. Every existing test for
+                         action_set_default()/action_set_backup()'s own
+                         behavior is unaffected - this is a view-only
+                         change. -->
                     <group>
-                        <field name="is_default"/>
-                        <field name="is_backup"/>
-                        <field name="status"/>
-                        <field name="last_seen"/>
+                        <field name="is_default" readonly="1"/>
+                        <field name="is_backup" string="Backup Printer" readonly="1"/>
+                        <field name="status" string="Agent Status" readonly="1"/>
+                        <field name="last_seen" string="Agent Last Seen" readonly="1"/>
                     </group>
                     <group string="Print Agent" groups="flexsys_kds.group_kds_administrator">
                         <field name="agent_key" password="True"/>

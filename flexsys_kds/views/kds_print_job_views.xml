@@ -40,9 +40,20 @@
                  reads naturally top-to-bottom within each order,
                  whether grouped or not - see the search view below for
                  the new default "Group by Order" behavior that makes
-                 this most visible. -->
+                 this most visible.
+
+                 UI/DATA FIX ("Master Change Request", item 17,
+                 "Print Jobs - Default sorting: Newest first"):
+                 `order_id` alone (ascending) put the OLDEST orders'
+                 own jobs first, contradicting this - `order_id desc`
+                 reconciles both requirements together rather than
+                 favoring one over the other: the newest orders' own
+                 groups appear first (item 17), while print_number
+                 (unchanged, still ascending) keeps each individual
+                 order's own jobs reading 1, 2, 3 top to bottom within
+                 its own group (the earlier fix this doesn't undo). -->
             <list string="Print Jobs" create="false" edit="false"
-                  default_order="order_id, print_number">
+                  default_order="order_id desc, print_number">
                 <field name="order_id"/>
                 <field name="station_id"/>
                 <field name="printer_id"/>
@@ -54,7 +65,24 @@
                 <field name="reason" string="Reprint Reason"/>
                 <field name="status" decoration-success="status == 'printed'" decoration-danger="status == 'failed'" decoration-warning="status in ('pending','dispatched')" widget="badge"/>
                 <field name="retry_count"/>
-                <field name="escalated" widget="boolean_toggle"/>
+                <!-- UI/DATA FIX ("Master Change Request", item 18,
+                     "Failover Visibility"): a widget/help addition
+                     only - when a job escalates to a backup printer
+                     after repeated failures, this flag is TRUE on the
+                     original (failed) job's own row; the new job
+                     created on the backup printer (a separate,
+                     independent record - kept exactly as required,
+                     "مع الاحتفاظ بالسجلات المستقلة الحالية") sits
+                     right next to it once grouped by Order (this
+                     screen's own default). Combined with printer_id
+                     differing between the two rows, "Original Printer
+                     -> Backup Printer" is directly visible without
+                     leaving this list - see the new form view below
+                     for an even more explicit statement of this, plus
+                     the underlying error/lease/agent details this list
+                     deliberately doesn't try to cram in. -->
+                <field name="escalated" widget="boolean_toggle"
+                       help="True on the original job when it was escalated to a backup printer after repeated failures - see the backup printer's own separate job row, right next to this one once grouped by Order."/>
                 <field name="user_id"/>
                 <field name="create_date" string="Created On"/>
             </list>
@@ -80,6 +108,21 @@
                 <filter string="Print (first)" name="filter_print" domain="[('display_job_type', '=', 'print')]"/>
                 <filter string="Reprint" name="filter_reprint" domain="[('display_job_type', '=', 'reprint')]"/>
                 <separator/>
+                <!-- UI/DATA FIX ("Master Change Request", item 17,
+                     "Print Jobs - Filters"): "إضافة/تحسين الفلاتر:
+                     Pending, Dispatched, Printed, Failed, Escalated,
+                     Reprints." Failed/Escalated/Reprints already
+                     existed (see above/below) - Pending/Dispatched/
+                     Printed are the three genuinely new ones this round
+                     adds, matching status's own three "in-flight or
+                     succeeded" values exactly (status's own remaining
+                     value, 'cancelled', intentionally has no dedicated
+                     filter here - not named in the request's own list,
+                     and the existing free-text status field search
+                     already covers it if ever needed). -->
+                <filter string="Pending" name="filter_pending" domain="[('status', '=', 'pending')]"/>
+                <filter string="Dispatched" name="filter_dispatched" domain="[('status', '=', 'dispatched')]"/>
+                <filter string="Printed" name="filter_printed" domain="[('status', '=', 'printed')]"/>
                 <filter string="Failed" name="filter_failed" domain="[('status', '=', 'failed')]"/>
                 <filter string="Escalated" name="filter_escalated" domain="[('escalated', '=', True)]"/>
                 <separator/>
@@ -101,10 +144,99 @@
         </field>
     </record>
 
+    <record id="view_kds_print_job_form" model="ir.ui.view">
+        <field name="type">form</field>
+        <field name="name">kds.print.job.form</field>
+        <field name="model">kds.print.job</field>
+        <field name="arch" type="xml">
+            <!-- UI/DATA FIX ("Master Change Request", item 17, "Print
+                 Jobs - Job Detail" / item 18, "Failover Visibility"):
+                 new form view - none existed before this fix, only the
+                 list. Read-only throughout (create/edit/delete all
+                 false): these are operational records this module's
+                 own printing engine creates and updates itself
+                 (Claim/Lease/Dispatch/Ack/Result) - nothing here is
+                 meant to be hand-edited, matching the same read-only
+                 principle the list view already established. Shows
+                 exactly the fields the request names (Agent, Lease
+                 information, Failure/Error, Failover information)
+                 without cramming any of them into the list. -->
+            <form string="Print Job" create="false" edit="false" delete="false">
+                <sheet>
+                    <div class="alert alert-warning" role="alert" invisible="not escalated">
+                        <!-- UI/DATA FIX ("Master Change Request", item
+                             18, "Failover Visibility"): the explicit,
+                             plain-language statement the request asks
+                             for - "يجب أن يكون من السهل معرفة: Original
+                             Printer -> Backup Printer." Shown only on
+                             the ORIGINAL (failed) job - escalated=True
+                             is set on that record, never on the new
+                             backup-printer job itself (kds_print_job.py's
+                             own action_mark_failed()), so this
+                             correctly appears exactly once per
+                             failover, on the job it actually happened
+                             to. -->
+                        <strong>Escalated to a backup printer</strong> after repeated failures
+                        on <field name="printer_id" readonly="1" nolabel="1" class="d-inline"/>.
+                        The replacement job was created as its own, separate record on the
+                        station's backup printer - group this screen by Order to see it
+                        listed right next to this one.
+                    </div>
+                    <group>
+                        <group string="Job">
+                            <field name="order_id"/>
+                            <field name="station_id"/>
+                            <field name="printer_id"/>
+                            <field name="display_job_type" string="Job Type"/>
+                            <field name="print_number" string="Print #"/>
+                            <field name="scope"/>
+                            <field name="reason" string="Reprint Reason" invisible="not reason"/>
+                            <field name="reason_note" invisible="not reason_note"/>
+                            <field name="user_id"/>
+                            <field name="create_date" string="Created On"/>
+                        </group>
+                        <group string="Status">
+                            <field name="status"/>
+                            <field name="dispatched_at"/>
+                            <field name="acknowledged_at"/>
+                            <field name="printed_at"/>
+                            <field name="copies"/>
+                        </group>
+                    </group>
+                    <!-- UI/DATA FIX ("Master Change Request", item 17):
+                         "Agent, Lease information" - claimed_by_agent/
+                         claimed_at/lease_expires_at were already tracked
+                         by the engine (models/kds_print_job.py) but had
+                         no view exposing them at all before this fix. -->
+                    <group string="Agent / Lease">
+                        <field name="claimed_by_agent" string="Claimed By (Agent)"/>
+                        <field name="claimed_at"/>
+                        <field name="lease_expires_at"/>
+                    </group>
+                    <!-- UI/DATA FIX ("Master Change Request", item 17):
+                         "Failure/Error" - retry_count/error were also
+                         already tracked with no view exposing them. -->
+                    <group string="Failure / Retry" invisible="not error and retry_count == 0 and not escalated">
+                        <field name="retry_count"/>
+                        <field name="error" invisible="not error"/>
+                        <field name="escalated"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
     <record id="action_kds_print_job" model="ir.actions.act_window">
         <field name="name">Print Jobs</field>
         <field name="res_model">kds.print.job</field>
-        <field name="view_mode">list</field>
+        <!-- UI/DATA FIX ("Master Change Request", item 17, "Print
+             Jobs - Job Detail"): "تفاصيل Job يمكن أن تعرض: Agent,
+             Lease information, Failure/Error, Failover information.
+             لا يلزم حشر كل هذه المعلومات في List View." Adds the new
+             form view below to view_mode - the list itself stays
+             exactly as focused as it already was; clicking any row now
+             opens the full detail instead of doing nothing. -->
+        <field name="view_mode">list,form</field>
         <!-- UI/DATA FIX ("Printing Cleanup - Toast + Job Record
              Simplification"), decision item 5: opens already grouped
              by Order by default - see the search view's own

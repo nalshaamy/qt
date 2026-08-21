@@ -8,6 +8,150 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.23.0 — Master Change Request, Batch 3: Printing UI Cleanup (items 12-18)
+
+**Third batch of the multi-batch Master Change Request.** Batch 2 was
+confirmed fully live-tested and approved (including the item 10
+recursion fix and bidirectional scope filtering test) before this batch
+began, per the client's own explicit confirmation. Scoped exactly to
+items 12-18 - **no change to Claim/Lease/Agent/Retry/Failover/Dispatch
+behavior anywhere in this round**, per the explicit scope guard;
+several items below only ever touch views, labels, or purely additive
+detail screens.
+
+### Item 12 - Printing Landing
+Shortened the landing page's own header line and both card
+descriptions - the underlying two-card structure (Printers, Print
+Jobs) from an earlier round is unchanged. The Printers card's own
+description also updated from "connection status" to "agent status,"
+consistent with item 13's own naming fix below.
+
+### Item 13 - Printers List naming
+"Backup / Fallback Printer" -> "Backup Printer" (list and form).
+"Online"/"Offline" -> "Agent Online"/"Agent Offline" (`status` field's
+own display label, list and form) - `status` reflects the external
+Print Agent's own reported heartbeat (set by
+`controllers/kds.py`'s own `agent_result()` on a successful job
+report), never a verified physical connection to the printer itself;
+the label now says exactly that. Display-label-only throughout - the
+underlying field names and stored Selection values are completely
+unchanged.
+
+### Item 14 - Printer Form cleanup
+**"Mark as Online (No Real Connectivity Check)" button removed from
+the printer form entirely** - `action_test_connection()` itself is
+kept in the codebase (its own docstring updated to explain why),
+simply no longer reachable from the normal, day-to-day production UI.
+Removing this button is what makes item 13's "Agent Online"/"Agent
+Offline" labels genuinely accurate: with it gone, `status` is set only
+by a real agent's own successful report, never by someone clicking a
+button with zero verification.
+
+The long technical explanation of the Claim/Lease/Agent architecture
+that used to sit in an alert box on this form is **moved to
+`docs/PRINT_AGENT.md`'s** own new "Architecture at a glance" section
+(plus a new "What 'Status: Online' actually means" section explaining
+the item 13/14 reasoning together) - replaced on the form itself with
+a short, purely operational note pointing there. `Set as Default`, `Set
+as Backup`, printer configuration fields, and Agent Key management are
+all kept exactly as they were.
+
+### Item 15 - Default/Backup UI
+`is_default`/`is_backup` are now `readonly="1"` on the printer form -
+`action_set_default()`/`action_set_backup()` (the two header buttons,
+which already correctly enforce "only one Default/Backup per station")
+are the only way to actually change either role now, closing the gap
+where directly ticking the old checkboxes bypassed that enforcement
+entirely. View-only change - both action methods themselves are
+completely untouched.
+
+### Item 16 - Agent Key
+The Regenerate Agent Key confirmation dialog (added in an earlier
+round) already states plainly that regenerating invalidates the
+current key and requires updating the external Print Agent - nothing
+to change here. **One requirement not implemented this round, reported
+per the scope guard's own instruction to stop and report rather than
+force a fix**: "تسجيل Regenerate في Audit إذا لم يكن مسجلًا حاليًا."
+Confirmed `action_regenerate_agent_key()` does not currently log to
+`kds.event` - and confirmed this is architecturally blocked, not simply
+unimplemented: `kds.event.order_id` is a `required=True` field, and
+regenerating a printer's own agent key is not associated with any
+`kds.order` at all. Logging it there as-is is not possible without
+either loosening that required constraint (a real schema change to the
+audit model itself) or adding an entirely separate audit mechanism
+(e.g. `mail.thread` on `kds.printer`) - both are genuine architectural
+decisions, not a printing-UI cleanup, and are deliberately left for the
+client's own explicit choice before any code changes here.
+
+### Item 17 - Print Jobs
+Three new search filters - Pending, Dispatched, Printed - alongside
+the pre-existing Failed/Escalated/Reprint ones. Default sort corrected
+to `order_id desc, print_number` - reconciles "Newest first" (this
+item's own requirement) with an earlier round's own fix (each order's
+jobs reading 1, 2, 3 within their own group) rather than picking one
+over the other: newer orders' own job groups now appear first, while
+each order's own internal sequence is unaffected.
+
+**A form view now exists for `kds.print.job` at all** (there was only
+ever a list before this fix) - read-only throughout, showing exactly
+what the request names without cramming any of it into the list: Agent
+(`claimed_by_agent`), Lease information (`claimed_at`/
+`lease_expires_at`), and Failure/Error (`retry_count`/`error`) - all
+three already tracked by the engine with no view exposing them until
+now. The list itself gained no new columns.
+
+### Item 18 - Failover Visibility
+The new form view's own alert box states "Escalated to a backup
+printer after repeated failures on [printer]" whenever `escalated` is
+true - directly satisfying "يجب أن يكون من السهل معرفة: Original
+Printer -> Backup Printer," without merging or otherwise changing how
+the two related job records are stored ("مع الاحتفاظ بالسجلات
+المستقلة الحالية" - `action_mark_failed()`'s own escalation logic,
+still creating a genuinely separate record on the backup printer, is
+completely untouched). The list's own `escalated` column gained a
+tooltip explaining the same relationship for anyone not opening the
+full detail view.
+
+### What was found genuinely in use and NOT removed
+- `action_test_connection()` (Python method) - the button calling it
+  is removed from the UI (item 14), but the method itself is kept,
+  unused, for a possible future testing/demo need.
+- Every field/method the printing engine's own Claim/Lease/Retry/
+  Failover/Dispatch logic depends on - none were touched at all this
+  round, confirmed by the non-regression tests below.
+
+### Files changed
+`models/kds_printer.py` (`action_test_connection()`'s own docstring
+only - no behavior change), `views/kds_printer_views.xml` (items
+13-15), `views/kds_printer_hub_views.xml` (item 12),
+`views/kds_print_job_views.xml` (items 17-18 - new form view, search
+filters, default order), `docs/PRINT_AGENT.md` (item 14's own
+relocated architecture explanation).
+
+### Tests
+10 new regression tests covering every item's own change directly
+(button removal, readonly fields with non-regression on the underlying
+actions, new filters, sort order reconciliation, the new form view's
+own field presence, the failover message's own conditional visibility,
+and non-regression on `action_mark_failed()`'s own independent-record
+creation).
+
+**Total: 443 tests** (up from 433). No database migration required -
+no field/model changes this round, only views/labels/documentation and
+one new (currently unused, unlogged) audit gap correctly identified
+and reported rather than worked around.
+
+**Item 16's own audit-logging requirement remains open, awaiting the
+client's own decision** on how to resolve the architectural constraint
+described above, before any code change is made for that specific
+piece.
+
+**Batch 3 is not yet closed - awaiting the client's own live test
+round**, matching the same process every prior batch has gone through,
+before Batch 4 begins.
+
+---
+
 ## v7.22.1 — Batch 2 patch: Item 10 recursion crash fixed (POS Send-to-KDS Settings)
 
 **Confirmed live**: opening the Send-to-KDS Settings screen crashed
