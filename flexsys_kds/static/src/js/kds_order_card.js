@@ -102,6 +102,25 @@ export class KdsOrderCard extends Component {
         // green border) - the real COMPLETED tab (dev request) distinguishes
         // them at the tab/statusText level, not the border color.
         const isReadyOrDone = this.props.order.effective_stage === "ready" || this.props.order.effective_stage === "completed";
+        // UI/DATA FIX ("Master Change Request", item 28, "Completed
+        // Late Visual"): "عند انتقال Late Order إلى Completed... لا
+        // يلزم إبقاء البطاقة باللون الأحمر كحالة نشطة." Confirmed
+        // live: the 'late' check below used to run unconditionally,
+        // before isReadyOrDone was even consulted - a genuinely
+        // COMPLETED order that had been Late at some point along the
+        // way kept the same red "still urgent" card treatment forever,
+        // with nothing distinguishing it from an order that is still
+        // active and still actually running late right now. Checked
+        // here first instead, but ONLY for 'completed' specifically -
+        // not 'ready' (an order that reached Ready but hasn't been
+        // handed off/completed yet is still an active state, and a
+        // genuinely late one there should keep the red urgency exactly
+        // as before). sla_status itself - the underlying data this
+        // fix explicitly must not touch ("احتفظ بحقيقة أنه Late في
+        // البيانات/Analytics") - is never read, written, or
+        // recomputed here; only which CSS class a COMPLETED order's
+        // own card resolves to changes.
+        if (this.props.order.effective_stage === "completed") return "fs-card-ready";
         if (this.props.order.sla_status === "late") return "fs-card-late";
         if (isReadyOrDone) return "fs-card-ready";
         if (this.props.order.sla_status === "warning") return "fs-card-warning";
@@ -176,9 +195,21 @@ export class KdsOrderCard extends Component {
         const diffMin = Math.floor((Date.now() - created.getTime()) / 60000);
         const h = Math.floor(diffMin / 60);
         const m = diffMin % 60;
-        // Deliberately kept as digits (not translated) - a timer reading
-        // "12:04" is universally understood the same way a clock is.
-        return h > 0 ? `${h}:${String(m).padStart(2, "0")}` : `${m} min`;
+        // UI/DATA FIX ("Master Change Request", item 27, "SLA Timer"):
+        // "الشاشة الداخلية يفضل توحيد صيغة الوقت معها [الـKiosk] بدل
+        // صيغة ملتبسة مثل: 2:28." Confirmed live: this screen's own
+        // format ("H:MM", e.g. "2:28") and the public kiosk's own
+        // format (controllers/kds_kiosk.py's own elapsed(), matching
+        // `${h}h ${m}m` when h > 0, else `${m}m`) genuinely differed -
+        // unified to the kiosk's own exact format here instead of the
+        // reverse (kiosk left unchanged - it was already the one
+        // matching what this fix asks for; the exact same expression
+        // is duplicated here, not merely approximated, since this
+        // file's own JS cannot import from that separate server-
+        // rendered template). The timer's own START POINT
+        // (created_time, read above, unchanged) is explicitly not
+        // touched - only the digits' own display format.
+        return h > 0 ? `${h}h ${m}m` : `${m}m`;
     }
 
     get orderedAtLabel() {

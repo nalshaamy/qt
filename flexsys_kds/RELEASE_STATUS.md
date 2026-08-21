@@ -1,38 +1,42 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.23.0**
+**Version: 19.0.7.24.0**
 **Status as of this document: code-complete, including everything
-through v7.22.1 (see CHANGELOG.md for the full history). Batch 2 (items
-2-11) is CONFIRMED fully live-tested and approved, including the item
-10 recursion fix and bidirectional scope filtering. Batch 3 (items
-12-18, Printing UI Cleanup) is now implemented and unit-tested, scoped
-exactly as confirmed - no change anywhere to Claim/Lease/Agent/Retry/
-Failover/Dispatch behavior. The "Mark as Online" button (no real
-connectivity check) is removed from the printer form's production UI
-entirely, making the corrected "Agent Online"/"Agent Offline" labels
-genuinely accurate (status is now set only by a real agent's own
-successful report); the long Claim/Lease/Agent architecture explanation
-that used to sit on that same form is relocated to
-`docs/PRINT_AGENT.md`. `is_default`/`is_backup` are now read-only on
-the printer form, closing a gap where directly ticking the old
-checkboxes bypassed the two action buttons' own existing "only one per
-station" enforcement. Print Jobs gained three new status filters
-(Pending/Dispatched/Printed), a corrected default sort reconciling
-"newest first" with an earlier round's own within-order sequencing fix,
-and - for the first time - a read-only detail form view surfacing
-Agent/Lease/Failure/Failover information the engine already tracked but
-never had any view for, including an explicit "escalated to backup
-printer" message satisfying the Failover Visibility requirement, all
-without touching how the underlying escalation logic itself creates
-its own separate job records. **One requirement (item 16's own
-audit-logging for key regeneration) was found architecturally blocked
-- `kds.event.order_id` is required, and a key regeneration has no
-associated order - reported per the scope guard rather than worked
-around, awaiting the client's own decision on how to resolve it.** 443
-automated tests, all `py_compile`/XML/JS checks passing, plus a custom
-AST-based undefined-name sweep. No database migration needed - views/
-labels/documentation only this round. **Batch 3 is not yet closed** -
-awaiting the client's own live test round before Batch 4 begins.**
+through v7.23.0 (see CHANGELOG.md for the full history). Batch 3 (items
+12-18, Printing UI Cleanup) is CONFIRMED fully live-tested and
+approved. Batch 4 (items 19-30, Audit Log + Operations + Timing + KDS
+Screen) is now implemented and unit-tested, scoped exactly as
+confirmed - no change anywhere to the core KDS Workflow (New ->
+Preparing -> Ready -> Completed), the Routing Engine, the Printing
+Engine, Multi-Station completion, READY-only-after-last-station
+gating, or Completed retention. Two clearer Audit Log event types
+(`print_retry`/`printer_fallback`) replace the generic `override` at
+the specific printing-retry/fallback call sites this batch names; the
+"New" button is removed from Active Orders/Order History (both action
+context and view level); `action_print_full_order()` now logs a
+success event, not only its own pre-existing failure path;
+`is_expeditor_ready`/`packing_time` are now hidden when no
+Expeditor/Packing station is configured at all (their own real,
+unchanged computed values keep working for the workflow logic that
+already depends on them); the Notes tab is now "Internal Notes" with
+help text; "Total Fulfillment Minutes" gains a separate, purely-display
+field showing "-" instead of a misleading "0.0" for an incomplete
+order, alongside a new "Current Elapsed Time" for active orders only;
+POS Order Number confirmed unchanged and now regression-tested; the
+internal KDS Screen's own elapsed-time format is unified with the
+public kiosk's own clearer `Xh Ym`/`Xm` style, replacing an ambiguous
+`H:MM` display; and a genuinely completed order's own card no longer
+keeps a red "late" visual forever, while `sla_status` itself stays
+completely untouched for Analytics. **One requirement (item 19's own
+"System"/"Print Agent" user labeling for automated events) was found
+architecturally blocked - `kds.event.user_id` can only ever hold a real
+Odoo user record, never a free-text label - reported per the scope
+guard rather than worked around, awaiting the client's own decision on
+how to resolve it.** 460 automated tests, all `py_compile`/XML/JS
+checks passing, plus a custom AST-based undefined-name sweep. No
+database migration needed - new fields are computed only. **Batch 4 is
+not yet closed** - awaiting the client's own live test round before
+Batch 5 (Priority/Urgent/VIP removal) begins.**
 
 This document maps directly to that request's own section structure
 (A/B/C/D) and states, for each item, what's actually been verified and
@@ -1811,7 +1815,91 @@ new filters and sort order work as expected, and the new Print Job
 detail form renders correctly including the failover message for an
 actually-escalated job.
 
+✅ **CONFIRMED**: the client's own live test round passed - Batch 3
+(items 12-18) is fully approved. See v7.24.0's own section below for
+Batch 4.
+
 ---
+
+## Master Change Request, Batch 4: Audit Log + Operations + Timing + KDS Screen (v7.24.0)
+**Fourth batch, items 19-30**, begun only after Batch 3's own live test
+passed. Scoped exactly as instructed - no change anywhere to the core
+KDS Workflow, Routing Engine, Printing Engine, Multi-Station
+completion, READY gating, or Completed retention.
+
+**Item 19**: `print_retry`/`printer_fallback` replace the generic
+`override` at the three specific printing call sites this item names -
+`override` itself stays fully valid for every other existing use.
+**The "System"/"Print Agent" user-labeling half is architecturally
+blocked and left unimplemented, reported rather than worked around**:
+`kds.event.user_id` is a real `Many2one('res.users')`, never a
+free-text label.
+
+**Item 20**: "New" removed from Active Orders/Order History - both
+action context and view level. The real, programmatic creation path
+from POS is completely unaffected.
+
+**Item 21**: confirmed Mark Ready/Hold/Cancel were already correctly
+logged (shared `_wf_transition()`). Found and fixed a genuine gap:
+`action_print_full_order()`'s own success path now logs an audit
+event too, not only its pre-existing failure path.
+
+**Item 22**: `is_expeditor_ready` hidden on the order form when
+`expeditor_enabled` is false - the same field the real workflow gating
+already depends on. Purely visual.
+
+**Item 23**: "Notes" -> "Internal Notes," with help text. Confirmed
+this order-level field was already never printed or shown on the
+kiosk - only each line's own separate note is.
+
+**Item 24**: a new, separate display field shows "-" instead of a
+misleading "0.0" for an incomplete order's own fulfillment time - the
+real, stored Float value is unchanged for Analytics/sum aggregation. A
+new "Current Elapsed Time" field, active orders only, unstored,
+formatted to match item 27's own unified style.
+
+**Item 25**: `packing_time` hidden with the same `expeditor_enabled`
+condition as item 22.
+
+**Item 26**: no change - confirmed correct already (POS Order leads,
+KDS Reference stays secondary) and now regression-tested.
+
+**Item 27**: the internal KDS Screen's own elapsed-time format
+unified with the public kiosk's own `Xh Ym`/`Xm` style, replacing the
+ambiguous `H:MM` display this item names by example. The timer's own
+start point is unchanged.
+
+**Item 28**: a genuinely completed order's own card no longer keeps a
+red "late" visual forever - `sla_status` itself stays completely
+untouched for Analytics; only which CSS class a completed order's card
+resolves to changes. An active (not-yet-completed) late order keeps
+the red treatment exactly as before.
+
+**Items 29, 30**: no change, confirmed completely untouched by this
+entire batch, per the dev request's own explicit instruction.
+
+**What was found in use and kept**: `expeditor_enabled`/
+`is_expeditor_ready`'s own real computed values (workflow logic
+unaffected); `total_fulfillment_minutes`'s own original Float value
+(kept for Analytics, a separate display field added instead of
+altering it); `kds.event`'s own pre-existing `override` value (still
+valid everywhere except the three specific call sites item 19 renames).
+
+**What Scope Guard stopped**: item 19's own "System"/"Print Agent"
+user-label requirement - see that item's own note above.
+
+**What still needs a human**: the client's own live test round on this
+batch - confirming the new event types appear correctly in the Audit
+Log, the "New" button is genuinely gone from both order screens while
+POS-driven creation still works, Expeditor-related fields correctly
+hide/show depending on whether any station is actually flagged as
+Expeditor, the Timing tab's own new fields display correctly for both
+active and completed orders, the KDS Screen's own timer format now
+matches the kiosk, and a completed order that was previously late no
+longer shows the red card treatment.
+
+---
+
 ## What still needs a human
 
 Everything above that says "still needs a human" or "cannot be
@@ -2073,7 +2161,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 443 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 460 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

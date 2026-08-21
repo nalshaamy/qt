@@ -8,6 +8,164 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.24.0 — Master Change Request, Batch 4: Audit Log + Operations + Timing + KDS Screen (items 19-30)
+
+**Fourth batch of the multi-batch Master Change Request.** Batch 3 was
+confirmed fully live-tested and approved before this batch began. No
+change anywhere to the core KDS Workflow (New -> Preparing -> Ready ->
+Completed), the Routing Engine, the Printing Engine, Multi-Station
+completion logic, READY-only-after-last-station gating, or Completed
+retention - all confirmed completely untouched by every change below.
+
+### Item 19 - Audit Log Event Types (partially implemented, one part reported per scope guard)
+Two new, clearer event types added - `print_retry` and
+`printer_fallback` - replacing the generic `override` at the three
+specific call sites in `action_mark_failed()` that this request names
+by example. The pre-existing `override` value itself is kept
+completely unremoved (still used correctly elsewhere, e.g. manager
+overrides, cross-station moves) - only these three new writes use the
+clearer values going forward; no historical record is reinterpreted.
+
+**Not implemented, reported per the scope guard's own instruction**:
+showing "System"/"Print Agent" instead of a real user for automated
+events. Confirmed `kds.event.user_id` is a `Many2one('res.users')` -
+it can only ever hold a real Odoo user record, never a free-text label
+like "Print Agent." Solving this genuinely requires either a dedicated
+system user record or a new display field/mechanism - a real
+architectural decision, not a label change, left for the client's own
+explicit choice.
+
+### Item 20 - Remove New
+The "New" button is removed from Active Orders, Order History, and
+`kds.order`'s own list/form views - `create="false"` set at both the
+action level (context) and the view level (defense in depth), matching
+the pattern already used elsewhere in this module for `kds.print.job`/
+`kds.printer`. The real, programmatic creation path
+(`_flexsys_kds_create()`, called from `pos_order.py`) never goes
+through this view at all and is completely unaffected.
+
+### Item 21 - Manager Actions
+Confirmed Mark Ready/Hold/Cancel (all routed through the shared
+`_wf_transition()`) were already correctly logging to the Audit Log -
+no change needed. Found a genuine gap: `action_print_full_order()` -
+itself a manual, explicit staff/manager action - only ever logged its
+own failure path (no printer configured); a successful manual print
+request left no audit trail. Now logs on success too, per station.
+
+### Item 22 - Is Expeditor Ready visibility
+`is_expeditor_ready` is now hidden on the order form when
+`expeditor_enabled` is false - the same field the real workflow logic
+already depends on to decide whether Expeditor gating applies at all
+(confirmed by usage check). Purely visual - the field's own computed
+value and every place the workflow itself reads it are untouched.
+
+### Item 23 - Notes
+The "Notes" tab is now "Internal Notes," with help text "Internal
+operational notes for this order." Confirmed by usage check that this
+order-level field is never included in any print payload or the public
+kiosk's own display - only each line's own separate note is - so "must
+not appear to the customer or on the receipt" was already true before
+this fix.
+
+### Item 24 - Timing UI
+"Total Fulfillment Minutes" -> "Total Fulfillment Time (min)" - but as
+a new, separate, purely-display `total_fulfillment_display` (Char)
+field rather than relabeling the existing `total_fulfillment_minutes`
+(Float) directly, since that field's own real numeric value is still
+genuinely needed, unchanged, for sum aggregation in the list view and
+Analytics. Shows `'-'` for an incomplete order instead of a misleading
+`0.0`. A new `current_elapsed_display` field adds "Current Elapsed
+Time" for active orders only (hidden once `state` is `completed` or
+`cancelled`), unstored (recomputed fresh on each read, like the KDS
+Screen's own live timer), formatted with the same `Xh Ym`/`Xm` style
+item 27 below unifies everywhere.
+
+### Item 25 - Packing Time visibility
+`packing_time` on the Timing tab is now hidden with the same
+`expeditor_enabled` condition as item 22 - meaningless (always blank)
+for any company with no Expeditor/Packing station configured at all.
+
+### Item 26 - POS Order Number
+No change, confirmed correct already and now explicitly regression-
+tested: `pos_order_id` ("POS Order") still leads, ahead of `name`
+("KDS Order"), in the Active Orders/Order History list.
+
+### Item 27 - SLA Timer format
+The internal KDS Screen's own elapsed-time display
+(`kds_order_card.js`'s own `elapsedLabel`) previously used `H:MM`
+(e.g. "2:28," the exact ambiguous example this item names) while the
+public kiosk used `Xh Ym`/`Xm`. Unified to the kiosk's own exact format
+- the timer's own start point (`created_time`, still the moment the
+order reaches the station, per this item's own "الإبقاء على") is
+completely unchanged; only the digits' own display format.
+
+### Item 28 - Completed Late Visual
+A genuinely `completed` order's own card now always resolves to the
+calm "ready" (green) visual treatment, regardless of whether it was
+ever `sla_status == 'late'` along the way - previously, the red "late"
+card class was checked unconditionally, before the completed/ready
+check, so a completed order that had been late kept the same urgent-
+red treatment forever. `sla_status` itself - the underlying data this
+item explicitly requires stay intact for Analytics - is never read,
+written, or recomputed by this fix; only which CSS class a completed
+order's card resolves to changes. An order still active in `ready`
+(not yet handed off) that is genuinely late keeps the red treatment
+exactly as before - this fix is scoped specifically to `completed`.
+
+### Items 29, 30 - Post-Send Changes, Multi-Station
+No change, per the dev request's own explicit instruction - both
+confirmed completely untouched by every change in this batch, and
+covered by this suite's own extensive pre-existing tests for both
+areas.
+
+### What was found genuinely in use and NOT removed
+- `expeditor_enabled`/`is_expeditor_ready` - both remain fully wired
+  into the real workflow gating logic; only their own view-level
+  visibility changed.
+- `total_fulfillment_minutes` (the original Float field) - kept
+  completely unchanged for sum aggregation; a separate display field
+  added instead of altering it.
+- `kds.event`'s own pre-existing `override` event type - kept valid
+  and in active use for every case other than the three specific
+  printing-retry/fallback call sites this item names.
+
+### What Scope Guard stopped
+Item 19's own "System"/"Print Agent" user-label requirement - see that
+item's own section above for the full architectural reasoning. No
+workaround was attempted; the code change for this specific piece is
+deliberately not made pending the client's own decision.
+
+### Files changed
+`models/kds_event.py` (two new event_type values), `models/kds_print_job.py`
+(three call sites updated to the new event types), `models/kds_order.py`
+(`action_print_full_order()`'s own success logging; two new computed
+fields - `total_fulfillment_display`, `current_elapsed_display`),
+`views/kds_order_views.xml` (items 20, 22, 23, 24, 25),
+`static/src/js/kds_order_card.js` (items 27, 28).
+
+### Tests
+20 new regression tests covering every implemented item directly, plus
+explicit non-regression checks for the workflow paths this batch was
+required to leave untouched (the shared `_wf_transition()`'s own
+existing logging, `is_expeditor_ready`'s own real computed value, the
+Float `total_fulfillment_minutes` field's own unchanged value,
+programmatic `kds.order` creation from POS still working with the
+manual "New" button removed).
+
+**Total: 460 tests** (up from 443). No database migration required -
+new fields are computed (backfill automatically on first read/module
+update), no existing field's type or required-ness changed.
+
+**Item 19's own audit-user-labeling half remains open, awaiting the
+client's own decision** on how to resolve the architectural
+constraint described above.
+
+**Batch 4 is not yet closed - awaiting the client's own live test
+round**, matching the same process every prior batch has gone through,
+before Batch 5 (Priority/Urgent/VIP removal) begins.
+
+---
+
 ## v7.23.0 — Master Change Request, Batch 3: Printing UI Cleanup (items 12-18)
 
 **Third batch of the multi-batch Master Change Request.** Batch 2 was

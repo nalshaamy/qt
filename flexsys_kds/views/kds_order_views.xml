@@ -5,7 +5,7 @@
         <field name="name">kds.order.list</field>
         <field name="model">kds.order</field>
         <field name="arch" type="xml">
-            <list string="Orders" decoration-danger="sla_status == 'late'" decoration-warning="sla_status == 'warning'">
+            <list string="Orders" create="false" decoration-danger="sla_status == 'late'" decoration-warning="sla_status == 'warning'">
                 <!-- UI/DATA FIX ("UI / DATA IMPROVEMENT REQUEST - KDS
                      Active Orders & Order History"), item 1: "the
                      first important reference displayed for the
@@ -63,7 +63,7 @@
         <field name="name">kds.order.form</field>
         <field name="model">kds.order</field>
         <field name="arch" type="xml">
-            <form string="FlexSys KDS Order">
+            <form string="FlexSys KDS Order" create="false">
                 <header>
                     <button name="action_accept" type="object" string="Accept" invisible="state != 'new'"/>
                     <button name="action_start_preparing" type="object" string="Start Preparing" invisible="state not in ('new','accepted')"/>
@@ -123,7 +123,28 @@
                             <field name="table_number" readonly="1"/>
                             <field name="station_ids" widget="many2many_tags" readonly="1"/>
                             <field name="sla_status" readonly="1"/>
-                            <field name="is_expeditor_ready" readonly="1"/>
+                            <!-- UI/DATA FIX ("Master Change Request",
+                                 item 22, "Is Expeditor Ready
+                                 Visibility"): "إظهاره فقط عندما يكون
+                                 الطلب/Workflow يستخدم Expeditor/
+                                 Packing." expeditor_enabled (existing,
+                                 unchanged - the same field
+                                 kds_order.py's own real workflow logic
+                                 already depends on to decide whether
+                                 Expeditor gating applies at all,
+                                 confirmed by usage check, e.g.
+                                 action_ready()'s own line just below
+                                 this one) is reused here purely as an
+                                 `invisible` condition - a UI-only
+                                 change; is_expeditor_ready's own
+                                 computed VALUE and every place the
+                                 workflow itself reads it are completely
+                                 untouched. When no station anywhere in
+                                 the company is flagged is_expeditor,
+                                 this field is meaningless noise on
+                                 every single order's own form - hidden
+                                 rather than always shown regardless. -->
+                            <field name="is_expeditor_ready" readonly="1" invisible="not expeditor_enabled"/>
                         </group>
                     </group>
                     <notebook>
@@ -177,9 +198,48 @@
                                 <field name="accepted_time" readonly="1"/>
                                 <field name="preparation_start_time" readonly="1"/>
                                 <field name="ready_time" readonly="1"/>
-                                <field name="packing_time" readonly="1"/>
+                                <!-- UI/DATA FIX ("Master Change
+                                     Request", item 25, "Packing Time
+                                     Visibility"): "يظهر فقط عندما يكون
+                                     Packing / Expeditor مستخدمًا فعليًا
+                                     في Workflow." Same expeditor_enabled
+                                     condition as item 22 above -
+                                     packing_time is meaningless (always
+                                     blank) for any order at a company
+                                     with no Expeditor/Packing station
+                                     configured at all. -->
+                                <field name="packing_time" readonly="1" invisible="not expeditor_enabled"/>
                                 <field name="completion_time" readonly="1"/>
-                                <field name="total_fulfillment_minutes" readonly="1"/>
+                                <!-- UI/DATA FIX ("Master Change
+                                     Request", item 24, "Timing UI"):
+                                     "Total Fulfillment Minutes -> Total
+                                     Fulfillment Time (min)" - label
+                                     only, the field itself
+                                     (total_fulfillment_minutes) and its
+                                     own stored Float value are
+                                     completely unchanged (still used
+                                     as-is for sum aggregation in the
+                                     list view and Analytics - a display
+                                     string here would break that
+                                     everywhere else it's genuinely
+                                     needed as a real number). "بالنسبة
+                                     للطلب غير المكتمل: لا تعرض 0.00
+                                     كأنه زمن نهائي. اعرض '-' / empty
+                                     حتى اكتمال الطلب." - solved with a
+                                     new, separate, purely-display Char
+                                     field (below) instead of touching
+                                     this one's own type/value - see
+                                     that field's own docstring in
+                                     kds_order.py for why. -->
+                                <field name="total_fulfillment_display" string="Total Fulfillment Time (min)" readonly="1"/>
+                                <!-- UI/DATA FIX ("Master Change
+                                     Request", item 24): "إضافة: Current
+                                     Elapsed Time للطلبات النشطة فقط." -
+                                     new field, active orders only (see
+                                     its own docstring in kds_order.py
+                                     for the exact "active" definition
+                                     used and why this is unstored). -->
+                                <field name="current_elapsed_display" string="Current Elapsed Time" readonly="1" invisible="state in ('completed', 'cancelled')"/>
                             </group>
                         </page>
                         <page string="Expeditor / Packing" invisible="not expeditor_enabled">
@@ -228,8 +288,25 @@
                                 </list>
                             </field>
                         </page>
-                        <page string="Notes">
-                            <field name="note"/>
+                        <!-- UI/DATA FIX ("Master Change Request", item
+                             23, "Notes"): clearer title + help text -
+                             confirmed by usage check that this
+                             order-level `note` field (distinct from
+                             each line's own product-level Modifiers/
+                             Notes, unaffected) is never included in
+                             any print payload or the public kiosk's
+                             own display (models/kds_print_job.py's own
+                             _print_payload(), controllers/kds_kiosk.py's
+                             own line rendering both only ever surface
+                             each LINE's own note, never this
+                             order-level one) - "يجب ألا تظهر هذه
+                             الملاحظات للعميل أو في الإيصال" was already
+                             true before this fix; nothing here changes
+                             that, only the field's own on-screen
+                             label/help text. -->
+                        <page string="Internal Notes">
+                            <field name="note" string="Internal Notes"
+                                   help="Internal operational notes for this order."/>
                         </page>
                     </notebook>
                 </sheet>
@@ -266,13 +343,29 @@
         <field name="name">Active Orders</field>
         <field name="res_model">kds.order</field>
         <field name="view_mode">list,form</field>
-        <field name="context">{'search_default_active_orders': 1}</field>
+        <!-- UI/DATA FIX ("Master Change Request", item 20, "Remove
+             New"): "KDS Orders يجب أن تنشأ من المصادر المعتمدة، وليس
+             يدويًا من Backend." Confirmed live: neither this action
+             nor the list/form views it opens had create="false" set -
+             the generic "New" button was fully functional here,
+             letting anyone create a kds.order with no originating POS
+             order/routing/lines at all - a record this module's own
+             engine never produces on its own and isn't designed to
+             handle. Set both here (action-level, defense in depth) and
+             on the two views themselves (kds_order_views.xml's own
+             list/form records) - matching the same pattern already
+             used for kds.print.job and kds.printer elsewhere in this
+             module. -->
+        <field name="context">{'search_default_active_orders': 1, 'create': False}</field>
     </record>
 
     <record id="action_kds_order_history" model="ir.actions.act_window">
         <field name="name">Order History</field>
         <field name="res_model">kds.order</field>
         <field name="view_mode">list,form</field>
+        <!-- UI/DATA FIX ("Master Change Request", item 20): same fix
+             as action_kds_order_active above. -->
+        <field name="context">{'create': False}</field>
     </record>
 
     <record id="action_kds_order_analytics" model="ir.actions.act_window">

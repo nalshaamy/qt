@@ -357,8 +357,15 @@ class KdsPrintJob(models.Model):
             if job.retry_count < MAX_AUTO_RETRY:
                 # Retry on the same printer first.
                 job.write({'status': 'pending', 'retry_count': job.retry_count + 1})
+                # UI/DATA FIX ("Master Change Request", item 19,
+                # "Audit Log Event Types"): 'print_retry' replaces the
+                # generic 'override' here - a technical retry of the
+                # SAME job on the SAME printer, distinct from a genuine
+                # manager override. No change to the retry logic itself
+                # - only which event_type value this specific write
+                # records.
                 self.env['kds.event'].log(
-                    job.order_id, event_type='override', station=job.station_id,
+                    job.order_id, event_type='print_retry', station=job.station_id,
                     note=_("Print job retry %(n)d/%(max)d after failure: %(error)s")
                          % {'n': job.retry_count, 'max': MAX_AUTO_RETRY, 'error': error_msg})
                 continue
@@ -375,13 +382,27 @@ class KdsPrintJob(models.Model):
                     'user_id': job.user_id.id,
                 })
                 job.write({'status': 'failed', 'escalated': True})
+                # UI/DATA FIX ("Master Change Request", item 19):
+                # 'printer_fallback' replaces 'override' - a genuine
+                # escalation to the station's own backup printer, the
+                # exact scenario the request names by example.
                 self.env['kds.event'].log(
-                    job.order_id, event_type='override', station=job.station_id,
+                    job.order_id, event_type='printer_fallback', station=job.station_id,
                     note=_("Fallback to backup printer '%s' after repeated failures") % backup.name)
             else:
                 job.write({'status': 'failed', 'escalated': True})
+                # UI/DATA FIX ("Master Change Request", item 19): also
+                # 'printer_fallback' - this is the SAME fallback attempt
+                # as above, just one that couldn't complete because no
+                # backup printer was actually configured for this
+                # station; grouping it under the same, more specific
+                # event type (rather than the generic 'override') keeps
+                # every "the engine tried to escalate to a backup
+                # printer" event queryable together, succeeded or not -
+                # the note text itself still says plainly which
+                # happened.
                 self.env['kds.event'].log(
-                    job.order_id, event_type='override', station=job.station_id,
+                    job.order_id, event_type='printer_fallback', station=job.station_id,
                     note=_("MANAGER ALERT: print job failed with no backup printer "
                            "available (%s)") % error_msg)
 

@@ -184,6 +184,37 @@ class KdsOrder(models.Model):
     # completion timeout may hide it").
     pos_closed_at = fields.Datetime()
     total_fulfillment_minutes = fields.Float(compute='_compute_total_fulfillment', store=True)
+    # UI/DATA FIX ("Master Change Request", item 24, "Timing UI"):
+    # "بالنسبة للطلب غير المكتمل: لا تعرض 0.00 كأنه زمن نهائي. اعرض
+    # '-' / empty حتى اكتمال الطلب." total_fulfillment_minutes above
+    # (a Float, stored, unchanged) always resolves to 0.0 for an
+    # incomplete order (no completion_time yet) - genuinely correct as
+    # a NUMBER for sum aggregation (list view/Analytics both rely on
+    # this exact behavior, confirmed by usage check), but misleading as
+    # a DISPLAY value, indistinguishable from "this order was somehow
+    # fulfilled in zero minutes." A separate, purely-display Char field
+    # instead of changing the Float field's own type/value (which would
+    # break the sum aggregation everywhere else it's genuinely relied
+    # on) - '-' when there's no real elapsed time to report yet, the
+    # real formatted value once there is. Not stored: cheap to compute
+    # from a field on the same record, no reason to persist and keep in
+    # sync with every write to total_fulfillment_minutes.
+    total_fulfillment_display = fields.Char(compute='_compute_total_fulfillment_display')
+    # UI/DATA FIX ("Master Change Request", item 24): "إضافة: Current
+    # Elapsed Time للطلبات النشطة فقط." A genuinely new piece of
+    # information - nothing before this fix showed "how long has this
+    # STILL-ACTIVE order been running so far" anywhere on this form
+    # (only the final total, once done). Deliberately unstored:
+    # depends on fields.Datetime.now() at read time, not a value that
+    # can be meaningfully cached/persisted - correctly recomputed fresh
+    # every time this form is opened/refreshed, exactly like the KDS
+    # Screen's own live elapsed-time display already works
+    # (kds_order_card.js's own elapsedLabel, unrelated code but the
+    # same underlying idea). "Active" here means state not in
+    # ('completed', 'cancelled') - the same two terminal states the
+    # order's own workflow already treats as final everywhere else in
+    # this model.
+    current_elapsed_display = fields.Char(compute='_compute_current_elapsed_display')
 
     sla_status = fields.Selection([
         ('normal', 'Normal'),
@@ -330,6 +361,30 @@ class KdsOrder(models.Model):
                 order.total_fulfillment_minutes = round(delta.total_seconds() / 60.0, 1)
             else:
                 order.total_fulfillment_minutes = 0.0
+
+    @api.depends('total_fulfillment_minutes', 'completion_time')
+    def _compute_total_fulfillment_display(self):
+        for order in self:
+            if order.completion_time:
+                order.total_fulfillment_display = '%.1f' % order.total_fulfillment_minutes
+            else:
+                order.total_fulfillment_display = '-'
+
+    @api.depends('created_time', 'state')
+    def _compute_current_elapsed_display(self):
+        for order in self:
+            if not order.created_time or order.state in ('completed', 'cancelled'):
+                order.current_elapsed_display = False
+                continue
+            diff_minutes = int(
+                (fields.Datetime.now() - order.created_time).total_seconds() // 60)
+            diff_minutes = max(diff_minutes, 0)
+            hours, minutes = divmod(diff_minutes, 60)
+            # Matches static/src/js/kds_order_card.js's own elapsedLabel
+            # exactly (item 27's own unified format) - "Xh Ym" once past
+            # 60 minutes, else "Ym".
+            order.current_elapsed_display = (
+                '%dh %dm' % (hours, minutes) if hours > 0 else '%dm' % minutes)
 
     @api.depends('line_ids.sla_status')
     def _compute_sla_status(self):
@@ -948,6 +1003,17 @@ class KdsOrder(models.Model):
         station with no printer is skipped, with a clear audit-log
         event explaining why, rather than either creating a broken job
         or aborting the whole action.
+
+        UI/DATA FIX ("Master Change Request", item 21, "Manager
+        Actions"): "تأكد أن Manager Overrides تسجل في Audit Log."
+        Confirmed live: this action - a manual, explicit staff/manager
+        trigger, exactly what "Manager Actions" refers to - only ever
+        logged the FAILURE path (no printer configured); a genuinely
+        successful manual print request left no audit trail at all. Now
+        logs 'override' on success too, per-station, alongside the
+        existing failure log - both paths are now covered, matching
+        the same event_type this module already uses for other manual
+        staff overrides elsewhere.
         """
         self.ensure_one()
         self._kds_check_action('print_full_order', bypass=bypass_check)
@@ -968,3 +1034,7 @@ class KdsOrder(models.Model):
                 'job_type': 'manual',
                 'scope': 'full_order',
             })
+            self.env['kds.event'].log(
+                self, event_type='override', station=station,
+                note=_("Manual print of full order requested for station '%s'.") % station.name
+            )

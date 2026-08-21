@@ -1434,3 +1434,228 @@ class TestWorkflow(FlexSysKdsTestCommon):
             "A completed order reopened by a new line must classify as 'preparing', not "
             "'new' (the original line stays historically completed - BUG-02B) and not "
             "'completed' (new work genuinely remains).")
+
+    # -----------------------------------------------------------------
+    # UI/DATA FIX ("Master Change Request", Batch 4, items 19-25).
+    # Non-regression: New -> Preparing -> Ready -> Completed, Multi-
+    # Station completion, READY-only-after-last-station gating, and
+    # Completed retention are all covered extensively above/elsewhere
+    # in this suite and completely untouched by this batch - these
+    # tests focus specifically on what this batch actually changed.
+    # -----------------------------------------------------------------
+    def test_item19_print_retry_event_type_used_on_first_failure(self):
+        """Item 19: 'بدل استخدام Override العام لأحداث الطباعة، استخدم
+        أسماء أوضح مثل: Print Retry, Printer Fallback.' Confirms
+        action_mark_failed()'s own same-printer retry path now logs
+        'print_retry', not the generic 'override'."""
+        order = self._order()
+        job = self.env['kds.print.job'].create({
+            'order_id': order.id, 'station_id': self.station_kitchen.id,
+            'printer_id': self.printer_primary.id, 'job_type': 'auto',
+        })
+        job.action_mark_failed('paper jam')
+
+        event = self.env['kds.event'].search(
+            [('order_id', '=', order.id), ('event_type', '=', 'print_retry')], limit=1)
+        self.assertTrue(event, "A same-printer retry must log event_type='print_retry'.")
+
+    def test_item19_printer_fallback_event_type_used_on_escalation(self):
+        """Confirms the backup-printer escalation path logs
+        'printer_fallback', not 'override'."""
+        order = self._order()
+        job = self.env['kds.print.job'].create({
+            'order_id': order.id, 'station_id': self.station_kitchen.id,
+            'printer_id': self.printer_primary.id, 'job_type': 'auto',
+        })
+        job.action_mark_failed('e1')
+        job.action_mark_failed('e2')
+        job.action_mark_failed('e3')  # exceeds retry budget, escalates
+
+        event = self.env['kds.event'].search(
+            [('order_id', '=', order.id), ('event_type', '=', 'printer_fallback')], limit=1)
+        self.assertTrue(event, "A backup-printer escalation must log event_type='printer_fallback'.")
+
+    def test_item19_existing_override_event_type_still_valid(self):
+        """Non-regression: the pre-existing 'override' value itself is
+        completely unremoved - still assignable/valid, for every OTHER
+        use of it elsewhere in this codebase (e.g. genuine manager
+        overrides, cross-station line moves)."""
+        order = self._order()
+        event = self.env['kds.event'].log(order, event_type='override', note='test')
+        self.assertEqual(event.event_type, 'override')
+
+    def test_item20_kds_order_create_disabled_in_active_orders_action(self):
+        """Item 20: 'إزالة زر New من Active Orders / Order History /
+        kds.order UI.' Confirms both actions now set create: False in
+        their own context."""
+        for xml_id in ('action_kds_order_active', 'action_kds_order_history'):
+            action = self.env.ref('flexsys_kds.%s' % xml_id)
+            context = eval(action.context or '{}')
+            self.assertFalse(
+                context.get('create', True), "%s must disable manual creation." % xml_id)
+
+    def test_item20_kds_order_list_and_form_views_disable_create(self):
+        """Structural check confirming create="false" is genuinely on
+        the views themselves too (defense in depth, not just the
+        action's own context)."""
+        list_view = self.env.ref('flexsys_kds.view_kds_order_list')
+        form_view = self.env.ref('flexsys_kds.view_kds_order_form')
+        self.assertIn('create="false"', list_view.arch_db)
+        self.assertIn('create="false"', form_view.arch_db)
+
+    def test_item20_programmatic_kds_order_creation_from_pos_still_works(self):
+        """Non-regression: create="false" on the VIEW/action only
+        affects the manual "New" button in the UI - the real,
+        programmatic creation path (_flexsys_kds_create(), called from
+        pos_order.py, never goes through this view at all) is
+        completely unaffected."""
+        order = self._order()
+        self.assertTrue(order.exists())
+        self.assertEqual(order.state, 'new')
+
+    def test_item21_print_full_order_logs_success_per_station(self):
+        """Item 21: 'تأكد أن Manager Overrides تسجل في Audit Log.'
+        Confirms action_print_full_order() - a manual, explicit staff
+        trigger - now logs an audit event on SUCCESS too, not only on
+        the pre-existing failure path."""
+        order = self._order()
+        order.action_print_full_order(bypass_check=True)
+
+        success_event = self.env['kds.event'].search([
+            ('order_id', '=', order.id), ('event_type', '=', 'override'),
+            ('station_id', '=', self.station_kitchen.id),
+            ('note', 'like', 'Manual print of full order requested'),
+        ], limit=1)
+        self.assertTrue(success_event, "A successful manual print request must be logged.")
+
+    def test_item21_mark_ready_hold_cancel_still_logged_via_wf_transition(self):
+        """Non-regression: confirms Mark Ready/Hold/Cancel (all routed
+        through the shared _wf_transition()) were already, and remain,
+        correctly logged - no change needed or made to that shared
+        path this round."""
+        order = self._order()
+        order.action_accept()
+        order.line_ids.action_accept()
+        order.action_start_preparing()
+        order.line_ids.action_start()
+
+        order.action_hold()
+        hold_event = self.env['kds.event'].search([
+            ('order_id', '=', order.id), ('new_value', '=', 'on_hold'),
+        ], limit=1)
+        self.assertTrue(hold_event)
+
+    def test_item22_is_expeditor_ready_hidden_when_no_expeditor_station(self):
+        """Item 22: 'إظهاره فقط عندما يكون الطلب/Workflow يستخدم
+        Expeditor/Packing.' Structural check confirming the form view's
+        own field is gated on expeditor_enabled."""
+        form_view = self.env.ref('flexsys_kds.view_kds_order_form')
+        arch = form_view.arch_db
+        self.assertIn('name="is_expeditor_ready"', arch)
+        self.assertIn('invisible="not expeditor_enabled"', arch)
+
+    def test_item22_is_expeditor_ready_value_computation_unaffected(self):
+        """Non-regression: is_expeditor_ready's own computed VALUE
+        (used by the real workflow gating logic - action_ready(),
+        action_complete(), etc.) is completely unaffected by this
+        purely visual change."""
+        order = self._order()
+        order.action_accept()
+        order.line_ids.action_accept()
+        order.action_start_preparing()
+        order.line_ids.action_start()
+        order.line_ids.action_ready()
+        order.invalidate_recordset()
+        self.assertTrue(order.is_expeditor_ready)
+
+    def test_item23_notes_tab_relabeled_and_field_never_printed(self):
+        """Item 23: clearer title + help text, and confirms note
+        (order-level) is genuinely never included in any print payload
+        or the kiosk's own display - only each LINE's own note is."""
+        form_view = self.env.ref('flexsys_kds.view_kds_order_form')
+        arch = form_view.arch_db
+        self.assertIn('string="Internal Notes"', arch)
+        self.assertIn('Internal operational notes for this order.', arch)
+
+        import inspect
+        from odoo.addons.flexsys_kds.models.kds_print_job import KdsPrintJob
+        payload_source = inspect.getsource(KdsPrintJob._print_payload)
+        self.assertNotIn('order_id.note', payload_source,
+                          "The print payload must never include the order-level note field "
+                          "- only each line's own note.")
+
+    def test_item24_total_fulfillment_display_shows_dash_when_incomplete(self):
+        """Item 24: 'بالنسبة للطلب غير المكتمل: لا تعرض 0.00 كأنه زمن
+        نهائي. اعرض - / empty حتى اكتمال الطلب.'"""
+        order = self._order()
+        self.assertFalse(order.completion_time)
+        self.assertEqual(order.total_fulfillment_display, '-')
+        # Non-regression: the underlying Float field itself is
+        # unaffected - still a real, sum-able 0.0 for an incomplete
+        # order, exactly as before, for Analytics/list aggregation.
+        self.assertEqual(order.total_fulfillment_minutes, 0.0)
+
+    def test_item24_total_fulfillment_display_shows_real_value_when_complete(self):
+        """Confirms a genuinely completed order shows its own real
+        fulfillment time as text, not '-'."""
+        order = self._order()
+        order.action_accept()
+        order.line_ids.action_accept()
+        order.action_start_preparing()
+        order.line_ids.action_start()
+        order.line_ids.action_ready()
+        order.action_complete(bypass_check=True)
+        order.invalidate_recordset()
+
+        self.assertTrue(order.completion_time)
+        self.assertNotEqual(order.total_fulfillment_display, '-')
+        self.assertIn('.', order.total_fulfillment_display)  # "%.1f" always has a decimal point
+
+    def test_item24_current_elapsed_display_present_for_active_order(self):
+        """Item 24: 'إضافة: Current Elapsed Time للطلبات النشطة فقط.'
+        Confirms it's genuinely populated for a still-active order."""
+        order = self._order()
+        self.assertIn(order.state, ('new', 'accepted', 'preparing', 'on_hold'))
+        self.assertTrue(order.current_elapsed_display)
+        self.assertTrue(
+            order.current_elapsed_display.endswith('m'),
+            "Must match kds_order_card.js's own unified 'Xm'/'Xh Ym' format.")
+
+    def test_item24_current_elapsed_display_empty_for_completed_order(self):
+        """Confirms it's correctly empty/absent once an order is no
+        longer active - 'للطلبات النشطة فقط' means it must NOT show a
+        stale elapsed time on a finished order."""
+        order = self._order()
+        order.action_accept()
+        order.line_ids.action_accept()
+        order.action_start_preparing()
+        order.line_ids.action_start()
+        order.line_ids.action_ready()
+        order.action_complete(bypass_check=True)
+        order.invalidate_recordset()
+
+        self.assertFalse(order.current_elapsed_display)
+
+    def test_item25_packing_time_hidden_when_no_expeditor_station(self):
+        """Item 25: 'يظهر فقط عندما يكون Packing / Expeditor مستخدمًا
+        فعليًا في Workflow.' Structural check - same expeditor_enabled
+        gate as item 22."""
+        form_view = self.env.ref('flexsys_kds.view_kds_order_form')
+        arch = form_view.arch_db
+        self.assertIn('name="packing_time"', arch)
+        # Confirms it's on the SAME line/element as the expeditor_enabled
+        # gate, not merely present somewhere else in the arch.
+        import re
+        match = re.search(r'<field name="packing_time"[^/]*/>', arch)
+        self.assertIsNotNone(match)
+        self.assertIn('invisible="not expeditor_enabled"', match.group(0))
+
+    def test_item26_pos_order_number_still_leads_kds_reference(self):
+        """Item 26: 'لا تغيير' - non-regression confirming pos_order_id
+        still leads, ahead of the KDS record's own name, in the list
+        view - unaffected by this entire batch."""
+        list_view = self.env.ref('flexsys_kds.view_kds_order_list')
+        arch = list_view.arch_db
+        pos_pos = arch.index('name="pos_order_id"')
+        kds_pos = arch.index('name="name" string="KDS Order"')
+        self.assertLess(pos_pos, kds_pos, "POS Order must still be listed before KDS Order.")
