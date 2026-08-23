@@ -6295,3 +6295,260 @@ class TestPosSync(FlexSysKdsTestCommon):
             order.kds_order_id.id, kds_order_id,
             "The entire increase-then-decrease sequence must stay on the exact same "
             "kds.order - never spawning a second/duplicate order.")
+
+    # -----------------------------------------------------------------
+    # NEW FEATURE ("New Workflow Integrity Issue - Unsent Removal Can
+    # Leave POS and KDS Inconsistent"), confirmed live with POS order
+    # 2640-3-000005: a quantity decrease (including all the way to 0)
+    # on an already-Ready line, made under 'send' trigger mode without
+    # pressing Send, left POS and KDS showing genuinely different
+    # effective quantities indefinitely if the cashier simply navigated
+    # away. The client's own explicit, deliberate choice, after this
+    # report: NOT frontend navigation blocking - "We do not want to
+    # block or warn the cashier, and we do not want to change the
+    # normal POS workflow" - but immediate backend reconciliation
+    # specifically for quantity DECREASES, regardless of the configured
+    # kds_send_trigger, while every other change (increases, new
+    # products, notes) stays fully deferred to the next genuine
+    # Send/Payment exactly as before. Implemented via
+    # pos_order_line.py's own write() override, calling
+    # _flexsys_kds_diff_lines(decrease_only=True) directly - bypassing
+    # _flexsys_kds_sync()'s own trigger gate, but ONLY for genuinely
+    # decreased lines.
+    # -----------------------------------------------------------------
+    def _send_order(self, product_qty_list):
+        """Builds and sends a fresh order under 'send' trigger mode -
+        the exact configuration the client's own report reproduced the
+        bug under, and the one every test below needs to isolate the
+        new decrease-only immediate-sync feature from the ordinary
+        'payment' trigger's own already-different sync timing."""
+        self.pos_config.kds_send_trigger = 'send'
+        line_vals = []
+        for product, qty in product_qty_list:
+            line_vals.append((0, 0, {
+                'product_id': product.id, 'qty': qty,
+                'price_unit': product.list_price or 10.0,
+                'price_subtotal': (product.list_price or 10.0) * qty,
+                'price_subtotal_incl': (product.list_price or 10.0) * qty,
+            }))
+        order = self.env['pos.order'].create({
+            'session_id': self.pos_session.id,
+            'company_id': self.company.id,
+            'lines': line_vals,
+            'amount_tax': 0.0,
+            'amount_total': sum((p.list_price or 10.0) * q for p, q in product_qty_list),
+            'amount_paid': 0.0, 'amount_return': 0.0,
+            'state': 'draft',
+        })
+        order.flexsys_kds_register_send()
+        return order
+
+    def test_unsent_removal_1_to_0_after_ready_syncs_immediately_no_send(self):
+        """The exact client-reported reproduction: 1 -> Ready -> (POS
+        reduces qty to 0, Send is NEVER pressed again, no navigation
+        simulated - the write() itself is the only trigger). Required:
+        KDS must reflect the cancellation immediately, with no further
+        action."""
+        order = self._send_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+        self.assertEqual(line.state, 'ready')
+
+        # The reported reproduction: quantity -> 0, Send NEVER pressed
+        # again.
+        order.lines.write({'qty': 0})
+
+        line.invalidate_recordset()
+        self.assertEqual(
+            line.state, 'cancelled',
+            "Required: the decrease to zero must be reflected in KDS immediately, with "
+            "no explicit Send/navigation-triggering action needed at all - closing the "
+            "exact gap reported (POS showed 0/Ongoing while KDS still showed 1x Ready).")
+
+    def test_unsent_removal_partial_decrease_after_ready_syncs_immediately(self):
+        """Required: partial decreases (not just all the way to 0) must
+        also sync immediately - the client's own explicit examples
+        (3->2, 3->1)."""
+        order = self._send_order([(self.product_burger, 3)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+
+        order.lines.write({'qty': 2})  # no Send pressed
+
+        line.invalidate_recordset()
+        self.assertEqual(
+            line.state, 'ready',
+            "Reduced in place, not reopened - matching the earlier decrease-after-Ready fix.")
+        self.assertEqual(line.qty, 2, "Must reflect the new POS quantity immediately.")
+        self.assertEqual(line.qty_delta, -1)
+
+    def test_unsent_removal_increase_still_deferred_to_next_send(self):
+        """Required non-regression: 'every OTHER change (increases, new
+        products) stays fully deferred.' Confirms an INCREASE, unlike a
+        decrease, is genuinely NOT synced immediately - the existing
+        'send' trigger deferral behavior for increases is completely
+        unaffected by this feature."""
+        order = self._send_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+        line_count_before = len(kds_order.line_ids)
+
+        order.lines.write({'qty': 3})  # increase, no Send pressed
+
+        line.invalidate_recordset()
+        kds_order.invalidate_recordset()
+        self.assertEqual(
+            line.qty, 1,
+            "An increase must NOT sync immediately - the original line's own quantity "
+            "stays exactly as last sent to the kitchen until the next genuine Send.")
+        self.assertEqual(
+            len(kds_order.line_ids), line_count_before,
+            "No delta line should be created yet for an increase without an explicit Send.")
+
+        # Confirms it DOES still apply correctly once genuinely Sent -
+        # the deferred increase isn't lost, only delayed.
+        order.flexsys_kds_register_send()
+        kds_order.invalidate_recordset()
+        delta_line = kds_order.line_ids - line
+        self.assertEqual(delta_line.qty, 2, "The deferred increase applies correctly on the "
+                                             "next genuine Send.")
+
+    def test_unsent_removal_unrelated_added_line_not_immediately_synced(self):
+        """Required regression test, and the specific defect found and
+        fixed while reviewing this feature's own decrease_only gates: a
+        genuinely NEW product added to the same order (not yet sent at
+        all) must NOT be immediately synced just because a DIFFERENT
+        line on the same order happened to decrease - additions stay
+        deferred to the next genuine Send, exactly as before."""
+        order = self._send_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        burger_line = kds_order.line_ids
+        burger_line.action_accept()
+        burger_line.action_start()
+        burger_line.action_ready()
+
+        # Add a genuinely new product (never sent) alongside the decrease.
+        self.env['pos.order.line'].create({
+            'order_id': order.id, 'product_id': self.product_cappuccino.id,
+            'qty': 1, 'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
+        })
+        # The decrease that triggers the immediate sync path.
+        order.lines.filtered(lambda l: l.product_id == self.product_burger).write({'qty': 0})
+
+        kds_order.invalidate_recordset()
+        cappuccino_kline = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        self.assertFalse(
+            cappuccino_kline,
+            "The unrelated new product must NOT be immediately added to KDS just because "
+            "another line on the same order genuinely decreased - additions stay deferred "
+            "to the next genuine Send, exactly as before this feature.")
+        burger_line.invalidate_recordset()
+        self.assertEqual(burger_line.state, 'cancelled', "The genuine decrease itself still "
+                                                           "correctly syncs immediately.")
+
+    def test_unsent_removal_unrelated_unlinked_line_not_immediately_cancelled(self):
+        """Required regression test, and the SECOND defect found and
+        fixed while reviewing this feature's own decrease_only gates
+        (the pending_removal sweep, and the current_ids-missing sweep,
+        both had to be gated behind `not decrease_only`): a DIFFERENT
+        line on the same order, deleted outright (unlink()) but still
+        correctly awaiting the next genuine Send, must NOT be
+        immediately cancelled just because ANOTHER line's own quantity
+        genuinely decreased - directly matching the deliberate decision
+        already documented in pos_order_line.py's own unlink() not to
+        extend immediate sync to line deletion."""
+        order = self._send_order([(self.product_burger, 1), (self.product_cappuccino, 1)])
+        kds_order = order.kds_order_id
+        burger_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_burger)
+        cappuccino_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        burger_line.action_accept()
+        burger_line.action_start()
+        burger_line.action_ready()
+
+        # Delete the cappuccino line outright (unlink) - awaiting the
+        # next genuine Send, per the existing, deliberate design.
+        order.lines.filtered(lambda l: l.product_id == self.product_cappuccino).unlink()
+        cappuccino_line.invalidate_recordset()
+        self.assertNotEqual(
+            cappuccino_line.state, 'cancelled',
+            "Immediately after unlink(), with no Send yet, the line must still show "
+            "completely unchanged - this is the existing, deliberate contract.")
+
+        # Now genuinely decrease the UNRELATED burger line - triggers
+        # the new immediate decrease-only sync path.
+        order.lines.filtered(lambda l: l.product_id == self.product_burger).write({'qty': 0})
+
+        cappuccino_line.invalidate_recordset()
+        self.assertNotEqual(
+            cappuccino_line.state, 'cancelled',
+            "The unrelated deleted line must still NOT be immediately cancelled just "
+            "because a different line's own quantity genuinely decreased - only a "
+            "genuine Send (or the deletion's own next real sync) may process it, "
+            "exactly as pos_order_line.py's own unlink() deliberately decided.")
+        burger_line.invalidate_recordset()
+        self.assertEqual(burger_line.state, 'cancelled', "The genuine decrease itself still "
+                                                           "correctly syncs immediately.")
+
+        # Confirms the deleted line is still correctly processed on the
+        # NEXT genuine Send - only delayed, never lost.
+        order.flexsys_kds_register_send()
+        cappuccino_line.invalidate_recordset()
+        self.assertEqual(cappuccino_line.state, 'cancelled')
+
+    def test_unsent_removal_decrease_on_never_sent_order_defers_normally(self):
+        """Confirms the feature correctly does nothing for an order
+        that has never been sent to KDS at all (no kds_order_id yet) -
+        'already-sent item' (the report's own words) does not apply;
+        the order's own eventual first Send handles everything
+        normally, exactly as before this feature existed."""
+        self.pos_config.kds_send_trigger = 'send'
+        order = self.env['pos.order'].create({
+            'session_id': self.pos_session.id, 'company_id': self.company.id,
+            'lines': [(0, 0, {
+                'product_id': self.product_burger.id, 'qty': 3,
+                'price_unit': 10.0, 'price_subtotal': 30.0, 'price_subtotal_incl': 30.0,
+            })],
+            'amount_tax': 0.0, 'amount_total': 30.0, 'amount_paid': 0.0, 'amount_return': 0.0,
+            'state': 'draft',
+        })
+        self.assertFalse(order.kds_order_id, "Never sent yet - no kds_order_id.")
+
+        order.lines.write({'qty': 1})  # a decrease, but on a never-sent order
+
+        order.invalidate_recordset()
+        self.assertFalse(
+            order.kds_order_id,
+            "A decrease on an order that was never sent to KDS at all must not itself "
+            "trigger any KDS sync - there is nothing to reconcile yet.")
+
+    def test_unsent_removal_decrease_under_payment_trigger_also_immediate(self):
+        """Confirms the same immediate decrease-only sync applies
+        equally under 'payment' trigger mode - the reported gap is not
+        specific to 'send' mode; a paid order can still be actively
+        edited while its own POS order remains 'draft'/still open at
+        the register (e.g. a dine-in table), and a decrease there must
+        be reflected immediately too, exactly as under 'send' mode."""
+        order = self._create_pos_order([(self.product_burger, 1)])  # default 'payment' trigger
+        kds_order = order.kds_order_id
+        self.assertTrue(kds_order)
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+
+        order.lines.write({'qty': 0})
+
+        line.invalidate_recordset()
+        self.assertEqual(
+            line.state, 'cancelled',
+            "The same immediate reconciliation must apply under 'payment' trigger mode too.")

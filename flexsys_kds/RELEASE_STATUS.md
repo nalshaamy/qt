@@ -1,41 +1,43 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.25.3**
+**Version: 19.0.7.26.0**
 **Status as of this document: code-complete, including everything
-through v7.25.2 (see CHANGELOG.md for the full history), plus a real
-fix - unlike v7.25.2's own verification-only round, this bug report
-described a genuinely new, MULTI-SIBLING scenario (a prior increase-
-after-Ready had already created a separate delta line, and THAT delta
-line had ALSO since reached ready/completed) that no earlier fix had
-covered. Two real defects were found and fixed together in
-`_flexsys_kds_diff_lines()`'s own ready/completed branch: (1) the
-`existing` dict can only ever hold ONE `kds.order.line` per POS line
-(the most recently created sibling), so change detection compared only
-that one sibling's own qty against the new POS total, missing the
-reported decrease entirely when the numbers coincidentally matched;
-(2) even when detected, the write itself set the FULL new POS total
-directly onto just that one sibling, silently inflating the true
-combined total instead of correctly reducing it. Fixed by resolving
-the TRUE combined historical quantity across every non-cancelled ready/
-completed sibling sharing the same `pos_order_line_id`, using that for
-both detection and the real delta, and distributing a decrease from the
-most recently created sibling backward to the oldest (never touching
-the original portion unless genuinely required), cancelling a sibling
-outright if reduced to zero. The single-sibling case (every scenario
-every earlier fix already covers) is mathematically identical to
-before - confirmed directly, and by every existing test continuing to
-pass unmodified. The client's own separate required `1 -> Ready -> 3 ->
-2 -> 4` case exercises a different, already-correct, completely
-untouched code path. One honest, explicitly out-of-scope edge case
-found while designing the fix and documented rather than silently left
-uncovered: a decrease all the way to zero with multiple historical
-siblings already present is not covered by this round's own four
-required test scenarios. 507 automated tests, all `py_compile`/XML/JS
-checks passing, plus a custom AST-based undefined-name sweep. No
-database migration needed - logic-only change to an existing method.
-**Required before this can be closed**: the client's own live re-test
-of the exact reported reproduction and the three other required
-sequences on this specific version.**
+through v7.25.3 (see CHANGELOG.md for the full history), plus a fix for
+a genuine workflow integrity gap confirmed live on POS order
+2640-3-000005: under `kds_send_trigger='send'`, a quantity decrease
+(including all the way to 0/removal) on an already-Ready line stayed
+purely local to POS until the next explicit Send - a cashier who
+reduced quantity and simply navigated away left POS and KDS showing
+genuinely different effective quantities indefinitely. Presented with
+three implementation approaches of differing risk (frontend navigation
+blocking, a purely visual indicator, or backend-only automatic
+reconciliation), the client explicitly rejected navigation blocking -
+"We do not want to block or warn the cashier, and we do not want to
+change the normal POS workflow" - choosing immediate backend
+reconciliation specifically for quantity decreases, with increases and
+new products staying deferred to the next genuine Send/Payment exactly
+as before. `pos_order_line.py`'s own `write()` now detects a genuine
+decrease on an already-sent line and calls
+`_flexsys_kds_diff_lines(decrease_only=True)` directly, bypassing the
+trigger gate but strictly scoped to lines that genuinely decreased.
+Two additional real defects were found and fixed during final review,
+before this feature had ever been exercised by a test: the
+`pending_removal` sweep and the "line missing from `current_ids`"
+cancellation sweep both ran unconditionally regardless of
+`decrease_only`, meaning the new immediate path would have also
+immediately cancelled an unrelated, separately-deleted line still
+correctly awaiting its own next genuine Send - directly contradicting
+an earlier round's own deliberate design decision on that exact point.
+Both are now correctly gated behind `not decrease_only`. Explicitly not
+extended to line deletion (`unlink()`) itself, per the client's own
+scoped examples (all quantity writes, never product removal via
+deletion). 514 automated tests, all `py_compile`/XML/JS checks passing,
+plus a custom AST-based undefined-name sweep. No database migration
+needed - logic-only changes to two existing methods. **Required before
+this can be closed**: the client's own live re-test of the exact
+reported reproduction, confirming KDS reflects the change immediately
+with POS's own normal, unmodified editing workflow completely
+unaffected.**
 
 This document maps directly to that request's own section structure
 (A/B/C/D) and states, for each item, what's actually been verified and
@@ -2164,6 +2166,57 @@ markers, cancellation audit/history, no duplicate `kds.order` creation
 exact reported reproduction and the three other required sequences on
 this specific version.
 
+✅ **Update**: the client's own live re-test confirmed this exact fix
+working correctly - but surfaced a genuinely different, new workflow-
+integrity issue during further testing. See v7.26.0's own section
+immediately below.
+
+---
+
+## New Workflow Integrity Issue: Unsent Removal Can Leave POS and KDS Inconsistent (v7.26.0)
+**Confirmed live on POS order 2640-3-000005**: under
+`kds_send_trigger='send'`, a quantity decrease (including all the way
+to 0) on an already-Ready line stayed purely local to POS until the
+next explicit Send - a cashier who reduced quantity and simply
+navigated away left POS and KDS showing genuinely different effective
+quantities indefinitely, with the kitchen continuing to operate on
+stale information.
+
+**Client's own explicit design decision**: presented three approaches
+of differing risk (frontend navigation blocking, a visual-only
+indicator, or backend-only automatic reconciliation). The client
+explicitly rejected navigation blocking - "We do not want to block or
+warn the cashier, and we do not want to change the normal POS workflow"
+- choosing immediate backend reconciliation specifically for quantity
+decreases, with increases and new products staying fully deferred to
+the next genuine Send/Payment exactly as before.
+
+**Implementation**: `pos_order_line.py`'s own `write()` now detects a
+genuine decrease on a line whose order already has a `kds_order_id`
+(sent at least once) and calls
+`_flexsys_kds_diff_lines(decrease_only=True)` directly - bypassing the
+trigger gate, but strictly scoped to lines that genuinely decreased.
+
+**Two additional real defects found and fixed during final review**,
+before this feature had ever been exercised by a test: the
+`pending_removal` sweep and the "line missing from `current_ids`"
+sweep both ran unconditionally, regardless of `decrease_only` - meaning
+the new immediate path would have also immediately cancelled an
+unrelated, separately-deleted line still correctly awaiting its own
+next genuine Send, directly contradicting an earlier round's own
+deliberate decision on that exact point. Both now correctly gated
+behind `not decrease_only`.
+
+**Explicitly not extended to `unlink()`** (line deletion) itself, per
+the client's own scoped examples throughout this exchange (all
+quantity writes, never product removal via deletion).
+
+**What still needs a human**: the client's own live re-test of the
+exact reported reproduction (1 -> 0 after Ready, no Send, no
+navigation-blocking dialog) confirming KDS reflects the change
+immediately and POS's own normal editing workflow is completely
+unaffected.
+
 ---
 
 ## What still needs a human
@@ -2427,7 +2480,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 507 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 514 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

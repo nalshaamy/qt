@@ -1,6 +1,6 @@
 {
     'name': 'FlexSys KDS',
-    'version': '19.0.7.25.3',
+    'version': '19.0.7.26.0',
     'category': 'Point of Sale',
     'summary': 'Multi-station Kitchen Display System for Odoo POS',
     'description': """

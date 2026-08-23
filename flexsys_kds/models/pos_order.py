@@ -1666,7 +1666,7 @@ class PosOrder(models.Model):
         if line_vals:
             self.env['kds.order.line'].create(line_vals)
 
-    def _flexsys_kds_diff_lines(self):
+    def _flexsys_kds_diff_lines(self, decrease_only=False):
         """Delta-sync: compare current POS order lines against the
         kds.order.line records already routed to stations, and apply the
         minimal set of changes rather than recreating the ticket.
@@ -1719,15 +1719,36 @@ class PosOrder(models.Model):
         # cancel action, but a POS-driven removal after completion is a
         # different, system-driven scenario where marking it Cancelled
         # is the correct, intended outcome).
-        pending_removed = kds_order.line_ids.filtered('pending_removal')
-        for kline in pending_removed:
-            if kline.state == 'completed':
-                kline._system_cancel_after_completion(
-                    reason=_('Removed from POS order (was already completed)'))
-            elif kline.state != 'cancelled':
-                kline.action_cancel(reason=_('Removed from POS order after send'), bypass_check=True)
-            else:
-                kline.write({'pending_removal': False})
+        # REAL BUG FIX (found during final review of "New Workflow
+        # Integrity Issue - Unsent Removal Can Leave POS and KDS
+        # Inconsistent"'s own decrease_only mechanism, before it had
+        # ever actually been exercised by a test): this pending_removal
+        # sweep used to run unconditionally, before any decrease_only
+        # check - meaning the immediate decrease-only sync path
+        # (pos_order_line.py's own write(), triggered purely by a
+        # QUANTITY decrease on one line) would ALSO immediately cancel
+        # any OTHER, completely unrelated line on the same order that
+        # had been deleted outright (unlink()) but was still correctly
+        # awaiting the next genuine Send/Payment - directly contradicting
+        # the deliberate decision, documented in pos_order_line.py's own
+        # unlink() (see its own detailed comment), NOT to extend
+        # immediate sync to line deletion, only to quantity decreases.
+        # Gated behind `not decrease_only` so the decrease-only path
+        # touches only genuine quantity decreases, exactly as scoped;
+        # the normal, full sync (decrease_only=False, the only way this
+        # method was ever called before this feature existed) still
+        # processes pending removals exactly as before - completely
+        # unaffected.
+        if not decrease_only:
+            pending_removed = kds_order.line_ids.filtered('pending_removal')
+            for kline in pending_removed:
+                if kline.state == 'completed':
+                    kline._system_cancel_after_completion(
+                        reason=_('Removed from POS order (was already completed)'))
+                elif kline.state != 'cancelled':
+                    kline.action_cancel(reason=_('Removed from POS order after send'), bypass_check=True)
+                else:
+                    kline.write({'pending_removal': False})
         # Only match against currently-active kds lines: a pos_order_line_id
         # can end up pointing at more than one kds.order.line over time (a
         # product-change reroute cancels the old one and creates a new one
@@ -2130,6 +2151,29 @@ class PosOrder(models.Model):
                             from .kds_notify import notify_station
                             notify_station(self.env, kline.station_id)
                         continue
+                    # REAL FEATURE ("New Workflow Integrity Issue -
+                    # Unsent Removal Can Leave POS and KDS
+                    # Inconsistent"), the client's own explicit,
+                    # deliberate choice: NOT frontend navigation
+                    # blocking (rejected outright - "We do not want to
+                    # block or warn the cashier, and we do not want to
+                    # change the normal POS workflow") but immediate
+                    # backend reconciliation specifically for
+                    # DECREASES, regardless of the configured
+                    # kds_send_trigger, while every other change
+                    # (increases, new products) stays fully deferred to
+                    # the next genuine Send/Payment exactly as before -
+                    # see pos_order_line.py's own write() override for
+                    # where this immediate path is actually invoked.
+                    # decrease_only=True (that immediate path's own
+                    # signal) reaching this point in the code means the
+                    # branch above already determined qty_increment > 0
+                    # (a genuine increase, not a decrease) - explicitly
+                    # not what this call was meant to process, so it's
+                    # skipped entirely rather than creating a delta line
+                    # a decrease-only sync has no business creating.
+                    if decrease_only:
+                        continue
                     # Quantity genuinely increased: the delta line
                     # represents ONLY the increase (qty_increment), not
                     # the new full total - "1 prepared + 1 needed" stays
@@ -2248,6 +2292,15 @@ class PosOrder(models.Model):
                         lambda l, pid=line.id, kid=kline.id: l.pos_order_line_id.id == pid
                         and l.id != kid and l.state in ('ready', 'completed'))
                     effective_qty = line.qty - sum(historical_siblings.mapped('qty'))
+                    # REAL FEATURE (same client-decided approach as
+                    # branch 1's own gate above): skip entirely unless
+                    # this is a genuine decrease (effective_qty <
+                    # kline.qty) - an increase or no-op reaching this
+                    # exact branch under decrease_only=True is left
+                    # completely untouched here, deferred to the next
+                    # genuine Send/Payment exactly as before.
+                    if decrease_only and effective_qty >= kline.qty:
+                        continue
                     # REAL BUG FIX ("BUG-11 [fourth report] - Sequential
                     # qty_delta baseline is still wrong at runtime"),
                     # confirmed STILL reproducing live even after the
@@ -2286,6 +2339,14 @@ class PosOrder(models.Model):
                         kds_order, event_type='order_updated', station=kline.station_id,
                         note=_("%s updated (qty/notes changed after send)") % line.product_id.display_name)
             else:
+                # REAL FEATURE (same client-decided approach as both
+                # gates above): a genuinely NEW product (no existing
+                # kds.order.line for this pos_order_line_id at all) is
+                # an addition, never a decrease - skipped entirely
+                # under decrease_only=True, deferred to the next
+                # genuine Send/Payment exactly as before.
+                if decrease_only:
+                    continue
                 new_line_vals.append({
                     'order_id': kds_order.id,
                     'pos_order_line_id': line.id,
@@ -2357,26 +2418,44 @@ class PosOrder(models.Model):
         # `active_lines_by_pos_line` on every subsequent poll/sync -
         # nothing here can ever re-cancel the same line or log the same
         # event twice.
-        active_lines_by_pos_line = {}
-        for l in kds_order.line_ids:
-            if l.pos_order_line_id and l.state != 'cancelled':
-                active_lines_by_pos_line.setdefault(l.pos_order_line_id.id, []).append(l)
-        for pos_line_id, klines in active_lines_by_pos_line.items():
-            if pos_line_id in current_ids:
-                continue
-            total_removed_qty = sum(kl.qty for kl in klines)
-            for kline in klines:
-                if kline.state == 'completed':
-                    kline._system_cancel_after_completion(
-                        reason=_('Removed from POS order after the order was already completed'))
-                else:
-                    kline.action_cancel(reason=_('Removed from POS order after send'), bypass_check=True)
-                touched_stations |= kline.station_id
-            self.env['kds.event'].log(
-                kds_order, event_type='line_removed', station=klines[0].station_id,
-                note=_("%(product)s fully removed from POS order (quantity: %(qty)s -> 0, "
-                       "cancelled_qty: %(qty)s)")
-                % {'product': klines[0].product_name, 'qty': total_removed_qty})
+        # REAL BUG FIX (found during the same final review as the
+        # pending_removal fix above): this loop must ALSO be gated
+        # behind `not decrease_only` for the identical reason - a POS
+        # line missing from current_ids means it was removed entirely
+        # (unlink()), never a quantity decrease on a still-existing
+        # line (that case is handled entirely by the branches above,
+        # inside the main per-line loop). Without this gate, the
+        # immediate decrease-only sync path (triggered purely by a
+        # QUANTITY decrease on some OTHER, unrelated line on the same
+        # order) would ALSO immediately cancel any fully-removed line
+        # still correctly awaiting the next genuine Send/Payment -
+        # exactly the same contradiction with pos_order_line.py's own
+        # unlink()-time decision this method's own pending_removal
+        # sweep was just fixed for, just reached via a different path
+        # (a removed line whose own pending_removal flag hadn't been
+        # picked up yet vs. one already reflected in current_ids
+        # simply not containing its id).
+        if not decrease_only:
+            active_lines_by_pos_line = {}
+            for l in kds_order.line_ids:
+                if l.pos_order_line_id and l.state != 'cancelled':
+                    active_lines_by_pos_line.setdefault(l.pos_order_line_id.id, []).append(l)
+            for pos_line_id, klines in active_lines_by_pos_line.items():
+                if pos_line_id in current_ids:
+                    continue
+                total_removed_qty = sum(kl.qty for kl in klines)
+                for kline in klines:
+                    if kline.state == 'completed':
+                        kline._system_cancel_after_completion(
+                            reason=_('Removed from POS order after the order was already completed'))
+                    else:
+                        kline.action_cancel(reason=_('Removed from POS order after send'), bypass_check=True)
+                    touched_stations |= kline.station_id
+                self.env['kds.event'].log(
+                    kds_order, event_type='line_removed', station=klines[0].station_id,
+                    note=_("%(product)s fully removed from POS order (quantity: %(qty)s -> 0, "
+                           "cancelled_qty: %(qty)s)")
+                    % {'product': klines[0].product_name, 'qty': total_removed_qty})
 
         # AUDIT FIX ("POS Delta Sync Still Bypasses The Central
         # Workflow", HIGH/FINAL BLOCKER): replaces the previous raw

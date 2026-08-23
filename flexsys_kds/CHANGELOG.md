@@ -8,6 +8,108 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.26.0 — New Workflow Integrity Issue: Unsent Removal Can Leave POS and KDS Inconsistent
+
+**A genuine workflow integrity gap, confirmed live on POS order
+2640-3-000005**: under `kds_send_trigger='send'`, a quantity decrease
+(including all the way to 0/removal) on an already-Ready line stayed
+purely local to POS - nothing synced to KDS - until the next explicit
+Send. A cashier who reduced quantity then simply navigated away left
+POS showing `Ongoing / 0.00` while KDS kept showing the stale, original
+quantity as still `READY`, with no forcing mechanism to reconcile.
+
+### Client's own explicit, deliberate design decision
+Presented three implementation approaches with clearly different risk
+profiles - (A) frontend navigation interception/blocking across every
+POS exit path (Orders screen, New Order, table switching, payment
+flow, reload), (B) a purely visual unsent-changes indicator, (C) a
+backend-only automatic reconciliation for decreases specifically. The
+client explicitly rejected navigation blocking: **"We do not want to
+block or warn the cashier, and we do not want to change the normal POS
+workflow"** - only immediate backend reconciliation for quantity
+decreases, with increases and new products staying deferred to the
+next genuine Send/Payment exactly as before, matching this project's
+own long-established, deliberately-designed "send trigger" deferral
+architecture for every OTHER kind of change.
+
+### Implementation
+`pos_order_line.py`'s own `write()` override now captures each line's
+own quantity immediately before `super().write()` applies the change,
+then - after the normal, trigger-gated sync (a correct no-op for a
+decrease under 'send' mode, exactly as designed, and exactly the gap
+this feature closes) - separately identifies any line that genuinely
+decreased on an order that already has a `kds_order_id` (i.e. was sent
+at least once before) and calls `_flexsys_kds_diff_lines(decrease_only=True)`
+directly, bypassing `_flexsys_kds_sync()`'s own trigger gate entirely,
+but strictly scoped to the lines that genuinely decreased on that call.
+`decrease_only=True` is honored throughout `_flexsys_kds_diff_lines()`:
+an increase, a brand-new product, or a note/variant-only change on any
+OTHER line in the same batch is explicitly skipped and left fully
+deferred, exactly as before.
+
+### Two additional real defects found and fixed during final review, before this feature had ever actually been exercised by a test
+1. **The `pending_removal` sweep at the top of `_flexsys_kds_diff_lines()`**
+   ran unconditionally, regardless of `decrease_only` - meaning the new
+   immediate decrease-only path (triggered purely by a quantity
+   decrease on one line) would ALSO immediately cancel any completely
+   unrelated line on the same order that had been deleted outright
+   (`unlink()`) but was still correctly awaiting the next genuine Send -
+   directly contradicting the deliberate decision, already documented
+   in `pos_order_line.py`'s own `unlink()`, not to extend immediate sync
+   to line deletion, only to quantity decreases specifically.
+2. **The "line missing from `current_ids`" cancellation sweep** near the
+   end of the same method had the identical defect, reached via a
+   different path (a removed line already reflected as absent from
+   `current_ids`, rather than one still carrying a fresh
+   `pending_removal` flag).
+
+Both are now gated behind `if not decrease_only:` - the normal, full
+sync (the only way this method was ever called before this feature
+existed) is completely unaffected; only the new immediate,
+decrease-scoped path correctly skips them, leaving any unrelated
+deleted line exactly as deferred as it already was.
+
+### Explicitly not extended to line deletion (`unlink()`), per the client's own scoped examples
+The client's own acceptance examples throughout this exchange (3->2,
+3->1, 1->0) are all quantity writes, never product removal via
+deletion - `pos_order_line.py`'s own `unlink()` remains exactly as it
+already was (only flags `pending_removal`, processed at the next
+genuine sync boundary), matching an earlier round's own deliberate
+design decision on this exact point.
+
+### Files changed
+`models/pos_order_line.py` (`write()` - the new immediate decrease
+detection and sync call), `models/pos_order.py`
+(`_flexsys_kds_diff_lines()`'s own two gating fixes described above -
+no other logic in that method touched).
+
+### Tests
+7 new regression tests: the exact client-reported reproduction (1 -> 0
+after Ready, no Send pressed, immediate cancellation confirmed);
+partial decreases (3 -> 2) syncing immediately; non-regression
+confirming an increase stays fully deferred (and correctly applies on
+the next genuine Send, only delayed, never lost); the first defect
+found during review (an unrelated newly-added product is NOT
+immediately synced by another line's own decrease); the second defect
+found during review (an unrelated deleted line is NOT immediately
+cancelled by another line's own decrease, and is still correctly
+processed on the next genuine Send); a decrease on a never-sent order
+correctly does nothing (nothing to reconcile yet); and the same
+immediate behavior confirmed under 'payment' trigger mode too (the
+gap is not specific to 'send' mode - a paid order can still be
+actively edited while its own POS order remains open at the register).
+
+**Total: 514 tests** (up from 507). No database migration required -
+logic-only changes to two existing methods.
+
+**Required before this can be closed**: the client's own live re-test
+of the exact reported reproduction (1 -> 0 after Ready, no Send, no
+navigation-blocking dialog of any kind) on this specific version,
+confirming KDS reflects the change immediately and POS's own normal,
+unmodified editing workflow is completely unaffected.
+
+---
+
 ## v7.25.3 — Quantity Decrease After READY Not Reflected — Two Real Defects Found and Fixed
 
 **Confirmed live, a genuine defect this time** - unlike v7.25.2's own
