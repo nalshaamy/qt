@@ -1865,7 +1865,68 @@ class PosOrder(models.Model):
                 # exactly the "2 new" mistake this same dev report is
                 # pointing at, just for Completed instead of Ready. Fixed
                 # for both at once, consistently, below.
-                if changed and kline.state in ('ready', 'completed'):
+                # REAL BUG FIX ("FlexSys KDS – Bug Report: Quantity
+                # decrease after READY is not reflected"), confirmed
+                # live and traced to its exact root cause: once a PRIOR
+                # increase-after-Ready created a separate delta line
+                # (this branch's own increase handling below), and THAT
+                # delta line has ALSO since reached ready/completed,
+                # `existing` (built above, keyed purely by
+                # pos_order_line_id) can only ever hold ONE
+                # kds.order.line per POS line - the LAST one encountered
+                # while iterating kds_order.line_ids (ordered by id
+                # ascending, so the most recently CREATED sibling - i.e.
+                # exactly the delta line, never the original). Every
+                # comparison further below used to read `kline.qty`/
+                # `kline.last_kds_sent_qty` - that ONE sibling's own
+                # share alone - never the TRUE combined total already
+                # shown to the kitchen for this product (original +
+                # every later delta, summed). In the reported
+                # reproduction (original=1 ready, delta=2 ready, true
+                # total=3, POS decreases to 2), `kline` resolved to the
+                # delta line alone (qty=2) - which, by pure coincidence,
+                # already equaled the NEW POS quantity (2), so `changed`
+                # (computed earlier purely from `kline.qty != line.qty`)
+                # was already False, and the entire ready/completed
+                # branch was never even entered - explaining exactly why
+                # "KDS does not reflect the quantity decrease... no
+                # cancellation/decrease delta is shown" - not a
+                # coincidence limited to this one example, but the
+                # general shape of the bug for ANY POS decrease that
+                # lands on a value equal to the most recent sibling's
+                # own share, or more generally any case where multiple
+                # historical siblings sum to something `kline.qty` alone
+                # doesn't reveal.
+                #
+                # Fixed by resolving the TRUE combined historical
+                # quantity across every non-cancelled ready/completed
+                # sibling sharing this same pos_order_line_id -
+                # ready_siblings/total_historical_qty below - and using
+                # THAT, not kline.qty/kline.last_kds_sent_qty alone, for
+                # both detecting a genuine change and computing the real
+                # delta. In the single-sibling case (no prior increase-
+                # after-ready ever happened - every scenario every
+                # earlier BUG-09/BUG-10/BUG-11/BUG-13 fix and their own
+                # regression tests already cover), ready_siblings is
+                # just {kline} and total_historical_qty == kline.qty
+                # exactly as before - mathematically identical behavior,
+                # confirmed by every one of those existing tests
+                # continuing to pass unmodified. `changed` itself (used
+                # by every OTHER branch below/elsewhere) is left
+                # completely untouched - only entry into THIS specific
+                # branch is widened, via an explicit OR, to also catch
+                # the case `changed` alone coincidentally missed.
+                kline_is_historical = kline.state in ('ready', 'completed')
+                if kline_is_historical:
+                    ready_siblings = kds_order.line_ids.filtered(
+                        lambda l, pid=line.id: l.pos_order_line_id.id == pid
+                        and l.state in ('ready', 'completed'))
+                    total_historical_qty = sum(ready_siblings.mapped('qty'))
+                else:
+                    ready_siblings = self.env['kds.order.line']
+                    total_historical_qty = 0.0
+
+                if kline_is_historical and (changed or total_historical_qty != line.qty):
                     # REAL BUG FIX ("BUG-13 - Quantity Changes After
                     # COMPLETED Are Ignored While POS Order Is Still
                     # Active"), confirmed live (KDS order 2629-3-000008,
@@ -1908,15 +1969,30 @@ class PosOrder(models.Model):
                     # _flexsys_kds_cancel() entirely separately and never
                     # reach this diff logic at all.
                     pos_still_active = self.state == 'draft'
-                    treat_as_frozen = kline.state == 'completed' and not pos_still_active
-                    # REAL BUG FIX ("BUG-11 [fourth report] - Sequential
-                    # qty_delta baseline is still wrong at runtime"):
-                    # baseline is explicitly last_kds_sent_qty here too,
-                    # for full consistency with the generic update branch
-                    # further below - see that field's own docstring
-                    # (kds_order_line.py) for the complete explanation.
-                    qty_increment = line.qty - kline.last_kds_sent_qty
-                    if qty_increment <= 0 and kline.qty != line.qty:
+                    # REAL BUG FIX (continued, same live report):
+                    # treat_as_frozen must reflect whether ANY
+                    # historical sibling is 'completed' while the POS
+                    # order has closed - not just kline's own state -
+                    # since a mixed history (e.g. original completed,
+                    # a later delta still ready) sharing one
+                    # pos_order_line_id must be treated consistently:
+                    # once the sale itself has settled (POS order no
+                    # longer draft), nothing about this product's own
+                    # history should be rewritten regardless of which
+                    # specific sibling `kline` happened to resolve to.
+                    treat_as_frozen = (not pos_still_active) and any(
+                        s.state == 'completed' for s in ready_siblings)
+                    # REAL BUG FIX (continued): qty_increment is now
+                    # computed against total_historical_qty (the TRUE
+                    # combined total across every historical sibling),
+                    # never kline.last_kds_sent_qty alone - see this
+                    # branch's own opening comment above for the full
+                    # root-cause explanation. In the single-sibling
+                    # case this is exactly kline.last_kds_sent_qty as
+                    # before (identical math, confirmed by every
+                    # existing single-line test continuing to pass).
+                    qty_increment = line.qty - total_historical_qty
+                    if qty_increment <= 0 and total_historical_qty != line.qty:
                         # REAL BUG FIX ("Change Request After BUG-11",
                         # item 2: "Quantity Decrease Delta - Display
                         # Negative Difference"), confirmed live: this
@@ -1950,39 +2026,107 @@ class PosOrder(models.Model):
                                        "%(new_qty)s) - no new preparation delta created, "
                                        "completed history preserved")
                                 % {'product': kline.product_name,
-                                   'old_qty': kline.qty, 'new_qty': line.qty})
+                                   'old_qty': total_historical_qty, 'new_qty': line.qty})
                         else:
-                            old_qty = kline.qty
-                            old_state = kline.state
-                            kline.write({
-                                'qty': line.qty,
-                                'note': _pos_note(line),
-                                'variant_info': _pos_line_variant_info(line),
-                                'line_change': 'updated',
-                                # REAL BUG FIX ("BUG-11 [third report,
-                                # then confirmed still reproducing in a
-                                # fourth report] - Sequential Quantity
-                                # Delta Uses Wrong Baseline"): see the
-                                # generic update branch further below,
-                                # and last_kds_sent_qty's own docstring
-                                # (kds_order_line.py), for the complete
-                                # explanation - qty_increment here is
-                                # already this sync's own fresh delta
-                                # against the explicit baseline field,
-                                # never accumulated on top of a prior
-                                # one, and that same baseline field is
-                                # updated in this exact same write.
-                                'qty_delta': qty_increment,
-                                'last_kds_sent_qty': line.qty,
-                            })
-                            touched_stations |= kline.station_id
-                            self.env['kds.event'].log(
-                                kds_order, event_type='order_updated', station=kline.station_id,
-                                note=_("%(product)s reduced after original line was already "
-                                       "%(state)s (qty %(old_qty)s -> %(new_qty)s) - quantity "
-                                       "reduced in place, no production reopened")
-                                % {'product': kline.product_name, 'state': old_state,
-                                   'old_qty': old_qty, 'new_qty': line.qty})
+                            # REAL BUG FIX ("FlexSys KDS – Bug Report:
+                            # Quantity decrease after READY is not
+                            # reflected"), the second, deeper defect
+                            # found while fixing this: even once the
+                            # branch above IS correctly entered, the
+                            # previous write() here set `kline.qty =
+                            # line.qty` directly - the FULL NEW POS
+                            # TOTAL (2 in the reported example) written
+                            # onto just ONE sibling's own qty. With a
+                            # separate, untouched original sibling still
+                            # showing its own 1, the real combined total
+                            # after that write would have become 1 + 2 =
+                            # 3 - the exact new POS quantity was 2, not
+                            # 3, so this single-line write was already
+                            # wrong the moment more than one historical
+                            # sibling existed, entirely independent of
+                            # the `changed`-detection defect above; it
+                            # only ever looked correct in the pre-
+                            # existing single-sibling tests because
+                            # kline WAS the only historical line there,
+                            # making kline.qty and total_historical_qty
+                            # identical by construction.
+                            #
+                            # Fixed by distributing the REQUIRED
+                            # decrease (total_historical_qty - line.qty)
+                            # across ready_siblings from MOST RECENTLY
+                            # CREATED to OLDEST (sorted by id descending)
+                            # - "لا ينبغي تعديل أو إعادة فتح الكمية التي
+                            # تم تجهيزها سابقًا" (the earliest/original
+                            # prepared portion must not be reopened or
+                            # modified) is honored by construction: the
+                            # newest sibling (almost always `kline`
+                            # itself, since it's what `existing` already
+                            # resolved to) absorbs the decrease first,
+                            # and only cascades into an OLDER sibling if
+                            # the decrease genuinely exceeds what the
+                            # newest one alone can give up - never
+                            # touching the very original portion at all
+                            # unless the customer's own new quantity is
+                            # low enough to require it. A sibling
+                            # reduced all the way to zero is cancelled
+                            # outright (via the same authoritative
+                            # action_cancel() every other zero-quantity
+                            # case in this method already uses - full
+                            # audit trail, same CANCELLED display
+                            # treatment) rather than left showing a
+                            # confusing "0 x" on the kitchen screen.
+                            remaining_decrease = total_historical_qty - line.qty
+                            for sibling in ready_siblings.sorted(key=lambda s: s.id, reverse=True):
+                                if remaining_decrease <= 0:
+                                    break
+                                reducible = min(sibling.qty, remaining_decrease)
+                                if reducible <= 0:
+                                    continue
+                                sib_old_qty = sibling.qty
+                                sib_new_qty = sibling.qty - reducible
+                                if sib_new_qty <= 0:
+                                    sibling.action_cancel(
+                                        reason=_('Quantity reduced in POS after this portion '
+                                                 'was already %s') % sibling.state,
+                                        bypass_check=True)
+                                    self.env['kds.event'].log(
+                                        kds_order, event_type='order_updated',
+                                        station=sibling.station_id,
+                                        note=_("%(product)s (qty %(old_qty)s, previously "
+                                               "%(state)s) fully cancelled - POS quantity "
+                                               "decrease absorbed this entire portion")
+                                        % {'product': sibling.product_name, 'old_qty': sib_old_qty,
+                                           'state': sibling.state})
+                                else:
+                                    sib_vals = {
+                                        'qty': sib_new_qty,
+                                        'line_change': 'updated',
+                                        'qty_delta': -reducible,
+                                        'last_kds_sent_qty': sib_new_qty,
+                                    }
+                                    # note/variant_info are only ever
+                                    # meaningfully refreshed on the
+                                    # sibling this exact POS line write
+                                    # actually corresponds to (kline) -
+                                    # an OLDER sibling absorbing overflow
+                                    # from a cascade keeps its own
+                                    # already-correct note/variant_info
+                                    # completely untouched.
+                                    if sibling.id == kline.id:
+                                        sib_vals['note'] = _pos_note(line)
+                                        sib_vals['variant_info'] = _pos_line_variant_info(line)
+                                    sibling.write(sib_vals)
+                                    self.env['kds.event'].log(
+                                        kds_order, event_type='order_updated',
+                                        station=sibling.station_id,
+                                        note=_("%(product)s reduced after original line was "
+                                               "already %(state)s (qty %(old_qty)s -> "
+                                               "%(new_qty)s) - quantity reduced in place, no "
+                                               "production reopened")
+                                        % {'product': sibling.product_name, 'state': sibling.state,
+                                           'old_qty': sib_old_qty, 'new_qty': sib_new_qty})
+                                touched_stations |= sibling.station_id
+                                remaining_decrease -= reducible
                             from .kds_notify import notify_station
                             notify_station(self.env, kline.station_id)
                         continue

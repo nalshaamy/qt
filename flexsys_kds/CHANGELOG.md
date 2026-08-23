@@ -8,6 +8,128 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.25.3 — Quantity Decrease After READY Not Reflected — Two Real Defects Found and Fixed
+
+**Confirmed live, a genuine defect this time** - unlike v7.25.2's own
+verification-only round for the simpler increase scenario. This bug
+report described a specifically MULTI-SIBLING scenario the previous
+round's own investigation had not yet exercised: a prior increase-
+after-Ready (1 -> 3) had already created a separate delta line, and
+that delta line had ALSO since reached ready/completed - a genuinely
+new condition, not covered by any earlier BUG-09/BUG-10/BUG-11/BUG-13
+fix or their own regression tests.
+
+### Root cause 1 - change detection missed the decrease entirely
+`_flexsys_kds_diff_lines()`'s own `existing` dict, keyed purely by
+`pos_order_line_id`, can only ever hold ONE `kds.order.line` per POS
+line - the LAST one encountered while iterating `kds_order.line_ids`
+(ordered by id ascending, so the most recently CREATED sibling - the
+delta line, never the original). Every comparison read `kline.qty`/
+`kline.last_kds_sent_qty` - that ONE sibling's own share alone - never
+the TRUE combined total already shown to the kitchen (original +
+every later delta, summed). In the reported reproduction (original=1
+ready, delta=2 ready, true total=3, POS decreases to 2), `kline`
+resolved to the delta line alone (qty=2) - which, by coincidence,
+already equaled the new POS quantity (2), so `changed` (computed
+purely from `kline.qty != line.qty`) was already False, and the
+ready/completed branch was never even entered.
+
+### Root cause 2 - the write itself was wrong, independent of detection
+Even once the branch IS correctly entered, the previous `write()` set
+`kline.qty = line.qty` directly - the FULL NEW POS TOTAL written onto
+just ONE sibling's own qty. With a separate, untouched original
+sibling still showing its own 1, the real combined total after that
+write would become `1 + 2 = 3`, not the required `2` - this was
+already wrong the moment more than one historical sibling existed,
+entirely independent of the change-detection defect above; it only
+ever looked correct in the pre-existing single-sibling tests because
+`kline` WAS the only historical line there.
+
+### Fix
+Resolves the TRUE combined historical quantity - `ready_siblings`/
+`total_historical_qty` - across every non-cancelled ready/completed
+sibling sharing the same `pos_order_line_id`, and uses that (not
+`kline.qty`/`kline.last_kds_sent_qty` alone) for both detecting a
+genuine change (entry into the branch widened via an explicit OR,
+`changed` itself left completely untouched for every other branch that
+reads it) and computing the real delta. On a decrease, the required
+reduction is distributed across `ready_siblings` from MOST RECENTLY
+CREATED to OLDEST (sorted by id descending) - "لا ينبغي تعديل أو إعادة
+فتح الكمية التي تم تجهيزها سابقًا" is honored by construction: the
+newest sibling (almost always `kline` itself) absorbs the decrease
+first, only cascading into an older sibling if the decrease genuinely
+exceeds what the newest one alone can give up, never touching the
+original portion unless the new quantity is low enough to require it.
+A sibling reduced all the way to zero is cancelled outright via the
+same authoritative `action_cancel()` every other zero-quantity case
+already uses (full audit trail, same CANCELLED display treatment)
+rather than left showing a confusing "0 x" on the kitchen screen.
+`treat_as_frozen` (the Completed-with-POS-closed case) is also
+corrected to check every historical sibling, not just `kline`'s own
+state, for a mixed-state history under a closed POS order.
+
+In the single-sibling case (no prior increase-after-ready ever
+happened), `ready_siblings` is just `{kline}` and `total_historical_qty
+== kline.qty` exactly as before - mathematically identical behavior,
+confirmed directly: `remaining_decrease` in that case always equals
+the old `qty_increment`, and the resulting written quantity is
+identical to the old `kline.write({'qty': line.qty, ...})` - every
+existing single-line test continues to pass unmodified.
+
+### The separate, already-working branch (delta line still 'new') is untouched
+The client's own required `1 -> READY -> 3 -> 2 -> 4` case exercises a
+genuinely different code path (`elif changed and kline.state !=
+'cancelled':`) - the delta line here never reaches ready/completed
+between the further changes, so it's `kline` itself directly, still
+'new', and the pre-existing `historical_siblings`/`effective_qty` logic
+there already correctly reconciles against the original's own Ready
+share. Directly re-verified this math before writing its own test -
+completely unmodified by this round.
+
+### Honest, explicitly out-of-scope edge case found while designing the fix, documented not silently left uncovered
+A decrease all the way to zero WITH multiple historical siblings
+already present (e.g. increase 1->3 creating a delta, both reach
+ready, then POS reduces to 0) is not covered by this round's own
+required test cases (none of the four named scenarios combine "prior
+increase + full-zero decrease") - the very early `line.qty <= 0`
+short-circuit check (unrelated to this branch, runs before it) would
+currently only cancel whichever single sibling `existing` happens to
+resolve to, potentially leaving an earlier sibling still showing as
+Ready despite the POS quantity being genuinely zero. Not fixed this
+round, per the request's own "Targeted Bug Fix only" scope - reported
+here explicitly rather than silently left as an undiscovered gap,
+should it come up in a future live test.
+
+### Explicitly preserved, per the request's own required non-regression list
+Multi-station behavior, Added/Updated markers, cancellation audit/
+history, and no duplicate `kds.order` creation - all confirmed by
+dedicated new tests below, alongside the KDS Workflow, Routing,
+Printing, and Completed retention (none touched by this change at all).
+
+### Files changed
+`models/pos_order.py` (`_flexsys_kds_diff_lines()`'s own ready/
+completed branch only - no other method touched).
+
+### Tests
+7 new regression tests: the exact client-reported reproduction (1 ->
+Ready -> 3 -> Ready -> 2, confirming the true effective total
+reconciles to 2 with the original portion untouched); the required
+`3 -> Ready -> 1` single-sibling case (confirms zero behavior change
+there); the required `3 -> Ready -> 0` case (confirms cancellation);
+the required `1 -> Ready -> 3 -> 2 -> 4` sequential case (confirms the
+separate, unmodified elif branch's own existing correctness);
+Multi-Station non-regression; Audit Log correctness for this exact
+scenario; and no-duplicate-kds.order non-regression.
+
+**Total: 507 tests** (up from 500). No database migration required -
+logic-only change to an existing method, no field/model changes.
+
+**Required before this can be closed**: the client's own live re-test
+of both the exact reported reproduction and the three other required
+sequences, on this specific version.
+
+---
+
 ## v7.25.2 — Final Bug Fix Request: Quantity Delta After READY — Verification Report (no code defect found)
 
 **Important, stated plainly rather than glossed over: a thorough

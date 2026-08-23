@@ -6045,3 +6045,253 @@ class TestPosSync(FlexSysKdsTestCommon):
             kds_order.pos_order_id.id, order.id,
             "pos_order_id itself must still correctly link to the real POS order - "
             "unrelated to and unaffected by the table_number fix.")
+
+    # -----------------------------------------------------------------
+    # REAL BUG FIX ("FlexSys KDS – Bug Report: Quantity decrease after
+    # READY is not reflected"), confirmed live: once a PRIOR increase-
+    # after-Ready (1 -> 3) created a separate delta line, and THAT
+    # delta line ALSO reached ready/completed, a further POS decrease
+    # (3 -> 2) was silently ignored - existing[pos_order_line_id] can
+    # only ever hold ONE kds.order.line per POS line (the most recently
+    # created one), so every comparison used to read that ONE sibling's
+    # own qty/last_kds_sent_qty alone, never the TRUE combined total
+    # across every historical (ready/completed) sibling sharing the
+    # same pos_order_line_id. See pos_order.py's own detailed comment
+    # at the top of this branch for the complete root-cause explanation
+    # - two distinct defects were found and fixed together: (1) change
+    # detection missed the decrease entirely when the most recent
+    # sibling's own qty coincidentally equaled the new POS total, and
+    # (2) even when detected, the previous write() would have set the
+    # wrong absolute quantity on that one sibling, silently inflating
+    # the real combined total instead of reducing it correctly.
+    # -----------------------------------------------------------------
+    def test_final_decrease_1_ready_3_ready_2_matches_client_report(self):
+        """The exact reported reproduction, step by step:
+        1 -> Ready -> (POS increases to 3) -> the +2 delta line ALSO
+        reaches Ready -> (POS decreases to 2). Required: the decrease
+        must be reflected, the true effective total must become 2, and
+        the earliest (original) portion must never be reopened/
+        modified - only the more recently created sibling absorbs the
+        decrease."""
+        order = self._create_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        original_line = kds_order.line_ids
+        original_line.action_accept()
+        original_line.action_start()
+        original_line.action_ready()
+        original_ready_time = original_line.ready_time
+
+        # 1 -> 3: creates a +2 delta line (already confirmed working).
+        order.lines.write({'qty': 3})
+        kds_order.invalidate_recordset()
+        delta_line = kds_order.line_ids - original_line
+        self.assertEqual(delta_line.qty, 2)
+
+        # The delta line ALSO completes its own full cycle to Ready -
+        # the exact condition that exposes this bug (both siblings now
+        # ready/completed together).
+        delta_line.action_accept()
+        delta_line.action_start()
+        delta_line.action_ready()
+        self.assertEqual(delta_line.state, 'ready')
+
+        # 3 -> 2: the reported decrease.
+        order.lines.write({'qty': 2})
+
+        kds_order.invalidate_recordset()
+        original_line.invalidate_recordset()
+        delta_line.invalidate_recordset()
+
+        self.assertEqual(
+            original_line.ready_time, original_ready_time,
+            "The earliest/original portion must never be reopened or modified by a "
+            "later decrease - production history preserved exactly.")
+        self.assertEqual(
+            original_line.qty, 1,
+            "The original portion's own quantity must remain untouched by the decrease.")
+        self.assertEqual(
+            delta_line.qty, 1,
+            "The more recently created sibling (the delta line) must absorb the "
+            "decrease - reduced from 2 to 1, so 1 (original) + 1 (reduced delta) = "
+            "the required effective total of 2.")
+        self.assertEqual(delta_line.qty_delta, -1, "Must show as a -1 decrease.")
+        self.assertEqual(
+            original_line.qty + delta_line.qty, 2,
+            "The true combined effective quantity across both siblings must "
+            "reconcile to exactly the new POS quantity (2), not the stale 3.")
+        # No duplicate/extra kds.order created or line spawned by this sync.
+        self.assertEqual(len(kds_order.line_ids), 2)
+
+    def test_final_decrease_3_ready_1_single_line_no_prior_increase(self):
+        """Required regression test: '3 -> READY -> 1' - a simple
+        single-line decrease with NO prior increase-after-ready
+        involved at all (confirms the single-sibling case, already
+        working before this fix, is completely unaffected by it)."""
+        order = self._create_pos_order([(self.product_burger, 3)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+
+        order.lines.write({'qty': 1})
+
+        kds_order.invalidate_recordset()
+        line.invalidate_recordset()
+        self.assertEqual(line.state, 'ready', "Still Ready - reduced in place, not reopened.")
+        self.assertEqual(line.qty, 1)
+        self.assertEqual(line.qty_delta, -2)
+        self.assertEqual(len(kds_order.line_ids), 1, "No new/extra line created.")
+
+    def test_final_decrease_3_ready_0_cancels_the_line(self):
+        """Required regression test: '3 -> READY -> 0.' A decrease all
+        the way to zero must correctly cancel the line entirely
+        (never left showing a confusing '0 x' on the kitchen screen),
+        with a full, correct audit trail - matching the same
+        authoritative action_cancel() path every other zero-quantity
+        case in this codebase already uses."""
+        order = self._create_pos_order([(self.product_burger, 3)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+
+        order.lines.write({'qty': 0})
+
+        kds_order.invalidate_recordset()
+        line.invalidate_recordset()
+        self.assertEqual(line.state, 'cancelled')
+
+    def test_final_decrease_1_ready_3_2_4_sequential_before_delta_reaches_ready(self):
+        """Required regression test: '1 -> READY -> 3 -> 2 -> 4' - the
+        delta line created by the 1->3 increase stays 'new' (never
+        reaches Ready) while POS makes TWO further changes in a row
+        (3->2, then 2->4) - exercises the OTHER branch entirely (the
+        pre-existing historical_siblings/effective_qty logic for a
+        non-ready/completed kline), confirming it's unaffected by this
+        fix and still correctly reconciles the running total against
+        the ORIGINAL's own already-ready 1."""
+        order = self._create_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        original_line = kds_order.line_ids
+        original_line.action_accept()
+        original_line.action_start()
+        original_line.action_ready()
+
+        order.lines.write({'qty': 3})
+        kds_order.invalidate_recordset()
+        delta_line = kds_order.line_ids - original_line
+        self.assertEqual(delta_line.state, 'new', "Delta line NOT yet Ready - confirms this "
+                                                    "test exercises the other (elif) branch.")
+        self.assertEqual(delta_line.qty, 2)
+
+        # 3 -> 2 (delta line still 'new').
+        order.lines.write({'qty': 2})
+        delta_line.invalidate_recordset()
+        original_line.invalidate_recordset()
+        self.assertEqual(original_line.qty, 1, "Original Ready portion untouched.")
+        self.assertEqual(
+            delta_line.qty, 1,
+            "The still-unacknowledged delta line reconciles to its own remaining share: "
+            "2 (new POS total) - 1 (original's own already-Ready share) = 1.")
+
+        # 2 -> 4 (delta line still 'new').
+        order.lines.write({'qty': 4})
+        delta_line.invalidate_recordset()
+        original_line.invalidate_recordset()
+        self.assertEqual(original_line.qty, 1, "Original Ready portion still untouched.")
+        self.assertEqual(
+            delta_line.qty, 3,
+            "4 (new POS total) - 1 (original's own already-Ready share) = 3.")
+        self.assertEqual(
+            original_line.qty + delta_line.qty, 4,
+            "The true combined effective quantity must reconcile to the latest POS "
+            "quantity (4) throughout.")
+
+    def test_final_decrease_non_regression_multi_station_unaffected(self):
+        """Required non-regression: Multi-station behavior must remain
+        unaffected - confirms a decrease on one product's own siblings
+        does not touch or interfere with an entirely different
+        product's own line at a different station."""
+        order = self._create_pos_order([(self.product_burger, 1), (self.product_cappuccino, 2)])
+        kds_order = order.kds_order_id
+        burger_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_burger)
+        cappuccino_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        burger_line.action_accept()
+        burger_line.action_start()
+        burger_line.action_ready()
+        cappuccino_line.action_accept()
+        cappuccino_line.action_start()
+        cappuccino_line.action_ready()
+
+        order.lines.filtered(lambda l: l.product_id == self.product_burger).write({'qty': 3})
+        kds_order.invalidate_recordset()
+        burger_delta = kds_order.line_ids.filtered(
+            lambda l: l.product_id == self.product_burger and l.id != burger_line.id)
+        burger_delta.action_accept()
+        burger_delta.action_start()
+        burger_delta.action_ready()
+
+        order.lines.filtered(lambda l: l.product_id == self.product_burger).write({'qty': 2})
+
+        cappuccino_line.invalidate_recordset()
+        self.assertEqual(
+            cappuccino_line.state, 'ready',
+            "An unrelated product's own Ready line at a different station must be "
+            "completely unaffected by another product's own decrease reconciliation.")
+        self.assertEqual(cappuccino_line.qty, 2, "Unrelated product's own quantity untouched.")
+
+    def test_final_decrease_non_regression_audit_log_records_correctly(self):
+        """Required non-regression: 'Cancellation audit/history' -
+        confirms the Audit Log correctly records the decrease event for
+        the exact reported multi-sibling scenario, with the real
+        old/new quantities."""
+        order = self._create_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        original_line = kds_order.line_ids
+        original_line.action_accept()
+        original_line.action_start()
+        original_line.action_ready()
+        order.lines.write({'qty': 3})
+        kds_order.invalidate_recordset()
+        delta_line = kds_order.line_ids - original_line
+        delta_line.action_accept()
+        delta_line.action_start()
+        delta_line.action_ready()
+
+        order.lines.write({'qty': 2})
+
+        events = self.env['kds.event'].search([
+            ('order_id', '=', kds_order.id), ('event_type', '=', 'order_updated'),
+        ], order='id desc', limit=3)
+        combined_notes = ' '.join(events.mapped('note') or [])
+        self.assertIn('reduced in place', combined_notes)
+
+    def test_final_decrease_non_regression_no_duplicate_kds_order(self):
+        """Required non-regression: 'No duplicate KDS order creation.'
+        Confirms the entire multi-step scenario (increase then
+        decrease, both after Ready) never creates a second kds.order -
+        everything stays on the same, single order record."""
+        order = self._create_pos_order([(self.product_burger, 1)])
+        kds_order_id = order.kds_order_id.id
+        line = order.kds_order_id.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+
+        order.lines.write({'qty': 3})
+        order.invalidate_recordset()
+        self.assertEqual(order.kds_order_id.id, kds_order_id)
+
+        delta = order.kds_order_id.line_ids - line
+        delta.action_accept()
+        delta.action_start()
+        delta.action_ready()
+
+        order.lines.write({'qty': 2})
+        order.invalidate_recordset()
+        self.assertEqual(
+            order.kds_order_id.id, kds_order_id,
+            "The entire increase-then-decrease sequence must stay on the exact same "
+            "kds.order - never spawning a second/duplicate order.")

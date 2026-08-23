@@ -1,36 +1,41 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.25.2**
+**Version: 19.0.7.25.3**
 **Status as of this document: code-complete, including everything
-through v7.25.1 (see CHANGELOG.md for the full history), plus a
-verification report on the "Final Bug Fix Request" (quantity delta
-after READY). ⚠️ Important, stated plainly: a thorough investigation of
-the exact reported bug (1 -> 3 after Ready must create a delta of +2,
-never the full new total of 3) found the current implementation's own
-delta math already correct - `_flexsys_kds_diff_lines()`'s own
-`qty_increment = line.qty - kline.last_kds_sent_qty` computes `3 - 1 =
-2` exactly, and creates a new delta line with that value, never
-`line.qty` itself. Traced the complete path
-(`pos_order_line.write()` -> `_flexsys_kds_sync()` ->
-`_flexsys_kds_diff_lines()`) and confirmed no separate/bypassing code
-path exists for a Ready/Completed line's own quantity change; also
-confirmed the frontend renders `line.qty` as-is with no aggregation
-logic that could substitute a different value. An existing test
-already covered the same principle for 1 -> 2. **No code defect was
-found or fixed this round** - 9 new regression/lock-in tests were added
-instead, locking in the client's own exact 1 -> 3 example, the required
-3 -> 5 case, no-change-means-no-revision, Audit Log correctness, and
-non-regression across Added/Cancelled/Completed/Retention. It is
-possible the reported behavior reflects a version predating the several
-BUG-09/BUG-10/BUG-11/BUG-13 fixes already present in this codebase -
-this cannot be confirmed further without a live re-test against this
-exact version. 500 automated tests, all `py_compile`/XML/JS checks
-passing, plus a custom AST-based undefined-name sweep. No database
-migration needed - test-only change, no production code modified this
-round. **A live re-test of the exact reported scenario against this
-specific version is required before this item can be considered
-closed** - more so than any other item in this project's history, since
-no defect was actually located to fix.**
+through v7.25.2 (see CHANGELOG.md for the full history), plus a real
+fix - unlike v7.25.2's own verification-only round, this bug report
+described a genuinely new, MULTI-SIBLING scenario (a prior increase-
+after-Ready had already created a separate delta line, and THAT delta
+line had ALSO since reached ready/completed) that no earlier fix had
+covered. Two real defects were found and fixed together in
+`_flexsys_kds_diff_lines()`'s own ready/completed branch: (1) the
+`existing` dict can only ever hold ONE `kds.order.line` per POS line
+(the most recently created sibling), so change detection compared only
+that one sibling's own qty against the new POS total, missing the
+reported decrease entirely when the numbers coincidentally matched;
+(2) even when detected, the write itself set the FULL new POS total
+directly onto just that one sibling, silently inflating the true
+combined total instead of correctly reducing it. Fixed by resolving
+the TRUE combined historical quantity across every non-cancelled ready/
+completed sibling sharing the same `pos_order_line_id`, using that for
+both detection and the real delta, and distributing a decrease from the
+most recently created sibling backward to the oldest (never touching
+the original portion unless genuinely required), cancelling a sibling
+outright if reduced to zero. The single-sibling case (every scenario
+every earlier fix already covers) is mathematically identical to
+before - confirmed directly, and by every existing test continuing to
+pass unmodified. The client's own separate required `1 -> Ready -> 3 ->
+2 -> 4` case exercises a different, already-correct, completely
+untouched code path. One honest, explicitly out-of-scope edge case
+found while designing the fix and documented rather than silently left
+uncovered: a decrease all the way to zero with multiple historical
+siblings already present is not covered by this round's own four
+required test scenarios. 507 automated tests, all `py_compile`/XML/JS
+checks passing, plus a custom AST-based undefined-name sweep. No
+database migration needed - logic-only change to an existing method.
+**Required before this can be closed**: the client's own live re-test
+of the exact reported reproduction and the three other required
+sequences on this specific version.**
 
 This document maps directly to that request's own section structure
 (A/B/C/D) and states, for each item, what's actually been verified and
@@ -2103,6 +2108,62 @@ warrants a fresh, detailed live capture (server logs, the exact POS
 config/trigger mode, the precise action sequence) to locate what was
 missed here.
 
+✅ **Update**: the client's own live re-test found this exact simple
+increase case working correctly, confirming this round's own
+conclusion - but surfaced a real defect in a deeper, multi-sibling
+extension of the same scenario. See v7.25.3's own section immediately
+below for the actual fix.
+
+---
+
+## Quantity Decrease After READY Not Reflected — Two Real Defects Found and Fixed (v7.25.3)
+**A real defect this time**, in a genuinely new scenario v7.25.2's own
+investigation had not yet exercised: a prior increase-after-Ready
+(1 -> 3) had already created a separate delta line, and that delta
+line had ALSO since reached ready/completed - then a further decrease
+(3 -> 2) was silently ignored.
+
+**Root cause 1**: `existing` (keyed by `pos_order_line_id`) can only
+hold ONE `kds.order.line` per POS line - the most recently created
+sibling. Change detection compared only that one sibling's own qty
+against the new total, missing the decrease when the numbers
+coincidentally matched (kline.qty=2, new total=2).
+
+**Root cause 2**: even when detected, the write set the FULL new POS
+total directly onto just that one sibling - with an untouched original
+sibling still showing its own share, the real combined total after
+that write would have been wrong (inflated), independent of the
+detection defect.
+
+**Fix**: resolves the TRUE combined historical quantity across every
+non-cancelled ready/completed sibling for the same `pos_order_line_id`,
+uses it for both detection and the real delta, and distributes a
+decrease from the most recently created sibling backward to the
+oldest - the original portion is never touched unless genuinely
+required. A sibling reduced to zero is cancelled outright via the same
+authoritative path every other zero-quantity case uses.
+
+**Single-sibling case**: mathematically identical to before - confirmed
+directly, every existing test continues to pass unmodified.
+
+**The client's own separate `1 -> Ready -> 3 -> 2 -> 4` case**:
+exercises a different, already-correct, completely untouched code path
+(the delta line stays 'new' throughout, never reaching ready).
+
+**Honest, out-of-scope edge case found and documented, not silently
+left uncovered**: a decrease all the way to zero with multiple
+historical siblings already present is not covered by this round's own
+four required scenarios - worth a dedicated look if it comes up in a
+future live test.
+
+**Explicitly preserved**: Multi-Station behavior, Added/Updated
+markers, cancellation audit/history, no duplicate `kds.order` creation
+- all confirmed by dedicated new tests.
+
+**What still needs a human**: the client's own live re-test of the
+exact reported reproduction and the three other required sequences on
+this specific version.
+
 ---
 
 ## What still needs a human
@@ -2366,7 +2427,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 500 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 507 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |
