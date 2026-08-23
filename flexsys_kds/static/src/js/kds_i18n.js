@@ -48,7 +48,6 @@ export const KDS_LABELS = {
     filterCancelled: "CANCELLED",
     wasStage: "was",
     filterLate: "LATE",
-    filterPriority: "PRIORITY",
 
     noOrders: "No orders for this filter.",
 
@@ -63,7 +62,6 @@ export const KDS_LABELS = {
 
     filterAllOption: "All",
     orderTypeFilterLabel: "Order Type",
-    priorityFilterLabel: "Priority",
     employeeFilterLabel: "Employee",
     companyFilterLabel: "Company",
     posConfigFilterLabel: "POS",
@@ -73,11 +71,6 @@ export const KDS_LABELS = {
     orderTypeDelivery: "Delivery",
     orderTypePickup: "Pickup",
     orderTypeDriveThru: "Drive Thru",
-
-    priorityNormal: "Normal",
-    priorityPriority: "Priority",
-    priorityUrgent: "Urgent",
-    priorityVip: "VIP",
 
     printDisabledTooltip: "Printing is not enabled for this station",
 };

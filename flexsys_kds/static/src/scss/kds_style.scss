@@ -351,7 +351,7 @@ body.o_flexsys_kiosk {
     flex-shrink: 0;
 
     .fs-card.fs-card-late & { background: $fs-late; }
-    .fs-card.fs-card-warning &, .fs-card.fs-card-priority & { background: $fs-orange; }
+    .fs-card.fs-card-warning & { background: $fs-orange; }
     .fs-card.fs-card-ready & { background: $fs-ready; }
     // CANCELLATION VISIBILITY (dev request, point 2): deliberately muted
     // grey rather than the late/warning alert colors above - see the
@@ -381,20 +381,6 @@ body.o_flexsys_kiosk {
 
 .fs-order-number { font-size: 26px; font-weight: 800; line-height: 1; }
 .fs-ordered-ref { font-size: 11px; opacity: 0.75; margin-top: 4px; font-family: monospace; }
-
-.fs-ribbon {
-    position: absolute;
-    top: 10px;
-    inset-inline-end: 10px;
-    background: rgba(0, 0, 0, 0.25);
-    color: #fff;
-    font-size: 9.5px;
-    font-weight: 800;
-    padding: 3px 9px;
-    border-radius: 6px;
-    text-transform: uppercase;
-    z-index: 1;
-}
 
 .fs-status-blink {
     display: inline-flex;
@@ -444,7 +430,7 @@ body.o_flexsys_kiosk {
 .fs-chip-timer {
     color: $fs-blue;
     .fs-card.fs-card-late & { color: $fs-late; }
-    .fs-card.fs-card-warning &, .fs-card.fs-card-priority & { color: $fs-orange; }
+    .fs-card.fs-card-warning & { color: $fs-orange; }
     .fs-card.fs-card-ready & { color: $fs-ready; }
 
     &.fs-pulse { animation: fs-pulse-timer 1.6s ease-in-out infinite; }
@@ -640,7 +626,7 @@ body.o_flexsys_kiosk {
     svg { width: 16px; height: 16px; }
 
     .fs-card.fs-card-late & { background: $fs-late; }
-    .fs-card.fs-card-warning &, .fs-card.fs-card-priority & { background: $fs-orange; color: #3a1f00; }
+    .fs-card.fs-card-warning & { background: $fs-orange; color: #3a1f00; }
     .fs-card.fs-card-ready & { background: $fs-ready; }
 }
 

@@ -1,44 +1,42 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.26.1**
+**Version: 19.0.7.27.0**
 **Status as of this document: code-complete, including everything
-through v7.26.0 (see CHANGELOG.md for the full history), plus a
-critical fix confirmed live: v7.26.0's own new immediate decrease-
-reconciliation feature correctly settled KDS to the true effective
-quantity, but a LATER, ordinary Send re-processed the same, already-
-settled change again - fabricating a phantom additional delta line for
-the full current quantity even though nothing had actually changed.
-Root cause, confirmed mathematically before implementing anything:
-`_flexsys_kds_diff_lines()`'s own `changed` flag compared only ONE
-historical sibling's own partial share against the FULL POS total -
-almost never a meaningful "did anything change" signal once more than
-one historical sibling exists for the same product, even when the TRUE
-combined total already exactly matches the current POS quantity. Fixed
-at the reconciliation-state level, per the report's own explicit
-requirement, not a one-time "ignore next Send" workaround: `changed` is
-no longer this branch's own signal for quantity change at all -
-replaced by `qty_really_changed`, computed from `total_historical_qty`
-(the same authoritative combined total this method already treats as
-ground truth for the real delta everywhere else), with
-`note_variant_changed` split out separately for the genuinely different
-per-line note/variant-only case. Both the immediate decrease path and
-the normal full Send/Payment sync now share this exact same
-computation - a single, authoritative reconciliation baseline, not two
-independent mechanisms. Directly re-verified both of the report's own
-mandatory scenarios mathematically before writing any test: `1 -> Ready
--> 3 -> Send -> +2 Ready -> 2 -> Send -> Send` now produces delta 0 on
-both Sends; `3 -> 2 -> Send -> Send -> 4 -> Send` produces the exact
-required -1 -> 0 -> 0 -> +2 sequence. In the single-sibling case (every
-scenario every earlier fix covers), the new computation is
-mathematically identical to the old one - zero behavior change,
-confirmed directly and by every existing test continuing to pass
-unmodified. 521 automated tests, all `py_compile`/XML/JS checks
-passing, plus a custom AST-based undefined-name sweep. No database
-migration needed - logic-only change to an existing method's own
-decision conditions. **Required before this can be closed**: the
-client's own live re-test of both mandatory scenarios, confirming Send
-after an immediate decrease is a genuine no-op and repeated Send stays
-idempotent.**
+through v7.26.1 (see CHANGELOG.md for the full history), plus two
+final cleanup items - the recently stabilized quantity reconciliation
+logic (v7.26.0/v7.26.1) is completely untouched. Item 1 (Printer Only -
+Remove Public Kiosk): `_station_from_token()` - the single, central
+authentication function every one of the four public kiosk routes
+already relies on - now also rejects a station whose `operating_mode`
+is `'printer_only'`, matching the exact pattern already used for
+`kiosk_disabled`; a previously bookmarked kiosk URL for a station
+reconfigured to `printer_only` now correctly fails at the controller
+level itself, not merely a hidden UI tab. The Public Kiosk tab is also
+hidden for this mode. The Printers tab's own existing visibility rule
+was confirmed already correct - no change needed. Item 2 (Remove
+Priority/Urgent/VIP from KDS): a careful usage-check first confirmed
+`kds_routing_rule_views.xml`'s own "priority" text is an entirely
+unrelated concept (the routing rule's own `sequence` label) and was
+correctly left untouched. Removed from the Internal KDS Screen (pill
+filter, dropdown filter, count, card border/ribbon, i18n labels), the
+public kiosk (cleaned up identically for consistency, since the request
+names "active KDS functionality" as a whole), AND the backend Odoo
+Order list/form/search views (found during a deeper check beyond the
+Internal Screen's own JS - including the "Priority/Urgent/VIP" search
+filter this request names explicitly). Operational sorting by priority
+removed from both controllers, now sorting by `created_time` alone. Per
+this item's own explicit "Upgrade Safety" requirement, the underlying
+field, action, permission entry, and audit event type are all
+deliberately kept, completely unmodified - confirmed by two pre-
+existing tests calling `action_change_priority()` directly at the ORM
+level continuing to pass unmodified. Two pre-existing tests from
+earlier rounds (written when priority was deliberately kept visible,
+since those requests never named it explicitly) were updated, not
+silently left to fail, to assert the new correct state. 532 automated
+tests, all `py_compile`/XML/JS checks passing, plus a custom AST-based
+undefined-name sweep. No database migration needed - view/controller/
+JS changes only, no schema changes. Awaiting the client's own live test
+confirmation before any further work.**
 
 This document maps directly to that request's own section structure
 (A/B/C/D) and states, for each item, what's actually been verified and
@@ -2264,6 +2262,66 @@ change, confirmed by every existing test continuing to pass unmodified.
 mandatory scenarios, confirming Send after an immediate decrease is a
 genuine no-op and repeated Send stays idempotent.
 
+✅ **Update**: the client's own live re-test confirmed both mandatory
+scenarios working correctly. See v7.27.0's own section immediately
+below for the two final cleanup items handled afterward.
+
+---
+
+## Final Cleanup: Printer Only Kiosk Removal + Priority/Urgent/VIP Removal (v7.27.0)
+**Two final cleanup items** - the recently stabilized quantity
+reconciliation logic (v7.26.0/v7.26.1) is completely untouched.
+
+**Item 1 - Printer Only: Remove Public Kiosk.** Backend/controller
+enforcement (the real security boundary, not UI-only, per the
+request's own explicit instruction): `_station_from_token()` - the
+single, central authentication function every one of the four public
+kiosk routes relies on - now also rejects `operating_mode ==
+'printer_only'`, matching the pattern already used for
+`kiosk_disabled`. A previously bookmarked kiosk URL for a station later
+reconfigured to `printer_only` now correctly fails at the controller
+level itself. The Public Kiosk tab is also hidden for this mode. The
+Printers tab's own existing visibility rule was confirmed already
+correct - no change needed.
+
+**Item 2 - Remove Priority / Urgent / VIP from KDS.** A careful usage-
+check first confirmed `kds_routing_rule_views.xml`'s own "priority"
+text is an entirely unrelated concept (the routing rule's own
+`sequence` label, "lower number = higher priority") and was correctly
+left completely untouched - would have been a real mistake to remove.
+
+Removed from the Internal KDS Screen (pill filter, dropdown filter and
+its options, count, card border/ribbon, i18n labels), the public kiosk
+(cleaned up identically for consistency, since the request names
+"active KDS functionality" as a whole, not only the Internal Screen),
+AND the backend Odoo Order list/form/search views - found during a
+deeper check beyond the Internal Screen's own JS, including the
+"Priority/Urgent/VIP" search filter this request names explicitly
+("No PRIORITY filter"). Operational sorting by priority removed from
+both `controllers/kds.py` and `controllers/kds_kiosk.py`, now sorting
+by `created_time` alone.
+
+**Upgrade Safety, honored exactly as required**: the underlying
+`priority` field, `action_change_priority()`, its own permission entry,
+and the `priority_changed` audit event type are all deliberately kept,
+completely unmodified - confirmed by two pre-existing tests
+(`test_permissions.py`) calling `action_change_priority()` directly at
+the ORM level continuing to pass unmodified.
+
+**Four pre-existing tests updated, not silently left to fail**: two
+from "Patch 5" (written when priority was deliberately kept visible,
+since that request never named it explicitly) now assert the new,
+correct absent state instead of the old deliberate-presence state; two
+from an earlier "Completed Late Visual" fix had their own local
+simulation function's final `priority` fallback branch removed too, to
+keep mirroring the real, now-updated source exactly.
+
+**What still needs a human**: the client's own live re-test - a
+`printer_only` station's kiosk URL genuinely rejected, `kds_only`/
+`kds_printer` stations' own kiosks unaffected, and the Internal Screen/
+public kiosk/backend Order screens all genuinely free of any
+Priority/Urgent/VIP UI or operational behavior.
+
 ---
 
 ## What still needs a human
@@ -2527,7 +2585,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 521 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 532 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

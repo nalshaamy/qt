@@ -11,7 +11,6 @@ export function makeKdsStore() {
         orders: [],
         filter: "all",
         orderTypeFilter: "all",
-        priorityFilter: "all",
         employeeFilter: "all",
         companyFilter: "all",
         posConfigFilter: "all",
@@ -199,10 +198,6 @@ export function makeKdsStore() {
         state.orderTypeFilter = value;
     }
 
-    function setPriorityFilter(value) {
-        state.priorityFilter = value;
-    }
-
     function setEmployeeFilter(value) {
         state.employeeFilter = value;
     }
@@ -238,7 +233,6 @@ export function makeKdsStore() {
         reprint,
         setFilter,
         setOrderTypeFilter,
-        setPriorityFilter,
         setEmployeeFilter,
         setCompanyFilter,
         setPosConfigFilter,

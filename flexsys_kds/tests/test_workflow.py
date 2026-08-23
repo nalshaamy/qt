@@ -1781,7 +1781,12 @@ class TestWorkflow(FlexSysKdsTestCommon):
         the exact same cardClass logic in isolation (mirroring the real
         JS expression's own precedence) for a still-active, genuinely
         late order - must still resolve to 'late', not 'ready'."""
-        def resolve_card_class(state, effective_stage, sla_status, is_cancelled_terminal, priority):
+        def resolve_card_class(state, effective_stage, sla_status, is_cancelled_terminal):
+            # UPDATED for "Final Cleanup Request", item 2 ("Remove
+            # Priority / Urgent / VIP from KDS"): this resolver's own
+            # final `priority` fallback branch removed, matching the
+            # real cardClass expression (controllers/kds_kiosk.py) it
+            # mirrors - that branch no longer exists there either.
             if state == 'cancelled':
                 return 'cancelled'
             if is_cancelled_terminal:
@@ -1794,18 +1799,16 @@ class TestWorkflow(FlexSysKdsTestCommon):
                 return 'ready'
             if sla_status == 'warning':
                 return 'warning'
-            if priority != 'normal':
-                return 'priority'
             return 'normal'
 
         # Active + Late -> Red/Late (required acceptance point 1).
         self.assertEqual(
-            resolve_card_class('preparing', 'preparing', 'late', False, 'normal'), 'late')
+            resolve_card_class('preparing', 'preparing', 'late', False), 'late')
         # An order that reached Ready but hasn't been completed/handed
         # off yet, and is genuinely late, must still show red - this
         # fix is scoped specifically to 'completed', not 'ready'.
         self.assertEqual(
-            resolve_card_class('ready', 'ready', 'late', False, 'normal'), 'late')
+            resolve_card_class('ready', 'ready', 'late', False), 'late')
 
     def test_fix1_kiosk_late_completed_order_shows_completed_visual(self):
         """Required regression test, points 1 & 2 & 3 combined: 'Late
@@ -1814,7 +1817,12 @@ class TestWorkflow(FlexSysKdsTestCommon):
         Public Kiosk uses the Completed visual state instead of Late.'
         Same isolated resolver as above, for the exact Late-then-
         Completed scenario."""
-        def resolve_card_class(state, effective_stage, sla_status, is_cancelled_terminal, priority):
+        def resolve_card_class(state, effective_stage, sla_status, is_cancelled_terminal):
+            # UPDATED for "Final Cleanup Request", item 2 ("Remove
+            # Priority / Urgent / VIP from KDS"): this resolver's own
+            # final `priority` fallback branch removed, matching the
+            # real cardClass expression (controllers/kds_kiosk.py) it
+            # mirrors - that branch no longer exists there either.
             if state == 'cancelled':
                 return 'cancelled'
             if is_cancelled_terminal:
@@ -1827,8 +1835,6 @@ class TestWorkflow(FlexSysKdsTestCommon):
                 return 'ready'
             if sla_status == 'warning':
                 return 'warning'
-            if priority != 'normal':
-                return 'priority'
             return 'normal'
 
         # sla_status is STILL 'late' (the data itself, preserved for
@@ -1836,7 +1842,7 @@ class TestWorkflow(FlexSysKdsTestCommon):
         # effective_stage is now 'completed' - the card must resolve
         # to 'ready' (green/Completed), matching the Internal KDS
         # Screen's own already-fixed behavior exactly.
-        result = resolve_card_class('completed', 'completed', 'late', False, 'normal')
+        result = resolve_card_class('completed', 'completed', 'late', False)
         self.assertEqual(result, 'ready',
                           "A Completed order that was Late must show the Completed visual "
                           "(green), never the red Late visual - the card must NOT remain red.")
@@ -1920,18 +1926,106 @@ class TestWorkflow(FlexSysKdsTestCommon):
         self.assertIsNotNone(match)
         self.assertIn('sum="Total"', match.group(0))
 
-    def test_ui2_priority_field_untouched_no_scope_creep(self):
-        """Confirms priority (not named in either the default-visible
-        or optional-hidden lists this fix's own request specifies) is
-        left exactly as it already was - present, visible, no
-        optional="hide" added - avoiding any scope creep beyond what
-        was explicitly requested."""
+    def test_final_cleanup_priority_field_removed_from_order_list_view(self):
+        """UPDATED for "Final Cleanup Request", item 2 ("Remove
+        Priority / Urgent / VIP from KDS"): the earlier version of this
+        test ("Patch 5") confirmed priority was left visible here
+        deliberately, since that earlier request never named it
+        explicitly - "avoiding any scope creep beyond what was
+        explicitly requested." This request DOES name it explicitly
+        ("No PRIORITY tab... No PRIORITY filter... Remove Priority /
+        Urgent / VIP from the active KDS functionality and UI"), so
+        removing it here is the correct, in-scope action this round,
+        not scope creep. Confirms the field is genuinely absent from
+        this list view's own arch now."""
         list_view = self.env.ref('flexsys_kds.view_kds_order_list')
         arch = list_view.arch_db
         import re
         match = re.search(r'<field name="priority"[^/]*/>', arch)
-        self.assertIsNotNone(match)
-        self.assertNotIn('optional="hide"', match.group(0))
+        self.assertIsNone(match, "The priority field must no longer be exposed in this list view.")
+
+    def test_final_cleanup_priority_field_removed_from_order_form_view(self):
+        """Item 2: confirms priority is also removed from the backend
+        Order form view, not only the list."""
+        form_view = self.env.ref('flexsys_kds.view_kds_order_form')
+        arch = form_view.arch_db
+        self.assertNotIn('name="priority"', arch)
+
+    def test_final_cleanup_priority_filter_removed_from_search_view(self):
+        """Required: 'No PRIORITY filter.' Confirms the shared search
+        view (used by both Active Orders and Order History - neither
+        action defines its own search_view_id, confirmed in an earlier
+        round) no longer contains the Priority/Urgent/VIP filter."""
+        search_view = self.env.ref('flexsys_kds.view_kds_order_search')
+        arch = search_view.arch_db
+        self.assertNotIn('Priority/Urgent/VIP', arch)
+        self.assertNotIn("name=\"priority\"", arch)
+
+    def test_final_cleanup_priority_field_and_action_still_exist_in_backend(self):
+        """Required 'Upgrade Safety': 'Legacy database fields may
+        remain internally... provided that: They are no longer exposed
+        in the UI... No new workflow depends on them.' Confirms the
+        underlying field and action are deliberately KEPT (not deleted
+        - a real DB schema removal was explicitly not required, and
+        would have carried real upgrade/migration risk for existing
+        installations), just no longer exposed anywhere in the UI -
+        confirmed above. action_change_priority()'s own existing
+        behavior/audit-logging (test_permissions.py's own
+        test_action_change_priority_works_and_is_audited) is completely
+        unaffected by this round - not modified at all."""
+        self.assertIn('priority', self.env['kds.order']._fields)
+        self.assertTrue(hasattr(self.env['kds.order'], 'action_change_priority'))
+
+    def test_final_cleanup_kds_screen_operational_sorting_no_longer_uses_priority(self):
+        """Required: 'No priority-based operational behavior or sorting
+        affecting KDS orders.' Structural check confirming the real
+        source no longer sorts by priority in either the Internal
+        Screen's own controller or the public kiosk's own matching
+        controller (fixed identically in both, for consistency, since
+        both are part of "active KDS functionality")."""
+        import inspect
+        from odoo.addons.flexsys_kds.controllers import kds as kds_controller
+        from odoo.addons.flexsys_kds.controllers import kds_kiosk as kiosk_controller
+        kds_source = inspect.getsource(kds_controller)
+        kiosk_source = inspect.getsource(kiosk_controller)
+        self.assertNotIn("o.priority != 'vip'", kds_source)
+        self.assertNotIn("o.priority != 'vip'", kiosk_source)
+
+    def test_final_cleanup_kds_screen_frontend_files_have_no_priority_ui(self):
+        """Required: 'No PRIORITY tab. No PRIORITY filter. No
+        Priority/Urgent/VIP actions or controls. No priority-based
+        visual indicators/ribbons.' Structural check across every
+        frontend file this feature touched, confirming genuine removal
+        - not merely disabled/hidden with CSS, but the actual
+        filter/option/ribbon logic itself is gone."""
+        import os
+        module_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        checks = {
+            'static/src/xml/kds_templates.xml': ['priority'],
+            'static/src/js/kds_app.js': ['priority', 'Priority'],
+            'static/src/js/kds_store.js': ['priorityFilter', 'PriorityFilter'],
+            'static/src/js/kds_i18n.js': ['filterPriority', 'priorityFilterLabel', 'priorityNormal'],
+        }
+        for rel_path, forbidden_strings in checks.items():
+            with open(os.path.join(module_dir, rel_path), encoding='utf-8') as f:
+                content = f.read()
+            for forbidden in forbidden_strings:
+                self.assertNotIn(
+                    forbidden, content,
+                    "%s must not contain %r after Priority/Urgent/VIP removal." % (rel_path, forbidden))
+
+    def test_final_cleanup_order_card_no_longer_has_priority_border_class(self):
+        """Confirms the card's own priority-based border-color logic
+        (fs-card-priority) is genuinely removed from the real source -
+        the last remaining operational effect priority had on the
+        Internal Screen's own visual treatment."""
+        import os
+        module_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(module_dir, 'static', 'src', 'js', 'kds_order_card.js'),
+                  encoding='utf-8') as f:
+            content = f.read()
+        self.assertNotIn('fs-card-priority', content)
+        self.assertNotIn('props.order.priority', content)
 
     def test_ui2_both_active_orders_and_history_share_same_view(self):
         """Required, point 4 ('Consistency'): confirms both actions
@@ -1994,16 +2088,21 @@ class TestWorkflow(FlexSysKdsTestCommon):
         self.assertNotIn('Priority/Urgent/VIP', arch)
         self.assertNotIn("name=\"priority\"", arch)
 
-    def test_patch5_item6_active_orders_and_history_keep_priority_filter(self):
-        """Required: item 31's own full Priority/Urgent/VIP removal is
-        still its own separate, deferred batch - not started. Confirms
-        Active Orders and Order History (not named in this request)
-        still have the Priority/Urgent/VIP filter completely
-        unaffected - only Analytics lost it, via its own dedicated
-        search view, not a change to the shared one."""
+    def test_final_cleanup_priority_filter_removed_from_shared_search_view_too(self):
+        """UPDATED for "Final Cleanup Request", item 2 ("Remove
+        Priority / Urgent / VIP from KDS"): the earlier version of this
+        test ("Patch 5", item 6) confirmed Active Orders/Order History
+        deliberately KEPT the Priority/Urgent/VIP filter, since that
+        earlier request scoped removal to Analytics only, and item 31's
+        own full removal was still deferred/not started. This request
+        explicitly names "the active KDS functionality and UI" as a
+        whole, no longer scoping removal to Analytics alone - so the
+        shared search view (used by both Active Orders and Order
+        History, still without either defining its own search_view_id -
+        confirmed below, unchanged) is correctly cleaned up too now."""
         shared_search = self.env.ref('flexsys_kds.view_kds_order_search')
         arch = shared_search.arch_db
-        self.assertIn('Priority/Urgent/VIP', arch)
+        self.assertNotIn('Priority/Urgent/VIP', arch)
 
         active_action = self.env.ref('flexsys_kds.action_kds_order_active')
         history_action = self.env.ref('flexsys_kds.action_kds_order_history')

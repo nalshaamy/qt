@@ -68,14 +68,17 @@
                        decoration-warning="sla_status == 'warning'"
                        decoration-success="sla_status == 'normal'"/>
                 <field name="created_time"/>
-                <!-- priority: not named in either the default-visible
-                     or the optional-hidden list this fix's own request
-                     specifies - left exactly as it already was
-                     (always visible, no optional="hide") rather than
-                     guessing an intent not actually stated, avoiding
-                     any scope creep beyond what was explicitly asked
-                     for. -->
-                <field name="priority"/>
+                <!-- UI/DATA FIX ("Final Cleanup Request", item 2,
+                     "Remove Priority / Urgent / VIP from KDS"): the
+                     priority column (previously left visible here
+                     deliberately, per an earlier round's own "not
+                     named in this request, avoid scope creep"
+                     reasoning) is now removed - this request names it
+                     explicitly. The underlying `priority` field itself
+                     (kds_order.py) is intentionally kept, per this
+                     same item's own "Upgrade Safety" note - no longer
+                     exposed in this list, no longer affecting KDS
+                     behavior, no new workflow depends on it. -->
                 <!-- Optional, hidden by default (requirement 3): still
                      fully available via Odoo's own standard column
                      picker - never removed, never deleted, no field
@@ -162,7 +165,15 @@
                             <field name="company_id" readonly="1"/>
                             <field name="source" readonly="1"/>
                             <field name="order_type" readonly="1"/>
-                            <field name="priority" readonly="1"/>
+                            <!-- UI/DATA FIX ("Final Cleanup Request",
+                                 item 2, "Remove Priority / Urgent /
+                                 VIP from KDS"): removed from this
+                                 form view - the underlying field
+                                 itself (kds_order.py) is intentionally
+                                 kept per this item's own "Upgrade
+                                 Safety" note, matching the same
+                                 reasoning as the list view's own
+                                 matching comment just above. -->
                         </group>
                         <group>
                             <field name="table_number" readonly="1"/>
@@ -387,7 +398,13 @@
                 <field name="station_ids"/>
                 <filter string="Active" name="active_orders" domain="[('state','not in',('completed','cancelled'))]"/>
                 <filter string="Late" name="late" domain="[('sla_status','=','late')]"/>
-                <filter string="Priority/Urgent/VIP" name="priority" domain="[('priority','!=','normal')]"/>
+                <!-- UI/DATA FIX ("Final Cleanup Request", item 2,
+                     "Remove Priority / Urgent / VIP from KDS"): "No
+                     PRIORITY filter." Removed - the underlying field
+                     itself (kds_order.py) is intentionally kept per
+                     this item's own "Upgrade Safety" note, matching
+                     the same reasoning as this file's own list/form
+                     view comments above. -->
                 <separator/>
                 <filter string="Status" name="group_state" context="{'group_by': 'state'}"/>
                 <filter string="POS" name="group_pos" context="{'group_by': 'pos_config_id'}"/>

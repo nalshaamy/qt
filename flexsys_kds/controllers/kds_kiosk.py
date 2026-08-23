@@ -99,6 +99,21 @@ def _station_from_token(env, station_code, token):
     # having to reconfigure every device with a new URL afterward).
     if station.kiosk_disabled:
         return None
+    # UI/DATA FIX ("Final Cleanup Request", item 1, "Printer Only -
+    # Remove Public Kiosk"): "Direct access using an existing/old
+    # Public Kiosk URL must also be rejected at backend/controller
+    # level... Please do not implement this as UI hiding only." Gated
+    # here, the same single, central token-validation function EVERY
+    # public kiosk route in this controller already calls (confirmed
+    # by usage check: all four routes below go through this exact
+    # function, none bypass it) - a previously bookmarked/saved kiosk
+    # URL for a station later reconfigured to 'printer_only' now
+    # correctly fails authentication itself, not merely a UI element
+    # that happens to be hidden if the page were somehow still
+    # reached. A station in 'kds_only' or 'kds_printer' mode is
+    # completely unaffected - only 'printer_only' is rejected here.
+    if station.operating_mode == 'printer_only':
+        return None
     return station
 
 
@@ -175,14 +190,19 @@ class FlexSysKdsKioskController(http.Controller):
                             '|', ('order_id.pos_closed_at', '=', False), ('order_id.pos_closed_at', '>=', cancelled_cutoff),
                         '&', ('order_id.pos_order_id', '=', False), ('cancelled_at', '>=', cancelled_cutoff),
         ])
-        orders = lines.mapped('order_id').sorted(
-            key=lambda o: (o.priority != 'vip', o.priority != 'urgent',
-                            o.priority != 'priority', o.created_time))
+        # UI/DATA FIX ("Final Cleanup Request", item 2, "Remove
+        # Priority / Urgent / VIP from KDS"): same fix as
+        # controllers/kds.py's own matching sorted() call - applied
+        # here too for consistency, since this public kiosk page is
+        # equally part of the "active KDS functionality" this item
+        # requires cleaned up, not only the Internal Screen named
+        # explicitly. Sorting by created_time alone (oldest first) is
+        # the only ordering left.
+        orders = lines.mapped('order_id').sorted(key=lambda o: o.created_time)
 
-        order_fg = env['kds.order'].sudo().fields_get(['order_type', 'priority', 'state'])
+        order_fg = env['kds.order'].sudo().fields_get(['order_type', 'state'])
         line_fg = env['kds.order.line'].sudo().fields_get(['line_change'])
         order_type_labels = dict(order_fg['order_type']['selection'])
-        priority_labels = dict(order_fg['priority']['selection'])
         state_labels = dict(order_fg['state']['selection'])
         line_change_labels = dict(line_fg['line_change']['selection'])
 
@@ -255,8 +275,6 @@ class FlexSysKdsKioskController(http.Controller):
                 'id': order.id,
                 'name': order.name,
                 'order_type_label': order_type_labels.get(order.order_type, order.order_type),
-                'priority': order.priority,
-                'priority_label': priority_labels.get(order.priority, order.priority),
                 'state': order.state,
                 'state_label': state_labels.get(order.state, order.state),
                 # BUG-10 FIX: see controllers/kds.py's own matching,
@@ -529,7 +547,7 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
     flex-shrink:0;
   }
   .card.late .card-head{ background:var(--fs-late); }
-  .card.warning .card-head, .card.priority .card-head{ background:var(--fs-orange); }
+  .card.warning .card-head{ background:var(--fs-orange); }
   .card.ready .card-head{ background:var(--fs-ready); }
   /* CANCELLATION VISIBILITY (dev request, point 2: "the operator must
      immediately understand that the entire order has been cancelled"):
@@ -554,7 +572,7 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
   .chip svg{ width:13px; height:13px; flex-shrink:0; }
   .chip-timer{ color:var(--fs-blue); }
   .card.late .chip-timer{ color:var(--fs-late); }
-  .card.warning .chip-timer, .card.priority .chip-timer{ color:var(--fs-orange); }
+  .card.warning .chip-timer{ color:var(--fs-orange); }
   .card.ready .chip-timer{ color:var(--fs-ready); }
   .chip-timer.pulse{ animation:pulseTimer 1.6s ease-in-out infinite; }
   @keyframes pulseTimer{ 0%%,100%%{ opacity:1; } 50%%{ opacity:.5; } }
@@ -566,10 +584,6 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
   .customer-name{
     font-size:13px; font-weight:800; color:#fff; background:rgba(255,255,255,.18);
     padding:4px 10px; border-radius:7px; display:inline-block; margin-top:8px;
-  }
-  .ribbon{
-    position:absolute; top:10px; right:10px; background:rgba(0,0,0,.25); color:#fff;
-    font-size:9.5px; font-weight:800; padding:3px 9px; border-radius:6px; z-index:1;
   }
   .status-blink{
     display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:800;
@@ -650,7 +664,7 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
   }
   .main-act svg{ width:16px; height:16px; }
   .card.late .main-act{ background:var(--fs-late); }
-  .card.warning .main-act, .card.priority .main-act{ background:var(--fs-orange); color:#3a1f00; }
+  .card.warning .main-act{ background:var(--fs-orange); color:#3a1f00; }
   .card.ready .main-act{ background:var(--fs-ready); }
   .empty{ grid-column:1/-1; text-align:center; padding:60px; color:var(--fs-muted); }
   .statbar{
@@ -1204,7 +1218,7 @@ function render() {
       : order.sla_status === 'late' ? 'late'
       : isReadyOrDone ? 'ready'
       : order.sla_status === 'warning' ? 'warning'
-      : order.priority !== 'normal' ? 'priority' : 'normal';
+      : 'normal';
     const celebrateClass = CELEBRATE_IDS.has(order.id) ? 'celebrate' : '';
 
     const linesHtml = order.lines.map(l => {
@@ -1258,7 +1272,6 @@ function render() {
     return `
       <div class="card ${cardClass} ${celebrateClass}">
         <div class="card-head">
-          ${order.priority !== 'normal' ? `<div class="ribbon">${order.priority_label}</div>` : ''}
           <div class="card-title-row">
             <div class="accent-bar"></div>
             <div>

@@ -237,7 +237,7 @@ class FlexSysKdsController(http.Controller):
             # don't leak which stations exist to an unauthorized caller.
             return _kds_error(AccessError(_("Station not available.")))
 
-        order_labels = self._selection_labels('kds.order', ['order_type', 'priority', 'state', 'sla_status'])
+        order_labels = self._selection_labels('kds.order', ['order_type', 'state', 'sla_status'])
         line_labels = self._selection_labels('kds.order.line', ['state', 'sla_status', 'line_change'])
 
         # UX DECISION (see COMPLETED_GRACE_MINUTES/CANCELLED_GRACE_MINUTES
@@ -323,9 +323,21 @@ class FlexSysKdsController(http.Controller):
                             '|', ('order_id.pos_closed_at', '=', False), ('order_id.pos_closed_at', '>=', cancelled_cutoff),
                         '&', ('order_id.pos_order_id', '=', False), ('cancelled_at', '>=', cancelled_cutoff),
         ])
-        orders = lines.mapped('order_id').sorted(
-            key=lambda o: (o.priority != 'vip', o.priority != 'urgent',
-                            o.priority != 'priority', o.created_time))
+        # UI/DATA FIX ("Final Cleanup Request", item 2, "Remove
+        # Priority / Urgent / VIP from KDS"): "No priority-based
+        # operational behavior or sorting affecting KDS orders."
+        # Confirmed by usage check: this sorted() call previously
+        # ranked vip > urgent > priority ahead of every 'normal' order,
+        # regardless of how long the 'normal' one had actually been
+        # waiting - the exact operational behavior this item requires
+        # removed. Sorting by created_time alone (oldest first) is the
+        # only ordering left - the same fallback tiebreaker the old key
+        # already used last, now the sole criterion. The underlying
+        # `priority` field itself (kds_order.py) is intentionally left
+        # in place, per this same item's own "Upgrade Safety" note -
+        # no longer read here, no longer exposed anywhere in the UI,
+        # no new workflow depends on it.
+        orders = lines.mapped('order_id').sorted(key=lambda o: o.created_time)
         result = []
         for order in orders:
             # REAL BUG FIX, confirmed live (dev request "Remaining Fixes
@@ -419,8 +431,6 @@ class FlexSysKdsController(http.Controller):
                 'pos_reference': getattr(order.pos_order_id, 'pos_reference', '') or '',
                 'order_type': order.order_type,
                 'order_type_label': order_labels['order_type'].get(order.order_type),
-                'priority': order.priority,
-                'priority_label': order_labels['priority'].get(order.priority),
                 'state': order.state,
                 'state_label': order_labels['state'].get(order.state),
                 # BUG-10 FIX: see _effective_stage()'s own docstring -

@@ -165,9 +165,7 @@ export class FlexSysKdsScreen extends Component {
     get filteredOrders() {
         const filter = this.state.filter;
         let orders = this.state.orders;
-        if (filter === "priority") {
-            orders = orders.filter((o) => o.priority !== "normal");
-        } else if (filter === "late") {
+        if (filter === "late") {
             orders = orders.filter((o) => o.sla_status === "late");
         } else if (filter === "new" || filter === "preparing" || filter === "ready" || filter === "completed") {
             // REAL BUG FIX, confirmed live on Odoo.sh (BUG-10, "Reopened
@@ -201,9 +199,6 @@ export class FlexSysKdsScreen extends Component {
         if (this.state.orderTypeFilter !== "all") {
             orders = orders.filter((o) => o.order_type === this.state.orderTypeFilter);
         }
-        if (this.state.priorityFilter !== "all") {
-            orders = orders.filter((o) => o.priority === this.state.priorityFilter);
-        }
         if (this.state.employeeFilter !== "all") {
             orders = orders.filter((o) => (o.employee_name || "") === this.state.employeeFilter);
         }
@@ -226,15 +221,6 @@ export class FlexSysKdsScreen extends Component {
             { value: "delivery", label: this.labels.orderTypeDelivery },
             { value: "pickup", label: this.labels.orderTypePickup },
             { value: "drive_thru", label: this.labels.orderTypeDriveThru },
-        ];
-    }
-
-    get priorityOptions() {
-        return [
-            { value: "normal", label: this.labels.priorityNormal },
-            { value: "priority", label: this.labels.priorityPriority },
-            { value: "urgent", label: this.labels.priorityUrgent },
-            { value: "vip", label: this.labels.priorityVip },
         ];
     }
 
@@ -283,7 +269,6 @@ export class FlexSysKdsScreen extends Component {
             ready: byStage.ready || 0,
             completed: byStage.completed || 0,
             late: orders.filter((o) => o.sla_status === "late").length,
-            priority: orders.filter((o) => o.priority !== "normal").length,
         };
     }
 
@@ -321,10 +306,6 @@ export class FlexSysKdsScreen extends Component {
 
     onSelectOrderTypeFilter(ev) {
         this.store.setOrderTypeFilter(ev.target.value);
-    }
-
-    onSelectPriorityFilter(ev) {
-        this.store.setPriorityFilter(ev.target.value);
     }
 
     onSelectEmployeeFilter(ev) {

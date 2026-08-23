@@ -124,7 +124,6 @@ export class KdsOrderCard extends Component {
         if (this.props.order.sla_status === "late") return "fs-card-late";
         if (isReadyOrDone) return "fs-card-ready";
         if (this.props.order.sla_status === "warning") return "fs-card-warning";
-        if (this.props.order.priority !== "normal") return "fs-card-priority";
         return "fs-card-normal";
     }
 

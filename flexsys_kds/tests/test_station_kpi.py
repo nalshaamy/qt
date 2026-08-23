@@ -224,3 +224,93 @@ class TestStationKpi(FlexSysKdsTestCommon):
         })
         self.assertEqual(self.station_kitchen.warning_threshold_minutes, 16.0)
         self.assertEqual(self.station_kitchen.late_threshold_minutes, 24.0)
+
+    # -----------------------------------------------------------------
+    # UI/DATA FIX ("Final Cleanup Request", item 1, "Printer Only -
+    # Remove Public Kiosk"). Same test pattern as test_item5_kiosk_
+    # disabled_blocks_token_auth above - _station_from_token() is the
+    # single, central function every one of the four public kiosk
+    # routes in controllers/kds_kiosk.py relies on, confirmed by usage
+    # check.
+    # -----------------------------------------------------------------
+    def test_final_cleanup_printer_only_blocks_kiosk_token_auth(self):
+        """Required: 'Direct access using an existing/old Public Kiosk
+        URL must also be rejected at backend/controller level... do not
+        implement this as UI hiding only.' Confirms a station's own
+        VALID, unmodified token is rejected the moment its own
+        operating_mode becomes 'printer_only' - genuine backend
+        enforcement, not merely a hidden UI tab that could still be
+        reached directly via a previously bookmarked URL."""
+        from odoo.addons.flexsys_kds.controllers.kds_kiosk import _station_from_token
+        station = self.env['kds.station'].create({
+            'name': 'Final Cleanup Printer Only', 'code': 'FINALPRINTERONLY',
+            'operating_mode': 'kds_printer',
+        })
+        token = station.kiosk_token
+
+        # Confirms it works normally first (kds_printer mode).
+        found = _station_from_token(self.env, 'FINALPRINTERONLY', token)
+        self.assertEqual(found, station)
+
+        station.operating_mode = 'printer_only'
+        found_after = _station_from_token(self.env, 'FINALPRINTERONLY', token)
+        self.assertFalse(
+            found_after,
+            "A 'printer_only' station's kiosk URL must be rejected even with the exact "
+            "same, still-valid token - genuine backend/controller enforcement, not UI-only.")
+
+        # Switching back to a KDS-capable mode restores access
+        # immediately with the SAME token, confirming the token itself
+        # was never touched - the gate is purely operating_mode-based.
+        station.operating_mode = 'kds_only'
+        found_restored = _station_from_token(self.env, 'FINALPRINTERONLY', token)
+        self.assertEqual(found_restored, station)
+        self.assertEqual(station.kiosk_token, token, "The token itself was never touched.")
+
+    def test_final_cleanup_kds_printer_mode_kiosk_still_works(self):
+        """Non-regression: required behavior explicitly states 'KDS +
+        Printer -> Both Public Kiosk and Printers remain available.'
+        Confirms 'kds_printer' mode itself is completely unaffected by
+        this fix - only 'printer_only' is gated."""
+        from odoo.addons.flexsys_kds.controllers.kds_kiosk import _station_from_token
+        station = self.env['kds.station'].create({
+            'name': 'Final Cleanup KDS Printer', 'code': 'FINALKDSPRINTER',
+            'operating_mode': 'kds_printer',
+        })
+        found = _station_from_token(self.env, 'FINALKDSPRINTER', station.kiosk_token)
+        self.assertEqual(found, station)
+
+    def test_final_cleanup_kds_only_mode_kiosk_still_works(self):
+        """Non-regression: 'KDS Only -> Public Kiosk remains available.'"""
+        from odoo.addons.flexsys_kds.controllers.kds_kiosk import _station_from_token
+        station = self.env['kds.station'].create({
+            'name': 'Final Cleanup KDS Only', 'code': 'FINALKDSONLY',
+            'operating_mode': 'kds_only',
+        })
+        found = _station_from_token(self.env, 'FINALKDSONLY', station.kiosk_token)
+        self.assertEqual(found, station)
+
+    def test_final_cleanup_printer_only_public_kiosk_tab_hidden(self):
+        """UI half of item 1: 'Hide/remove Public Kiosk tab' for
+        'printer_only'. Structural check confirming the view-level
+        invisible= condition - the backend enforcement above is the
+        real security boundary; this confirms the UI half is also in
+        place, not a substitute for it."""
+        form_view = self.env.ref('flexsys_kds.view_kds_station_form')
+        arch = form_view.arch_db
+        import re
+        match = re.search(r'<page string="Public Kiosk"[^>]*>', arch)
+        self.assertIsNotNone(match)
+        self.assertIn('invisible="operating_mode == \'printer_only\'"', match.group(0))
+
+    def test_final_cleanup_printers_tab_visibility_unaffected(self):
+        """Non-regression: confirms the Printers tab's own existing
+        visibility rule (shown for printer_only/kds_printer, hidden for
+        kds_only) is completely unaffected by this fix - it was already
+        correct before item 1 and needed no change."""
+        form_view = self.env.ref('flexsys_kds.view_kds_station_form')
+        arch = form_view.arch_db
+        import re
+        match = re.search(r'<page string="Printers"[^>]*>', arch)
+        self.assertIsNotNone(match)
+        self.assertIn("invisible=\"operating_mode == 'kds_only'\"", match.group(0))

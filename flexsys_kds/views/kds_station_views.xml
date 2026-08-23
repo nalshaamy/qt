@@ -141,7 +141,21 @@
                              see the "Description" group added above,
                              right after the main field groups, outside
                              the notebook entirely. -->
-                        <page string="Public Kiosk" groups="flexsys_kds.group_kds_administrator">
+                        <!-- UI IMPROVEMENT ("Final Cleanup Request",
+                             item 1, "Printer Only - Remove Public
+                             Kiosk"): "Hide/remove Public Kiosk tab"
+                             for 'printer_only' - matching the same
+                             invisible= pattern already used by the
+                             SLA/Users tabs just above for this exact
+                             operating mode. The real security
+                             enforcement lives at the backend/controller
+                             level (_station_from_token(), controllers/
+                             kds_kiosk.py) - this is the UI half of the
+                             fix, not a substitute for it: KDS Only and
+                             KDS + Printer both keep this tab exactly as
+                             before, unaffected. -->
+                        <page string="Public Kiosk" groups="flexsys_kds.group_kds_administrator"
+                              invisible="operating_mode == 'printer_only'">
                             <div class="alert alert-warning" role="alert">
                                 Anyone with this URL can view and operate this station's
                                 screen with no Odoo login at all. Treat it like a password:

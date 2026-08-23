@@ -8,6 +8,136 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.27.0 — Final Cleanup: Printer Only Kiosk Removal + Priority/Urgent/VIP Removal
+
+**Two final cleanup items**, both scoped exactly as requested - the
+recently stabilized quantity reconciliation logic (v7.26.0/v7.26.1) is
+completely untouched.
+
+### Item 1 - Printer Only: Remove Public Kiosk
+
+**Backend/controller enforcement** (the real security boundary, not
+UI-only per the request's own explicit instruction): `_station_from_token()`
+- the single, central authentication function every one of the four
+public kiosk routes in `controllers/kds_kiosk.py` already relies on
+(confirmed by usage check) - now also rejects a station whose
+`operating_mode` is `'printer_only'`, matching the exact same pattern
+already established for `kiosk_disabled`. A previously bookmarked/
+saved kiosk URL for a station later reconfigured to `printer_only` now
+correctly fails authentication at the controller level itself, not
+merely a UI element that happens to be hidden.
+
+**UI half**: the Public Kiosk tab on the Station form now carries
+`invisible="operating_mode == 'printer_only'"`, matching the same
+pattern already used by the SLA/Users tabs for this exact mode.
+
+**Confirmed already correct, no change needed**: the Printers tab
+already correctly shows for `printer_only`/`kds_printer` and hides for
+`kds_only` - satisfying "KDS Only -> Printer-specific configuration
+remains hidden" and "KDS + Printer -> Both available" with zero
+additional work.
+
+### Item 2 - Remove Priority / Urgent / VIP from KDS
+
+**Careful usage-check performed first**, per this project's own
+established discipline, before touching anything: confirmed
+`views/kds_routing_rule_views.xml`'s own "priority" text is an entirely
+unrelated concept (a display label for the routing rule's own
+`sequence` field, "lower number = higher priority" - not the
+Priority/Urgent/VIP order feature at all) and was correctly left
+completely untouched.
+
+**Internal KDS Screen, removed**: the PRIORITY pill filter, the
+Priority dropdown filter and its options, the priority count, the
+`onSelectPriorityFilter` handler, `priorityFilter` state (`kds_app.js`/
+`kds_store.js`/`kds_templates.xml`), the card's own priority-based
+border color and ribbon (`kds_order_card.js`/`kds_templates.xml`/
+`kds_style.scss`, with `.fs-card-warning` carefully split apart from
+`.fs-card-priority` in every combined CSS rule rather than removing
+both), and every priority-specific i18n label (`kds_i18n.js`).
+
+**Public kiosk, cleaned up for consistency too**: the request names
+"active KDS functionality" as a whole, not only the Internal Screen -
+`controllers/kds_kiosk.py`'s own matching sort/payload/ribbon/CSS logic
+was cleaned up identically, for the same reason and with the same
+`.card.warning`/`.card.priority` care.
+
+**Backend `kds.order`/Odoo admin UI, also cleaned up** - found during a
+deeper check beyond the Internal Screen's own JS: the backend Order
+list view, form view, and shared search view (used by both Active
+Orders and Order History, confirmed still without either action
+defining its own `search_view_id`) all still exposed `priority` -
+removed from all three, including the "Priority/Urgent/VIP" search
+filter this request names explicitly ("No PRIORITY filter").
+
+**Operational sorting removed**: both `controllers/kds.py` and
+`controllers/kds_kiosk.py` used to sort orders vip > urgent > priority
+> normal ahead of `created_time` - now sort by `created_time` alone,
+satisfying "No priority-based operational behavior or sorting
+affecting KDS orders."
+
+**Upgrade Safety, honored exactly as required**: the underlying
+`priority` field (`kds_order.py`), `action_change_priority()`, its own
+`change_priority` permission entry (`kds_access.py`), and the
+`priority_changed` audit event type (`kds_event.py`) are all
+deliberately kept, completely unmodified - no schema removal, zero
+upgrade/migration risk. Confirmed by two pre-existing tests
+(`test_permissions.py`) that call `action_change_priority()` directly
+at the ORM level, completely unrelated to any UI element removed here
+- both continue to pass unmodified, confirming the backend layer is
+genuinely untouched.
+
+### Two pre-existing tests updated, not just added to
+Both were written in earlier rounds when priority was deliberately kept
+visible because those specific requests never named it explicitly -
+this request does name it explicitly, so removing it now is the
+correct in-scope action, not scope creep the way it would have been
+before. Both updated (not silently left to fail) to assert the new,
+correct state instead of the old one:
+`test_ui2_priority_field_untouched_no_scope_creep` (Patch 5) and
+`test_patch5_item6_active_orders_and_history_keep_priority_filter`
+(Patch 5, item 6) - both now confirm priority's own genuine absence
+where it used to confirm deliberate presence. Two more pre-existing
+tests (`test_fix1_kiosk_late_active_order_still_shows_late`/
+`test_fix1_kiosk_late_completed_order_shows_completed_visual`, from an
+earlier "Completed Late Visual" fix) had their own local
+`resolve_card_class()` simulation function's final `priority` fallback
+branch removed too, to keep mirroring the real, now-updated
+`cardClass` expression exactly, rather than silently drifting from it.
+
+### Files changed
+`controllers/kds_kiosk.py` (item 1's own backend gate; item 2's own
+sort/payload/ribbon/CSS cleanup), `views/kds_station_views.xml` (item
+1's own tab visibility), `views/kds_order_views.xml` (item 2's own
+list/form/search cleanup), `controllers/kds.py` (item 2's own sort/
+payload cleanup), `static/src/xml/kds_templates.xml`,
+`static/src/js/kds_app.js`, `static/src/js/kds_store.js`,
+`static/src/js/kds_order_card.js`, `static/src/js/kds_i18n.js`,
+`static/src/scss/kds_style.scss` (item 2's own Internal Screen
+cleanup).
+
+### Tests
+11 new tests (3 for item 1's own backend enforcement/UI/non-regression
+on kds_only and kds_printer modes, 8 for item 2's own removal across
+every layer - list/form/search views, operational sorting, and a
+structural sweep across every frontend file confirming genuine
+removal, not merely hidden), plus 4 pre-existing tests updated to match
+the new, correct state.
+
+**Total: 532 tests** (up from 521). No database migration required -
+view/controller/JS changes and one test-only fix; no field/model
+schema changes, per this item's own explicit "Upgrade Safety"
+requirement.
+
+**Explicitly untouched, per the request's own instruction**: the
+recently stabilized quantity reconciliation logic (v7.26.0/v7.26.1) -
+no file touched by that work was modified in this round.
+
+Awaiting the client's own live test confirmation before any further
+work.
+
+---
+
 ## v7.26.1 — Critical Bug Fix: Send After Immediate Decrease Reconciliation Re-Processes The Same Change
 
 **Confirmed live**: v7.26.0's own new immediate decrease-reconciliation
