@@ -87,16 +87,37 @@
                     </group>
                     <notebook>
                         <page string="SLA" invisible="operating_mode == 'printer_only'">
-                            <group>
+                            <!-- UI IMPROVEMENT ("Patch 5", item 1,
+                                 "Station - SLA UI"): "Warning and Late
+                                 settings should be visually clear and
+                                 grouped properly." Confirmed live: the
+                                 previous layout nested the Warning and
+                                 Late groups SIDE BY SIDE inside one
+                                 shared outer group - each one squeezed
+                                 into half the form's own width, with
+                                 its own two fields stacked awkwardly
+                                 inside that narrow half. Restructured
+                                 into three separate, full-width groups
+                                 instead - Target, then Warning, then
+                                 Late, each reading top to bottom in the
+                                 exact order requested (Warning
+                                 Threshold %, Warning At (min), Late
+                                 Threshold %, Late At (min)) - a plain
+                                 reordering/regrouping of the same four
+                                 fields, none of their own values,
+                                 compute logic, or validation touched at
+                                 all ("Do not change the existing SLA
+                                 calculation/business logic"). -->
+                            <group string="Target">
                                 <field name="target_prep_time"/>
-                                <group string="Warning">
-                                    <field name="warning_threshold_pct"/>
-                                    <field name="warning_threshold_minutes" readonly="1" widget="float_time"/>
-                                </group>
-                                <group string="Late">
-                                    <field name="late_threshold_pct"/>
-                                    <field name="late_threshold_minutes" readonly="1" widget="float_time"/>
-                                </group>
+                            </group>
+                            <group string="Warning">
+                                <field name="warning_threshold_pct"/>
+                                <field name="warning_threshold_minutes" readonly="1" widget="float_time"/>
+                            </group>
+                            <group string="Late">
+                                <field name="late_threshold_pct"/>
+                                <field name="late_threshold_minutes" readonly="1" widget="float_time"/>
                             </group>
                         </page>
                         <page string="Users" invisible="operating_mode == 'printer_only'">

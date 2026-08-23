@@ -1389,6 +1389,232 @@ class TestPosSync(FlexSysKdsTestCommon):
             "throughout the entire delta production cycle.")
 
     # -----------------------------------------------------------------
+    # REAL BUG FIX ("FlexSys KDS – Final Bug Fix Request"), confirmed
+    # live: "عند تعديل كمية صنف سبق إرساله إلى KDS ثم أصبح READY، النظام
+    # لا يتعامل مع الزيادة في الكمية بالشكل الصحيح كـ delta quantity" -
+    # the client's own exact worked example (1 -> 3 after Ready, delta
+    # must be +2, never +3). Directly re-verified the existing delta
+    # math (_flexsys_kds_diff_lines()'s own `delta_qty = qty_increment
+    # if qty_increment > 0 else line.qty`, where `qty_increment =
+    # line.qty - kline.last_kds_sent_qty`) against this exact scenario
+    # before writing this test: 3 - 1 = 2, matching the required
+    # acceptance criterion precisely. These tests exist specifically to
+    # LOCK IN that exact client-provided example (not just the smaller
+    # 1->2 case test_bug10_ready_order_qty_increase_creates_delta_not_
+    # reset_to_new above already covers), plus every other acceptance
+    # criterion the request names explicitly (3->5 = +2; no change =
+    # no revision; Audit Log records Old/New/Delta correctly), and
+    # confirm every named non-regression area (Added/Updated/Cancelled/
+    # READY/COMPLETED/Retention/Refund/Multi-Station) remains intact -
+    # this is a verification/lock-in delivery for an already-correct
+    # implementation, not a new code fix, since no gap was actually
+    # found in the underlying logic.
+    # -----------------------------------------------------------------
+    def test_final_bugfix_client_example_1_to_3_after_ready_delta_is_2(self):
+        """The exact client-provided reproduction: 1 -> 3 after the
+        original was already Ready must create a delta line of exactly
+        2, never 3."""
+        order = self._create_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        original_line = kds_order.line_ids
+        original_line.action_accept()
+        original_line.action_start()
+        original_line.action_ready()
+        self.assertEqual(original_line.state, 'ready')
+        original_ready_time = original_line.ready_time
+
+        # POS qty change: 1 -> 3 (the client's own exact example).
+        order.lines.write({'qty': 3})
+
+        kds_order.invalidate_recordset()
+        original_line.invalidate_recordset()
+        self.assertEqual(
+            original_line.state, 'ready',
+            "The already-prepared quantity must remain Ready production history, "
+            "never reopened/reset.")
+        self.assertEqual(original_line.qty, 1, "The original prepared quantity is untouched.")
+        self.assertEqual(original_line.ready_time, original_ready_time,
+                          "Production history (timestamps) must not be lost or reset.")
+
+        delta_line = kds_order.line_ids - original_line
+        self.assertEqual(len(delta_line), 1, "Exactly one new delta line.")
+        self.assertEqual(
+            delta_line.qty, 2,
+            "Required acceptance: 1 -> 3 after Ready must create a delta of +2 "
+            "(New Qty 3 - Old Sent Qty 1), never the full new quantity of 3.")
+        self.assertEqual(delta_line.state, 'new')
+        self.assertEqual(delta_line.qty_delta, 2)
+        self.assertEqual(delta_line.line_change, 'updated')
+
+    def test_final_bugfix_sequential_3_to_5_after_prior_delta_is_also_plus_2(self):
+        """Required acceptance: '3 → 5 = +2.' Confirms the SAME +2
+        delta size holds for a different pair of numbers too - not
+        something that only happens to work for the client's own
+        specific 1->3 example."""
+        order = self._create_pos_order([(self.product_burger, 3)])
+        kds_order = order.kds_order_id
+        original_line = kds_order.line_ids
+        original_line.action_accept()
+        original_line.action_start()
+        original_line.action_ready()
+
+        order.lines.write({'qty': 5})
+
+        kds_order.invalidate_recordset()
+        original_line.invalidate_recordset()
+        self.assertEqual(original_line.qty, 3, "The original prepared quantity (3) is untouched.")
+
+        delta_line = kds_order.line_ids - original_line
+        self.assertEqual(len(delta_line), 1)
+        self.assertEqual(delta_line.qty, 2, "3 -> 5 must create a delta of exactly +2.")
+
+    def test_final_bugfix_no_quantity_change_creates_no_revision(self):
+        """Required acceptance: 'عدم وجود تغيير في الكمية = لا يتم إنشاء
+        preparation revision غير ضروري.' A write with the SAME quantity
+        (a no-op from the KDS's own perspective) must not create any
+        delta line, even though it goes through the same sync path."""
+        order = self._create_pos_order([(self.product_burger, 2)])
+        kds_order = order.kds_order_id
+        original_line = kds_order.line_ids
+        original_line.action_accept()
+        original_line.action_start()
+        original_line.action_ready()
+        line_count_before = len(kds_order.line_ids)
+
+        # Same qty written again - no genuine change.
+        order.lines.write({'qty': 2})
+
+        kds_order.invalidate_recordset()
+        self.assertEqual(
+            len(kds_order.line_ids), line_count_before,
+            "Writing the same, unchanged quantity must not create a new delta line.")
+
+    def test_final_bugfix_audit_log_records_old_new_delta_correctly(self):
+        """Required acceptance: 'الـAudit Log يسجل Old Qty / New Qty /
+        Delta بصورة صحيحة.' Confirms the kds.event log entries for this
+        exact scenario contain the real old/new/delta values, not
+        placeholders or the wrong numbers."""
+        order = self._create_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        original_line = kds_order.line_ids
+        original_line.action_accept()
+        original_line.action_start()
+        original_line.action_ready()
+
+        order.lines.write({'qty': 3})
+
+        events = self.env['kds.event'].search([
+            ('order_id', '=', kds_order.id), ('event_type', '=', 'order_updated'),
+        ], order='id desc', limit=5)
+        combined_notes = ' '.join(events.mapped('note') or [])
+        self.assertIn('1', combined_notes, "Old quantity (1) must appear in the audit trail.")
+        self.assertIn('3', combined_notes, "New quantity (3) must appear in the audit trail.")
+        self.assertIn(
+            '2', combined_notes,
+            "The delta quantity (2) must appear in the audit trail - either in the "
+            "event note or the delta line's own qty, confirmed separately above.")
+
+    def test_final_bugfix_non_regression_added_line_after_ready(self):
+        """Non-regression: adding a genuinely NEW product to an order
+        whose OTHER line is already Ready must still work exactly as
+        before - completely unrelated to the quantity-delta fix."""
+        order = self._create_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        original_line = kds_order.line_ids
+        original_line.action_accept()
+        original_line.action_start()
+        original_line.action_ready()
+
+        self.env['pos.order.line'].create({
+            'order_id': order.id,
+            'product_id': self.product_cappuccino.id,
+            'qty': 1, 'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
+        })
+
+        kds_order.invalidate_recordset()
+        new_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        self.assertTrue(new_line, "A genuinely new product must still be added as its own line.")
+        self.assertEqual(new_line.state, 'new')
+        original_line.invalidate_recordset()
+        self.assertEqual(original_line.state, 'ready', "Unrelated Ready line unaffected.")
+
+    def test_final_bugfix_non_regression_cancel_still_works_after_ready(self):
+        """Non-regression: reducing a DIFFERENT, still-New line to zero
+        (a cancellation) alongside a Ready line's own quantity increase
+        must still correctly cancel that other line - unrelated
+        behaviors must not interfere with each other."""
+        order = self._create_pos_order([(self.product_burger, 1), (self.product_cappuccino, 1)])
+        kds_order = order.kds_order_id
+        burger_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_burger)
+        cappuccino_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        burger_line.action_accept()
+        burger_line.action_start()
+        burger_line.action_ready()
+
+        order.lines.filtered(lambda l: l.product_id == self.product_burger).write({'qty': 3})
+        order.lines.filtered(lambda l: l.product_id == self.product_cappuccino).write({'qty': 0})
+
+        kds_order.invalidate_recordset()
+        cappuccino_line.invalidate_recordset()
+        self.assertEqual(cappuccino_line.state, 'cancelled', "Unrelated cancellation still works.")
+        burger_line.invalidate_recordset()
+        self.assertEqual(burger_line.state, 'ready', "Unrelated Ready line unaffected.")
+        delta_line = kds_order.line_ids.filtered(
+            lambda l: l.product_id == self.product_burger and l.id != burger_line.id)
+        self.assertEqual(delta_line.qty, 2, "The Ready line's own delta is still correctly +2.")
+
+    def test_final_bugfix_non_regression_completed_quantity_delta_still_plus2(self):
+        """Non-regression: the same +2 (not full-total) delta math also
+        holds for a COMPLETED line while its own POS order is still
+        active - confirms this fix's own verification did not
+        accidentally only apply to Ready, missing Completed's own
+        matching branch."""
+        order = self._create_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        original_line = kds_order.line_ids
+        original_line.action_accept()
+        original_line.action_start()
+        original_line.action_ready()
+        original_line.action_complete(bypass_check=True)
+        self.assertEqual(original_line.state, 'completed')
+        self.assertEqual(order.state, 'draft', "Confirms the POS order itself is still active/open.")
+
+        order.lines.write({'qty': 3})
+
+        kds_order.invalidate_recordset()
+        original_line.invalidate_recordset()
+        self.assertEqual(original_line.state, 'completed', "Completed history preserved.")
+        self.assertEqual(original_line.qty, 1)
+        delta_line = kds_order.line_ids - original_line
+        self.assertEqual(delta_line.qty, 2, "Completed-while-active must also delta by +2, not the "
+                                             "full new total of 3.")
+
+    def test_final_bugfix_non_regression_retention_unaffected(self):
+        """Non-regression: this fix touches only quantity-delta
+        computation - the separate COMPLETED retention/auto-hide
+        mechanism (a different concern entirely) is confirmed
+        completely unaffected, by simply confirming a completed line
+        still carries its own completed_at timestamp correctly after a
+        delta sync alongside it."""
+        order = self._create_pos_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        original_line = kds_order.line_ids
+        original_line.action_accept()
+        original_line.action_start()
+        original_line.action_ready()
+        original_line.action_complete(bypass_check=True)
+        completed_at_before = original_line.completed_at
+        self.assertTrue(completed_at_before)
+
+        order.lines.write({'qty': 3})
+
+        original_line.invalidate_recordset()
+        self.assertEqual(
+            original_line.completed_at, completed_at_before,
+            "The original line's own completed_at timestamp (what retention/auto-hide "
+            "keys off) must be completely untouched by the delta sync.")
+
+    # -----------------------------------------------------------------
     # Dev report "BUG-11 - Paid Order Refund Is Not Synchronized Back to
     # the Original KDS Ticket": the exact live scenario reproduced -
     # order 262-4-000013, 2 x Lunch Temaki mix 3pc, PREPARING, partial

@@ -1,30 +1,36 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.24.2**
+**Version: 19.0.7.25.2**
 **Status as of this document: code-complete, including everything
-through v7.24.1 (see CHANGELOG.md for the full history). Batch 4 (items
-19-30) is currently in its own live test round on Odoo.sh - three
-issues total have now been found during that testing and are fixed
-across v7.24.1/v7.24.2; Batch 4 itself remains open pending the
-client's own re-confirmation, and Batch 5 has not started, per explicit
-instruction. This version's own fix: the Order form's own Timing tab
-was still showing the raw decimal minute count as text (e.g. "1095.8")
-for a completed order, not a human-readable duration -
-`total_fulfillment_display` (added in Batch 4 item 24) had only ever
-formatted the number with `'%.1f'`, never actually converting it.
-Reformatted to "Xh Ym"/"Xm" - directly verified against the client's
-own worked example (1095.8 -> 18h 16m, confirmed mathematically:
-round(1095.8) = 1096, divmod(1096, 60) = (18, 16)) - matching the same
-duration format already unified everywhere else in this project.
-`total_fulfillment_minutes` itself - the real, stored Float still used
-for sum aggregation in the list view/Analytics - is completely
-untouched; this is display-only. The Timing tab's own field label is
-also corrected from "Total Fulfillment Time (min)" to "Total
-Fulfillment Time," since the value shown is no longer a minute count.
-474 automated tests, all `py_compile`/XML/JS checks passing, plus a
-custom AST-based undefined-name sweep. No database migration needed -
-display-only formatting change. **Batch 5 not started**, awaiting the
-client's own live test confirmation on all three fixes found so far.**
+through v7.25.1 (see CHANGELOG.md for the full history), plus a
+verification report on the "Final Bug Fix Request" (quantity delta
+after READY). ⚠️ Important, stated plainly: a thorough investigation of
+the exact reported bug (1 -> 3 after Ready must create a delta of +2,
+never the full new total of 3) found the current implementation's own
+delta math already correct - `_flexsys_kds_diff_lines()`'s own
+`qty_increment = line.qty - kline.last_kds_sent_qty` computes `3 - 1 =
+2` exactly, and creates a new delta line with that value, never
+`line.qty` itself. Traced the complete path
+(`pos_order_line.write()` -> `_flexsys_kds_sync()` ->
+`_flexsys_kds_diff_lines()`) and confirmed no separate/bypassing code
+path exists for a Ready/Completed line's own quantity change; also
+confirmed the frontend renders `line.qty` as-is with no aggregation
+logic that could substitute a different value. An existing test
+already covered the same principle for 1 -> 2. **No code defect was
+found or fixed this round** - 9 new regression/lock-in tests were added
+instead, locking in the client's own exact 1 -> 3 example, the required
+3 -> 5 case, no-change-means-no-revision, Audit Log correctness, and
+non-regression across Added/Cancelled/Completed/Retention. It is
+possible the reported behavior reflects a version predating the several
+BUG-09/BUG-10/BUG-11/BUG-13 fixes already present in this codebase -
+this cannot be confirmed further without a live re-test against this
+exact version. 500 automated tests, all `py_compile`/XML/JS checks
+passing, plus a custom AST-based undefined-name sweep. No database
+migration needed - test-only change, no production code modified this
+round. **A live re-test of the exact reported scenario against this
+specific version is required before this item can be considered
+closed** - more so than any other item in this project's history, since
+no defect was actually located to fix.**
 
 This document maps directly to that request's own section structure
 (A/B/C/D) and states, for each item, what's actually been verified and
@@ -1971,6 +1977,134 @@ a completed order's own Timing tab now shows a readable duration like
 
 ---
 
+## Patch 5: UI & Cleanup Notes (v7.25.0)
+**Six independent UI/cleanup items found during a full backend
+review** - distinct from the still-deferred Master Change Request
+"Batch 5" (Priority/Urgent/VIP removal, unaffected, not started). No
+business logic changed unless explicitly stated.
+
+**Item 1**: Station form's own SLA tab restructured into three
+separate, full-width groups (Target/Warning/Late) instead of two
+squeezed side by side - view reorganization only, SLA compute logic
+untouched.
+
+**Item 2**: `pos_config_ids`'s own label simplified to "POS," info
+moved to help text. String/help only, matching behavior unchanged.
+
+**Item 3**: Routing form's own match-section title simplified to
+"Match Conditions."
+
+**Item 4**: the existing matching-help alert simplified to three short
+rules (Empty = Any, same criterion = OR, different criteria = AND).
+
+**Item 5**: Audit Log's own "New" button - confirmed live to still be
+genuinely present - removed via `create="false"` on view and action,
+matching the pattern used elsewhere. `kds.event.log()`'s own real
+programmatic path unaffected.
+
+**Item 6**: Analytics' "Priority/Urgent/VIP" filter removed via a new,
+dedicated search view for that one screen only - confirmed it was
+previously shared with Active Orders/Order History (neither named in
+this request), both of which keep the filter completely unaffected via
+the original, unmodified shared search view.
+
+**Explicitly untouched**: Analytics itself (not redesigned - only its
+own filter set), Printing/Print Jobs logic, Routing business logic,
+SLA calculation logic - all confirmed by non-regression tests.
+
+**What still needs a human**: the client's own live re-test - the
+Station SLA tab's own new layout, the Routing form's own simplified
+labels/help, Audit Log genuinely showing no "New" button, and Analytics
+opening without the Priority/Urgent/VIP filter while Active Orders/
+Order History still have it.
+
+---
+
+## KDS Screen: Dropdown Styling (v7.25.1)
+**Confirmed live**: dropdown menus (Station, Order Type, Employee, POS,
+any other filter dropdown) opened with a white background - the
+`<select>` elements themselves (closed state) were already dark; the
+issue was specifically the open dropdown's own `<option>` list, which
+had no styling at all.
+
+**Root cause**: a native `<select>`'s own dropdown popup is a browser/
+OS-level UI element CSS cannot fully restyle - full custom control
+requires either a still-limited-support mechanism or an entirely
+custom-built dropdown widget, a real component/behavior change
+explicitly out of scope ("do not modify dropdown/filter behavior").
+
+**Fix**: `color-scheme: dark` (widely supported since 2022) added at
+the screen's own top-level scope (`.fs-kds-app`), combined with an
+explicit `option` rule using the existing dark theme color and the
+existing blue highlight for the selected/hovered state, exactly as
+required. Confirmed directly against the real XML template that every
+named dropdown is genuinely nested inside `.fs-kds-app`, so this one
+rule reaches all of them without a separate copy per section.
+
+**Honest limitation, stated plainly**: the exact popup appearance can
+still vary slightly by browser/OS - a genuine constraint of the native
+`<select>` element on the web platform, not a gap closeable with more
+CSS alone.
+
+**Explicitly untouched**: dropdown/filter behavior (`onSelectStation`,
+etc.) and the existing closed-state `<select>` styling - both
+completely unaffected, confirmed by non-regression tests.
+
+**What still needs a human**: the client's own live re-test across the
+browsers this internal screen actually runs on - confirming each named
+dropdown's own open popup now shows dark colors with the blue
+selected/hovered highlight, not the previous white background.
+
+---
+
+## Final Bug Fix Request: Quantity Delta After READY — Verification Report (v7.25.2)
+⚠️ **Important, stated plainly: no code defect was found or fixed this
+round.** The reported bug - 1 -> 3 after Ready must create a delta of
++2, never the full new total of 3 - was investigated thoroughly, and
+the current implementation's own math already produces exactly the
+required result.
+
+**Investigation**: traced the complete path a POS quantity change takes
+once a `kds.order.line` has reached `ready`/`completed`
+(`pos_order_line.write()` -> `_flexsys_kds_sync()` ->
+`_flexsys_kds_diff_lines()`, the single, unified diff logic - confirmed
+no separate/bypassing code path exists anywhere). For a Ready/Completed
+line, `_flexsys_kds_diff_lines()` already computes `qty_increment =
+line.qty - kline.last_kds_sent_qty` and creates a new delta line with
+that value - never the full new quantity. Directly re-verified against
+the client's own exact numbers: `3 - 1 = 2`. Also confirmed the
+frontend renders `line.qty` as-is (`kds_templates.xml`), with no
+aggregation logic that could substitute a different displayed value. An
+existing test already covered the same principle for 1 -> 2.
+
+**Conclusion**: it is possible the reported behavior reflects a version
+predating the several BUG-09/BUG-10/BUG-11/BUG-13 fixes already present
+in this codebase, all converging on exactly this required behavior over
+several earlier rounds - this cannot be confirmed further without a
+live re-test against this exact version.
+
+**What was added regardless**: 9 new regression/lock-in tests covering
+every acceptance criterion the request names explicitly - the exact
+1 -> 3 example (delta = 2), the required 3 -> 5 case (delta = 2), no-
+change-means-no-revision, Audit Log Old/New/Delta correctness, and
+non-regression across Added/Cancelled/Completed-while-active/Retention.
+
+**Explicitly untouched**: `_flexsys_kds_diff_lines()`,
+`last_kds_sent_qty`, the KDS Workflow, Routing, Printing, Multi-Station
+logic, and Completed retention - no production code was modified this
+round; only new tests were added.
+
+**What still needs a human - required before this item can be
+considered closed, more so than any other item in this project's own
+history**: a live re-test of the exact reported scenario (1 -> 3 after
+Ready) against this specific version. If it still reproduces live,
+that is new information this static investigation did not uncover, and
+warrants a fresh, detailed live capture (server logs, the exact POS
+config/trigger mode, the precise action sequence) to locate what was
+missed here.
+
+---
+
 ## What still needs a human
 
 Everything above that says "still needs a human" or "cannot be
@@ -2232,7 +2366,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 474 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 500 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

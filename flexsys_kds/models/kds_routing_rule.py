@@ -35,7 +35,18 @@ class KdsRoutingRule(models.Model):
              "(security fix, audit finding 1/CRITICAL: multi-company "
              "isolation)."
     )
-    pos_config_ids = fields.Many2many('pos.config', string='POS (leave empty = all)')
+    # UI IMPROVEMENT ("Patch 5", item 2, "Routing - POS Field Label"):
+    # "POS (leave empty = all)" -> "POS", with the same information
+    # moved into a proper help tooltip instead of crammed into the
+    # label itself - a cleaner, more standard Odoo convention (labels
+    # name the field, help text explains behavior). Purely a
+    # string/help change - the field's own name, type, and matching
+    # behavior (route_product()/`_matches()`) are completely
+    # unchanged; empty still means "applies to all POS configurations,"
+    # exactly as before.
+    pos_config_ids = fields.Many2many(
+        'pos.config', string='POS',
+        help="Leave empty to apply this rule to all POS configurations.")
 
     # Many2many rather than Many2one: one rule commonly covers a group of
     # products/categories that should all go to the same station (e.g.

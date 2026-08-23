@@ -188,3 +188,39 @@ class TestStationKpi(FlexSysKdsTestCommon):
         found_restored = _station_from_token(self.env, 'ITEM5BLOCKED', token)
         self.assertEqual(found_restored, station)
         self.assertEqual(station.kiosk_token, token, "The token itself was never touched throughout.")
+
+    # -----------------------------------------------------------------
+    # UI IMPROVEMENT ("Patch 5", item 1, "Station - SLA UI").
+    # -----------------------------------------------------------------
+    def test_patch5_item1_sla_tab_restructured_into_three_groups(self):
+        """Item 1: Warning and Late settings reorganized into their own
+        separate, full-width groups (Target/Warning/Late) instead of
+        being squeezed side by side inside one shared group - structural
+        check confirming the new layout, and that the field order within
+        each group matches exactly what was requested (Warning
+        Threshold %, Warning At (min), Late Threshold %, Late At
+        (min))."""
+        form_view = self.env.ref('flexsys_kds.view_kds_station_form')
+        arch = form_view.arch_db
+        self.assertIn('group string="Warning"', arch)
+        self.assertIn('group string="Late"', arch)
+
+        warning_pct_pos = arch.index('name="warning_threshold_pct"')
+        warning_min_pos = arch.index('name="warning_threshold_minutes"')
+        late_pct_pos = arch.index('name="late_threshold_pct"')
+        late_min_pos = arch.index('name="late_threshold_minutes"')
+        self.assertLess(warning_pct_pos, warning_min_pos)
+        self.assertLess(warning_min_pos, late_pct_pos)
+        self.assertLess(late_pct_pos, late_min_pos)
+
+    def test_patch5_item1_sla_calculation_completely_unchanged(self):
+        """Non-regression: 'Do not change the existing SLA
+        calculation/business logic.' Confirms the computed minute
+        values (warning_threshold_minutes/late_threshold_minutes) still
+        compute exactly the same way - a pure view reorganization, zero
+        change to the underlying compute methods."""
+        self.station_kitchen.write({
+            'target_prep_time': 20, 'warning_threshold_pct': 80, 'late_threshold_pct': 120,
+        })
+        self.assertEqual(self.station_kitchen.warning_threshold_minutes, 16.0)
+        self.assertEqual(self.station_kitchen.late_threshold_minutes, 24.0)

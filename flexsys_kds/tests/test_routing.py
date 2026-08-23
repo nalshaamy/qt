@@ -441,3 +441,61 @@ class TestRouting(FlexSysKdsTestCommon):
         with_inactive = self.env['kds.order.source.tag'].with_context(
             active_test=False).search([('code', '=', 'qr')])
         self.assertTrue(with_inactive)
+
+    # -----------------------------------------------------------------
+    # UI IMPROVEMENT ("Patch 5", items 2, 3, 4).
+    # -----------------------------------------------------------------
+    def test_patch5_item2_pos_field_label_simplified(self):
+        """Item 2: 'POS (leave empty = all)' -> 'POS', with the same
+        info moved to help text. Confirms the field's own label/help
+        were updated, and that empty still means 'applies to all POS
+        configurations' - a pure label change, matching behavior."""
+        field = self.env['kds.routing.rule']._fields['pos_config_ids']
+        self.assertEqual(field.string, 'POS')
+        self.assertIn('Leave empty', field.help)
+        self.assertIn('all POS configurations', field.help)
+
+    def test_patch5_item2_empty_pos_still_matches_everything(self):
+        """Non-regression: confirms empty pos_config_ids still matches
+        any POS - the underlying behavior this label describes is
+        completely unchanged."""
+        rule = self.env['kds.routing.rule'].create({
+            'name': 'Empty POS still matches all',
+            'product_ids': [(6, 0, [self.product_burger.id])],
+            'station_id': self.station_kitchen.id,
+        })
+        self.assertTrue(rule._matches(self.product_burger, 'dine_in', 'pos', self.pos_config))
+
+    def test_patch5_item3_match_section_title_simplified(self):
+        """Item 3: 'MATCH ON (EMPTY = MATCHES EVERYTHING FOR THAT
+        CRITERION)' -> 'Match Conditions'."""
+        form_view = self.env.ref('flexsys_kds.view_kds_routing_rule_form')
+        arch = form_view.arch_db
+        self.assertIn('string="Match Conditions"', arch)
+        self.assertNotIn('Match on (empty = matches everything', arch)
+
+    def test_patch5_item4_matching_help_simplified(self):
+        """Item 4: simplified help text stating the three rules
+        plainly - Empty criterion = Any, Multiple values in the same
+        criterion = OR, Different criteria = AND."""
+        form_view = self.env.ref('flexsys_kds.view_kds_routing_rule_form')
+        arch = form_view.arch_db
+        self.assertIn('Empty criterion = Any', arch)
+        self.assertIn('same criterion = OR', arch)
+        self.assertIn('Different criteria = AND', arch)
+
+    def test_patch5_items2to4_matching_logic_completely_unchanged(self):
+        """Non-regression: confirms the underlying routing/matching
+        engine (route_product(), _matches()) is completely untouched
+        by these purely-cosmetic label/help/title changes - AND
+        semantics across different criteria, OR semantics within the
+        same criterion, still hold exactly as before."""
+        rule = self.env['kds.routing.rule'].create({
+            'name': 'AND/OR semantics unaffected',
+            'product_ids': [(6, 0, [self.product_burger.id, self.product_cappuccino.id])],
+            'pos_categ_ids': [(6, 0, [])],
+            'station_id': self.station_kitchen.id,
+        })
+        # OR within product_ids: either product matches.
+        self.assertTrue(rule._matches(self.product_burger, 'dine_in', 'pos', self.pos_config))
+        self.assertTrue(rule._matches(self.product_cappuccino, 'dine_in', 'pos', self.pos_config))

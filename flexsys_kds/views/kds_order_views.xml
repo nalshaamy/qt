@@ -424,9 +424,48 @@
         <field name="context">{'create': False}</field>
     </record>
 
+    <record id="view_kds_order_analytics_search" model="ir.ui.view">
+        <field name="type">search</field>
+        <field name="name">kds.order.analytics.search</field>
+        <field name="model">kds.order</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="pos_order_id" string="POS Order"/>
+                <field name="customer_name"/>
+                <field name="station_ids"/>
+                <filter string="Active" name="active_orders" domain="[('state','not in',('completed','cancelled'))]"/>
+                <filter string="Late" name="late" domain="[('sla_status','=','late')]"/>
+                <separator/>
+                <filter string="Status" name="group_state" context="{'group_by': 'state'}"/>
+                <filter string="POS" name="group_pos" context="{'group_by': 'pos_config_id'}"/>
+            </search>
+        </field>
+    </record>
+
     <record id="action_kds_order_analytics" model="ir.actions.act_window">
         <field name="name">Analytics</field>
         <field name="res_model">kds.order</field>
         <field name="view_mode">pivot,graph</field>
+        <!-- UI FIX ("Patch 5", item 6, "Analytics - Remove Obsolete
+             Priority Filter"): "Remove any remaining Analytics
+             UI/search references to this obsolete functionality."
+             Confirmed live: this action shares kds.order's own
+             single existing search view (view_kds_order_search, no
+             search_view_id previously set) with Active Orders and
+             Order History - that shared view's own "Priority/Urgent/
+             VIP" filter is exactly what needed removing here, but
+             neither Active Orders nor Order History were named in
+             this request, and item 31's own full Priority/Urgent/VIP
+             removal is still its own separate, deferred batch (not
+             started) - deleting the filter from the shared view
+             outright would have silently changed those two other,
+             unrelated screens too. A dedicated search view for
+             Analytics only, above, is a minimal, exact fix instead:
+             identical to the shared one in every other respect,
+             Priority/Urgent/VIP left out - Active Orders/Order History
+             keep that filter completely unaffected, exactly as they
+             already had it. -->
+        <field name="search_view_id" ref="view_kds_order_analytics_search"/>
     </record>
 </odoo>

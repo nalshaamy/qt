@@ -24,6 +24,59 @@ $fs-ready: #43a047;
     min-height: 100vh;
     font-family: "Cairo", "Segoe UI", sans-serif;
     padding: 12px;
+
+    // UI FIX ("KDS Screen - Dropdown Styling"), confirmed live: every
+    // <select> element's own CLOSED state (Station, Order Type,
+    // Employee, POS, etc.) was already dark - the reported issue is
+    // specifically the OPEN dropdown's own <option> list, which
+    // rendered with a white background, inconsistent with the rest of
+    // this dark-themed screen. Deliberately placed here, at this
+    // top-level scope (not nested inside .fs-header or .fs-dropdown-
+    // filters individually) - descendant-selector nesting inside just
+    // one of those sections would only have fixed the dropdown(s)
+    // physically located there, missing every other one; this single
+    // rule now covers every <select> anywhere under .fs-kds-app, "any
+    // other dropdown on the Internal KDS Screen" included, without
+    // needing a separate copy per section.
+    //
+    // Root cause, and an honest technical limit worth stating plainly:
+    // a native <select>'s own dropdown popup is a browser/OS-level UI
+    // element, not a plain HTML node CSS can fully restyle (see MDN's
+    // own "Customizable select elements" article - full styling
+    // control requires an entirely different, still limited-support
+    // HTML/CSS mechanism, or a custom JS-built dropdown from scratch,
+    // replacing this module's own long-standing plain <select>
+    // elements with a new custom widget - a real component/behavior
+    // change well beyond a styling-only fix, and explicitly not what
+    // was asked for here: "do not modify dropdown/filter behavior").
+    // `color-scheme: dark` (widely supported since 2022, per MDN and
+    // multiple independent CSS references) is the correct, standard,
+    // lightweight way to ask the browser to render an element's own
+    // native controls - including this exact dropdown popup - using
+    // dark colors instead of light ones, with no custom dropdown
+    // implementation at all. Combined with an explicit `option`
+    // background/color/selected-highlight rule below - keeping the
+    // existing blue ($fs-blue) highlight for the selected/hovered
+    // option, exactly as required - honored by Chromium/Firefox-based
+    // browsers, the ones actually likely to be running this internal
+    // screen, for the closest practical match to this project's own
+    // brand colors. The exact popup appearance can still vary slightly
+    // by browser/OS - stated plainly, not a gap this delivery can
+    // close further with CSS alone.
+    select {
+        color-scheme: dark;
+
+        option {
+            background: $fs-card-bg;
+            color: #eef2f7;
+
+            &:checked, &:hover {
+                background: $fs-blue;
+                color: white;
+            }
+        }
+    }
+
     // REAL FIX (reported live on the kiosk, applied here too since this
     // screen explicitly supports a touch-tablet kiosk mode of its own -
     // see the comment just below): the classic mobile-browser tap delay

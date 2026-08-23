@@ -93,23 +93,34 @@
                             <field name="pos_config_ids" widget="many2many_tags"/>
                         </group>
                     </group>
-                    <!-- UI/DATA FIX ("Master Change Request", item 8,
-                         "Routing Matching Explanation"): simplified,
-                         explicit help text replacing the earlier
-                         group-string-only note - states plainly, in
-                         order, the three facts an administrator setting
-                         up a rule actually needs: an empty criterion
-                         matches everything, multiple values within the
-                         SAME criterion are OR'd together, and every
-                         criterion that IS set must all match at once
-                         (AND) for the rule as a whole to match. -->
+                    <!-- UI IMPROVEMENT ("Patch 5", item 4, "Routing -
+                         Simplify Matching Help"): simplified further
+                         from the earlier full-sentence explanation
+                         (Master Change Request item 8) into the three
+                         short, explicit rules requested - "Empty
+                         criterion = Any," "Multiple values within the
+                         same criterion = OR," "Different criteria =
+                         AND." Same underlying facts as before, same
+                         matching behavior (route_product()/
+                         _matches()) - wording only, made as compact
+                         and scannable as the request asks for. -->
                     <div class="alert alert-info" role="alert">
-                        <strong>How matching works:</strong> leave a criterion empty to match every value for it.
-                        Selecting several values in the <em>same</em> criterion (e.g. two POS Categories) matches
-                        <em>any</em> of them. Every criterion that IS set below must all match at the same time
-                        for this rule to apply.
+                        <strong>How matching works:</strong>
+                        Empty criterion = Any &#8226;
+                        Multiple values in the same criterion = OR &#8226;
+                        Different criteria = AND
                     </div>
-                    <group string="Match on (empty = matches everything for that criterion)">
+                    <!-- UI IMPROVEMENT ("Patch 5", item 3, "Routing -
+                         Match Section Title"): "MATCH ON (EMPTY =
+                         MATCHES EVERYTHING FOR THAT CRITERION)" ->
+                         "Match Conditions" - the detailed explanation
+                         moved to the alert box above (item 4) already
+                         says this more clearly than a long group
+                         header could; this title is now just a plain,
+                         short section label. Behavior unchanged - the
+                         fields inside this group and their own
+                         matching logic are completely untouched. -->
+                    <group string="Match Conditions">
                         <group>
                             <field name="product_ids" widget="many2many_tags"/>
                             <field name="pos_categ_ids" widget="many2many_tags"/>
