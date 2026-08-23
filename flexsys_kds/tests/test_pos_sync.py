@@ -6552,3 +6552,262 @@ class TestPosSync(FlexSysKdsTestCommon):
         self.assertEqual(
             line.state, 'cancelled',
             "The same immediate reconciliation must apply under 'payment' trigger mode too.")
+
+    # -----------------------------------------------------------------
+    # REAL BUG FIX ("Critical Bug Report - Send After Immediate Decrease
+    # Reconciliation Re-Processes The Same Change"), confirmed live:
+    # v7.26.0's own new immediate decrease-reconciliation feature
+    # correctly settled KDS to the true effective quantity, but a LATER,
+    # ordinary Send re-entered the ready/completed branch anyway - the
+    # outer `changed` flag (kline.qty != line.qty) compares only ONE
+    # sibling's own partial share against the FULL POS total, which is
+    # almost never a meaningful "did anything change" signal once more
+    # than one historical sibling exists for the same product. Fixed at
+    # the reconciliation-state level: qty_really_changed (based on
+    # total_historical_qty, the same authoritative combined total this
+    # method already uses for computing the real delta) replaces
+    # `changed` as this branch's own entry/decision signal for quantity;
+    # note_variant_changed is split out separately for the genuinely
+    # different, per-line note/variant-only case. Both the immediate
+    # decrease path and the normal Send/Payment path now share this
+    # exact same computation - a single, authoritative reconciliation
+    # baseline, not two independent mechanisms.
+    # -----------------------------------------------------------------
+    def test_final_reconciliation_mandatory_scenario_1_ready_3_send_2_send_send(self):
+        """Required regression test, verbatim from the report:
+        '1 -> READY -> 3 -> Send -> +2 READY -> 2 -> immediate
+        reconciliation -> Send -> Send again.' Required: effective KDS
+        quantity remains exactly 2 throughout, and BOTH Send operations
+        after the immediate decrease create ZERO additional lines."""
+        order = self._send_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        original_line = kds_order.line_ids
+        original_line.action_accept()
+        original_line.action_start()
+        original_line.action_ready()
+
+        # 1 -> 3, then genuine Send (matches the report's own step 4-6).
+        order.lines.write({'qty': 3})
+        order.flexsys_kds_register_send()
+        kds_order.invalidate_recordset()
+        delta_line = kds_order.line_ids - original_line
+        self.assertEqual(delta_line.qty, 2)
+
+        # +2 fully READY (report's own step 7).
+        delta_line.action_accept()
+        delta_line.action_start()
+        delta_line.action_ready()
+
+        # 3 -> 2: immediate reconciliation (report's own step 8-9).
+        order.lines.write({'qty': 2})
+        kds_order.invalidate_recordset()
+        original_line.invalidate_recordset()
+        delta_line.invalidate_recordset()
+        self.assertEqual(original_line.qty, 1, "Original untouched.")
+        self.assertEqual(delta_line.qty, 1, "Delta reduced 2 -> 1 by immediate reconciliation.")
+        line_count_after_immediate = len(kds_order.line_ids)
+        self.assertEqual(line_count_after_immediate, 2, "Still exactly 2 lines - no phantom "
+                                                          "line yet.")
+
+        # Send (report's own step 10) - required: delta = 0, no
+        # additional KDS change.
+        order.flexsys_kds_register_send()
+        kds_order.invalidate_recordset()
+        self.assertEqual(
+            len(kds_order.line_ids), line_count_after_immediate,
+            "Pressing Send after an already-settled immediate decrease must be a "
+            "complete no-op - no phantom/additional delta line created.")
+        original_line.invalidate_recordset()
+        delta_line.invalidate_recordset()
+        self.assertEqual(original_line.qty, 1)
+        self.assertEqual(delta_line.qty, 1)
+        self.assertEqual(
+            original_line.qty + delta_line.qty, 2,
+            "Effective KDS quantity must remain exactly 2.")
+
+        # Send again (repeated Send must be idempotent).
+        order.flexsys_kds_register_send()
+        kds_order.invalidate_recordset()
+        self.assertEqual(
+            len(kds_order.line_ids), line_count_after_immediate,
+            "Repeated Send without another POS change must remain a no-op every time.")
+        original_line.invalidate_recordset()
+        delta_line.invalidate_recordset()
+        self.assertEqual(original_line.qty + delta_line.qty, 2)
+
+    def test_final_reconciliation_mandatory_scenario_3_2_send_send_4_send(self):
+        """Required regression test, verbatim from the report:
+        '3 -> 2 -> Send -> Send -> 4 -> Send.' Expected delta sequence:
+        -1 -> 0 -> 0 -> +2. Final effective quantity: 4."""
+        order = self._send_order([(self.product_burger, 3)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+
+        # 3 -> 2: immediate reconciliation, expected delta -1.
+        order.lines.write({'qty': 2})
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 2, "Delta -1: 3 -> 2.")
+        self.assertEqual(line.qty_delta, -1)
+        line_count = len(kds_order.line_ids)
+        self.assertEqual(line_count, 1, "Single-sibling case: reduced in place, no new line.")
+
+        # Send: expected delta 0 (no-op).
+        order.flexsys_kds_register_send()
+        kds_order.invalidate_recordset()
+        self.assertEqual(len(kds_order.line_ids), line_count, "Send #1 after settled state: no-op.")
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 2)
+
+        # Send again: expected delta 0 (no-op, idempotent).
+        order.flexsys_kds_register_send()
+        kds_order.invalidate_recordset()
+        self.assertEqual(len(kds_order.line_ids), line_count, "Send #2 (repeated): still a no-op.")
+        line.invalidate_recordset()
+        self.assertEqual(line.qty, 2)
+
+        # 2 -> 4 (a genuine increase, deferred until Send per existing
+        # behavior), then Send: expected delta +2.
+        order.lines.write({'qty': 4})
+        order.flexsys_kds_register_send()
+        kds_order.invalidate_recordset()
+        new_delta_line = kds_order.line_ids - line
+        self.assertTrue(new_delta_line, "The genuine increase must create exactly one new "
+                                         "delta line once Sent.")
+        self.assertEqual(new_delta_line.qty, 2, "Delta +2: 2 -> 4.")
+        line.invalidate_recordset()
+        self.assertEqual(
+            line.qty + new_delta_line.qty, 4,
+            "Final effective quantity must be exactly 4.")
+
+    def test_final_reconciliation_1_to_0_still_cancels_correctly(self):
+        """Required acceptance criterion: '1 -> 0 still correctly
+        becomes CANCELLED,' unaffected by this fix."""
+        order = self._send_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+
+        order.lines.write({'qty': 0})
+
+        line.invalidate_recordset()
+        self.assertEqual(line.state, 'cancelled')
+
+        # A later Send must remain a no-op (idempotent) too.
+        order.flexsys_kds_register_send()
+        kds_order.invalidate_recordset()
+        self.assertEqual(len(kds_order.line_ids), 1, "No phantom line created on the later Send.")
+
+    def test_final_reconciliation_note_change_alone_still_creates_full_batch_delta(self):
+        """Non-regression: confirms the DELIBERATE, pre-existing
+        behavior for a genuine note/variant-only change (no quantity
+        change at all) is completely unaffected by this fix -
+        note_variant_changed (split out separately) still correctly
+        triggers the "re-confirm the whole ready batch with the new
+        note" delta line, using the full current quantity, exactly as
+        it always has for the single-sibling case."""
+        order = self._send_order([(self.product_burger, 2)])
+        kds_order = order.kds_order_id
+        line = kds_order.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+
+        order.lines.write({'note': 'no onions'})
+
+        kds_order.invalidate_recordset()
+        delta_line = kds_order.line_ids - line
+        self.assertTrue(delta_line, "A genuine note-only change must still create a delta "
+                                     "line for the kitchen to see the new instructions.")
+        self.assertEqual(delta_line.qty, 2, "Uses the FULL current quantity - the whole "
+                                             "already-ready batch needs the new note, exactly "
+                                             "as this deliberate behavior always worked.")
+
+    def test_final_reconciliation_non_regression_multi_station_unaffected(self):
+        """Required acceptance criterion: 'Multi-station behavior
+        remains unaffected.' Confirms an unrelated product at a
+        different station is untouched by the no-op Send fix."""
+        order = self._send_order([(self.product_burger, 3), (self.product_cappuccino, 1)])
+        kds_order = order.kds_order_id
+        burger_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_burger)
+        cappuccino_line = kds_order.line_ids.filtered(lambda l: l.product_id == self.product_cappuccino)
+        burger_line.action_accept()
+        burger_line.action_start()
+        burger_line.action_ready()
+        cappuccino_line.action_accept()
+        cappuccino_line.action_start()
+        cappuccino_line.action_ready()
+
+        order.lines.filtered(lambda l: l.product_id == self.product_burger).write({'qty': 2})
+        order.flexsys_kds_register_send()  # must be a no-op for burger, and untouch cappuccino
+
+        cappuccino_line.invalidate_recordset()
+        self.assertEqual(cappuccino_line.state, 'ready')
+        self.assertEqual(cappuccino_line.qty, 1, "Unrelated station's own line completely "
+                                                  "untouched by the burger's own reconciliation.")
+
+    def test_final_reconciliation_non_regression_history_and_audit_preserved(self):
+        """Required acceptance criteria: 'Historical READY/COMPLETED
+        preparation records remain preserved' and 'Audit history
+        remains correct.' Confirms the original line's own timestamps
+        survive the immediate-decrease-then-Send sequence untouched,
+        and that a real audit event exists for the genuine decrease."""
+        order = self._send_order([(self.product_burger, 1)])
+        kds_order = order.kds_order_id
+        original_line = kds_order.line_ids
+        original_line.action_accept()
+        original_line.action_start()
+        original_line.action_ready()
+        original_ready_time = original_line.ready_time
+
+        order.lines.write({'qty': 3})
+        order.flexsys_kds_register_send()
+        kds_order.invalidate_recordset()
+        delta_line = kds_order.line_ids - original_line
+        delta_line.action_accept()
+        delta_line.action_start()
+        delta_line.action_ready()
+
+        order.lines.write({'qty': 2})
+        order.flexsys_kds_register_send()
+
+        original_line.invalidate_recordset()
+        self.assertEqual(
+            original_line.ready_time, original_ready_time,
+            "Original preparation history must remain preserved through the entire "
+            "immediate-decrease-then-Send sequence.")
+
+        events = self.env['kds.event'].search([
+            ('order_id', '=', kds_order.id), ('event_type', '=', 'order_updated'),
+        ])
+        self.assertTrue(events, "The audit trail must correctly record the genuine decrease.")
+
+    def test_final_reconciliation_non_regression_no_duplicate_kds_order(self):
+        """Required acceptance criterion: 'No duplicate KDS order... is
+        created.' Confirms the entire mandatory scenario stays on the
+        exact same kds.order."""
+        order = self._send_order([(self.product_burger, 1)])
+        kds_order_id = order.kds_order_id.id
+        line = order.kds_order_id.line_ids
+        line.action_accept()
+        line.action_start()
+        line.action_ready()
+
+        order.lines.write({'qty': 3})
+        order.flexsys_kds_register_send()
+        order.invalidate_recordset()
+        delta = order.kds_order_id.line_ids - line
+        delta.action_accept()
+        delta.action_start()
+        delta.action_ready()
+
+        order.lines.write({'qty': 2})
+        order.flexsys_kds_register_send()
+        order.flexsys_kds_register_send()
+
+        order.invalidate_recordset()
+        self.assertEqual(order.kds_order_id.id, kds_order_id)

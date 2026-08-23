@@ -1,43 +1,44 @@
 # FlexSys KDS — Release Status
 
-**Version: 19.0.7.26.0**
+**Version: 19.0.7.26.1**
 **Status as of this document: code-complete, including everything
-through v7.25.3 (see CHANGELOG.md for the full history), plus a fix for
-a genuine workflow integrity gap confirmed live on POS order
-2640-3-000005: under `kds_send_trigger='send'`, a quantity decrease
-(including all the way to 0/removal) on an already-Ready line stayed
-purely local to POS until the next explicit Send - a cashier who
-reduced quantity and simply navigated away left POS and KDS showing
-genuinely different effective quantities indefinitely. Presented with
-three implementation approaches of differing risk (frontend navigation
-blocking, a purely visual indicator, or backend-only automatic
-reconciliation), the client explicitly rejected navigation blocking -
-"We do not want to block or warn the cashier, and we do not want to
-change the normal POS workflow" - choosing immediate backend
-reconciliation specifically for quantity decreases, with increases and
-new products staying deferred to the next genuine Send/Payment exactly
-as before. `pos_order_line.py`'s own `write()` now detects a genuine
-decrease on an already-sent line and calls
-`_flexsys_kds_diff_lines(decrease_only=True)` directly, bypassing the
-trigger gate but strictly scoped to lines that genuinely decreased.
-Two additional real defects were found and fixed during final review,
-before this feature had ever been exercised by a test: the
-`pending_removal` sweep and the "line missing from `current_ids`"
-cancellation sweep both ran unconditionally regardless of
-`decrease_only`, meaning the new immediate path would have also
-immediately cancelled an unrelated, separately-deleted line still
-correctly awaiting its own next genuine Send - directly contradicting
-an earlier round's own deliberate design decision on that exact point.
-Both are now correctly gated behind `not decrease_only`. Explicitly not
-extended to line deletion (`unlink()`) itself, per the client's own
-scoped examples (all quantity writes, never product removal via
-deletion). 514 automated tests, all `py_compile`/XML/JS checks passing,
-plus a custom AST-based undefined-name sweep. No database migration
-needed - logic-only changes to two existing methods. **Required before
-this can be closed**: the client's own live re-test of the exact
-reported reproduction, confirming KDS reflects the change immediately
-with POS's own normal, unmodified editing workflow completely
-unaffected.**
+through v7.26.0 (see CHANGELOG.md for the full history), plus a
+critical fix confirmed live: v7.26.0's own new immediate decrease-
+reconciliation feature correctly settled KDS to the true effective
+quantity, but a LATER, ordinary Send re-processed the same, already-
+settled change again - fabricating a phantom additional delta line for
+the full current quantity even though nothing had actually changed.
+Root cause, confirmed mathematically before implementing anything:
+`_flexsys_kds_diff_lines()`'s own `changed` flag compared only ONE
+historical sibling's own partial share against the FULL POS total -
+almost never a meaningful "did anything change" signal once more than
+one historical sibling exists for the same product, even when the TRUE
+combined total already exactly matches the current POS quantity. Fixed
+at the reconciliation-state level, per the report's own explicit
+requirement, not a one-time "ignore next Send" workaround: `changed` is
+no longer this branch's own signal for quantity change at all -
+replaced by `qty_really_changed`, computed from `total_historical_qty`
+(the same authoritative combined total this method already treats as
+ground truth for the real delta everywhere else), with
+`note_variant_changed` split out separately for the genuinely different
+per-line note/variant-only case. Both the immediate decrease path and
+the normal full Send/Payment sync now share this exact same
+computation - a single, authoritative reconciliation baseline, not two
+independent mechanisms. Directly re-verified both of the report's own
+mandatory scenarios mathematically before writing any test: `1 -> Ready
+-> 3 -> Send -> +2 Ready -> 2 -> Send -> Send` now produces delta 0 on
+both Sends; `3 -> 2 -> Send -> Send -> 4 -> Send` produces the exact
+required -1 -> 0 -> 0 -> +2 sequence. In the single-sibling case (every
+scenario every earlier fix covers), the new computation is
+mathematically identical to the old one - zero behavior change,
+confirmed directly and by every existing test continuing to pass
+unmodified. 521 automated tests, all `py_compile`/XML/JS checks
+passing, plus a custom AST-based undefined-name sweep. No database
+migration needed - logic-only change to an existing method's own
+decision conditions. **Required before this can be closed**: the
+client's own live re-test of both mandatory scenarios, confirming Send
+after an immediate decrease is a genuine no-op and repeated Send stays
+idempotent.**
 
 This document maps directly to that request's own section structure
 (A/B/C/D) and states, for each item, what's actually been verified and
@@ -2217,6 +2218,52 @@ navigation-blocking dialog) confirming KDS reflects the change
 immediately and POS's own normal editing workflow is completely
 unaffected.
 
+✅ **Update**: the client's own live re-test confirmed the immediate
+decrease reconciliation itself working correctly - but found a
+critical follow-on defect when Send was pressed afterward. See
+v7.26.1's own section immediately below.
+
+---
+
+## Critical Bug Fix: Send After Immediate Decrease Reconciliation Re-Processes The Same Change (v7.26.1)
+**Confirmed live**: after v7.26.0's own immediate decrease
+reconciliation correctly settled KDS to the true effective quantity, a
+LATER, ordinary Send re-processed the same, already-settled change
+again - fabricating a phantom additional delta line for the full
+current quantity even though nothing had actually changed.
+
+**Root cause, confirmed mathematically before implementing anything**:
+`_flexsys_kds_diff_lines()`'s own `changed` flag compared only ONE
+historical sibling's own partial share against the FULL POS total -
+almost never a meaningful signal once more than one historical sibling
+exists for the same product, even when the TRUE combined total already
+exactly matches the current POS quantity.
+
+**Fix, at the reconciliation-state level as required, not a one-time
+workaround**: `changed` is no longer this branch's own signal for
+quantity change - replaced by `qty_really_changed`, computed from
+`total_historical_qty` (the same authoritative combined total this
+method already treats as ground truth for the real delta everywhere
+else). `note_variant_changed` is split out separately for the
+genuinely different per-line note/variant-only case. Both the
+immediate decrease path and the normal full Send/Payment sync now
+share this exact same computation - a single, authoritative
+reconciliation baseline, exactly as required.
+
+**Directly re-verified both of the report's own mandatory scenarios
+mathematically before writing any test**: `1 -> Ready -> 3 -> Send ->
++2 Ready -> 2 -> Send -> Send` now produces delta 0 on both Sends;
+`3 -> 2 -> Send -> Send -> 4 -> Send` produces the exact required
+-1 -> 0 -> 0 -> +2 sequence.
+
+**Non-regression, confirmed mathematically**: in the single-sibling
+case, the new computation is identical to the old one - zero behavior
+change, confirmed by every existing test continuing to pass unmodified.
+
+**What still needs a human**: the client's own live re-test of both
+mandatory scenarios, confirming Send after an immediate decrease is a
+genuine no-op and repeated Send stays idempotent.
+
 ---
 
 ## What still needs a human
@@ -2480,7 +2527,7 @@ analytics) was touched.
 | Gate | Status |
 |---|---|
 | Current Runtime Bugs Fixed | ✅ BUG-01 through BUG-07, plus two rounds of live Odoo.sh test failures (v7.2.0) |
-| Automated Tests PASS | ✅ 514 tests, all `py_compile`/XML/JS checks pass |
+| Automated Tests PASS | ✅ 521 tests, all `py_compile`/XML/JS checks pass |
 | Fresh Install PASS | ⬜ Live only |
 | Upgrade PASS | ⬜ Live only - **requires confirming BOTH `migrations/19.0.7.7.4/post-migrate.py` AND `migrations/19.0.7.8.0/post-migrate.py` actually ran** (see their own sections above) |
 | Runtime Regression PASS | 23/30 automated ✅ (see the original v7.0.0 matrix above - unaffected by v7.1.0-v7.2.0's own fixes), 7/30 live only ⬜ |

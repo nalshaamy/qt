@@ -1947,7 +1947,66 @@ class PosOrder(models.Model):
                     ready_siblings = self.env['kds.order.line']
                     total_historical_qty = 0.0
 
-                if kline_is_historical and (changed or total_historical_qty != line.qty):
+                # REAL BUG FIX ("Critical Bug Report - Send After
+                # Immediate Decrease Reconciliation Re-Processes The
+                # Same Change"), confirmed live: the outer `changed`
+                # (computed once, at the very top of this loop, purely
+                # from `kline.qty != line.qty`) compares only ONE
+                # sibling's own PARTIAL share against the FULL POS
+                # total - in the multi-sibling case this is almost
+                # NEVER a meaningful "did anything really change"
+                # signal, since a single sibling's own qty essentially
+                # never equals the full POS line's own total by
+                # construction, even when the TRUE combined total
+                # already exactly matches it (the reported scenario:
+                # after the new immediate decrease-reconciliation
+                # feature - v7.26.0 - correctly settled the real total
+                # at 2, `changed` still read True purely because
+                # kline.qty, 1, != line.qty, 2, even though nothing
+                # further actually needed to happen). Because this
+                # branch's own entry condition still included `changed`
+                # as one of its OR terms, a later, ordinary Send (the
+                # normal, non-decrease-only, full sync) re-entered this
+                # branch on a genuinely already-settled line, and its
+                # own `qty_increment == 0` case then fell through to the
+                # "note/variant-only change - re-confirm the whole
+                # batch" logic below (deliberately using `line.qty`, the
+                # FULL total, as the delta - correct ONLY for a genuine
+                # note/variant change with no quantity change at all) -
+                # silently fabricating a brand-new, phantom delta line
+                # for the full current quantity even though nothing
+                # about this product had actually changed since the
+                # immediate reconciliation.
+                #
+                # Fixed at the reconciliation-state level, exactly as
+                # required, not with a one-time "ignore next Send"
+                # workaround: `changed` is no longer used as this
+                # branch's own signal for "did quantity change" at all -
+                # replaced by `qty_really_changed`, computed the same
+                # correct way total_historical_qty already is (the TRUE
+                # combined total against the current POS quantity, the
+                # one authoritative comparison this entire method
+                # already treats as ground truth everywhere else).
+                # `note_variant_changed` is split out separately - it
+                # remains a per-kline (not per-total) concept by nature
+                # (note/variant describe THIS SPECIFIC line's own
+                # current content, not an aggregate), so comparing it
+                # against `kline` specifically is, and always was,
+                # correct - only the QUANTITY half of the old combined
+                # `changed` was ever the wrong comparison in the multi-
+                # sibling case. Both immediate decrease reconciliation
+                # (pos_order_line.py's own write(), decrease_only=True)
+                # and the normal full Send/Payment sync
+                # (decrease_only=False) now go through this exact same
+                # qty_really_changed/total_historical_qty computation -
+                # a single, authoritative reconciliation baseline, per
+                # the request's own explicit "same core reconciliation
+                # function/state" requirement - not two independent
+                # quantity mechanisms.
+                qty_really_changed = total_historical_qty != line.qty
+                note_variant_changed = (kline.note != _pos_note(line)) \
+                    or (kline.variant_info != _pos_line_variant_info(line))
+                if kline_is_historical and (qty_really_changed or note_variant_changed):
                     # REAL BUG FIX ("BUG-13 - Quantity Changes After
                     # COMPLETED Are Ignored While POS Order Is Still
                     # Active"), confirmed live (KDS order 2629-3-000008,
@@ -2013,7 +2072,7 @@ class PosOrder(models.Model):
                     # before (identical math, confirmed by every
                     # existing single-line test continuing to pass).
                     qty_increment = line.qty - total_historical_qty
-                    if qty_increment <= 0 and total_historical_qty != line.qty:
+                    if qty_increment <= 0 and qty_really_changed:
                         # REAL BUG FIX ("Change Request After BUG-11",
                         # item 2: "Quantity Decrease Delta - Display
                         # Negative Difference"), confirmed live: this

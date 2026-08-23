@@ -8,6 +8,94 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.26.1 — Critical Bug Fix: Send After Immediate Decrease Reconciliation Re-Processes The Same Change
+
+**Confirmed live**: v7.26.0's own new immediate decrease-reconciliation
+feature correctly settled KDS to the true effective quantity, but a
+LATER, ordinary Send re-processed the same, already-settled change
+again - fabricating a phantom additional delta line for the full
+current quantity even though nothing had actually changed since the
+immediate reconciliation.
+
+### Root cause, confirmed mathematically before implementing anything
+`_flexsys_kds_diff_lines()`'s own `changed` flag (computed once, at the
+top of the per-line loop, purely from `kline.qty != line.qty`) compares
+only ONE sibling's own PARTIAL share against the FULL POS total - in
+the multi-sibling case (a prior increase-after-Ready already created a
+separate delta line) this is almost never a meaningful "did anything
+change" signal, since a single sibling's own qty essentially never
+equals the full POS total by construction, even once the TRUE combined
+total already exactly matches it. In the reported scenario, after the
+immediate `3 -> 2` reconciliation correctly settled the real total at
+2 (original=1, delta reduced 2->1), `changed` still read True purely
+because `kline.qty` (1, one sibling's own share) != `line.qty` (2, the
+full POS total) - even though nothing further genuinely needed to
+happen. Because this branch's own entry condition still included
+`changed` as an OR term, the later Send re-entered the branch on an
+already-settled line, and its own `qty_increment == 0` case then fell
+through to the deliberate "note/variant-only change - re-confirm the
+whole ready batch" logic (which correctly uses the FULL current
+quantity as the delta for a genuine note/variant change) - silently
+fabricating a brand-new delta line for the full quantity even though
+nothing about this product had actually changed.
+
+### Fix - at the reconciliation-state level, exactly as required, not a one-time "ignore next Send" workaround
+`changed` is no longer used as this branch's own signal for "did
+quantity genuinely change." Replaced by `qty_really_changed`, computed
+the same correct way `total_historical_qty` already is - the TRUE
+combined total across every historical sibling against the current POS
+quantity, the one authoritative comparison this method already treats
+as ground truth everywhere else for computing the real delta.
+`note_variant_changed` is split out separately - a genuinely different,
+per-line (not per-total) concept by nature, so comparing it against
+`kline` specifically remains correct; only the QUANTITY half of the old
+combined `changed` was ever the wrong comparison in the multi-sibling
+case. Both the immediate decrease-reconciliation path
+(`decrease_only=True`) and the normal full Send/Payment sync
+(`decrease_only=False`) now go through this exact same
+`qty_really_changed`/`total_historical_qty` computation - a single,
+authoritative reconciliation baseline, per the report's own explicit
+"same core reconciliation function/state" requirement, not two
+independent quantity mechanisms. Directly re-verified both of the
+report's own mandatory scenarios mathematically before writing any
+test: `1 -> Ready -> 3 -> Send -> +2 Ready -> 2 -> Send -> Send` now
+produces delta 0 on both Sends, effective quantity staying exactly 2
+throughout; `3 -> 2 -> Send -> Send -> 4 -> Send` produces the exact
+required delta sequence -1 -> 0 -> 0 -> +2, final effective quantity 4.
+
+### Non-regression, confirmed mathematically
+In the single-sibling case (every scenario every earlier fix already
+covers), `total_historical_qty` always equals `kline.qty` exactly (only
+one sibling exists), so `qty_really_changed` is mathematically
+identical to the quantity half of the old `changed` computation -
+zero behavior change there, confirmed directly and by every existing
+test continuing to pass unmodified. The deliberate note/variant-only
+"re-confirm the whole batch" behavior is completely unaffected -
+`note_variant_changed` still correctly triggers it, using the full
+current quantity, exactly as it always has.
+
+### Files changed
+`models/pos_order.py` (`_flexsys_kds_diff_lines()`'s own ready/
+completed branch entry condition and decrease-detection condition only
+- no other logic touched).
+
+### Tests
+8 new regression tests: both of the report's own mandatory scenarios,
+verbatim; `1 -> 0` still correctly cancels and a later Send remains a
+no-op; the genuine note-only-change behavior confirmed completely
+unaffected; Multi-Station non-regression; history/audit-trail
+preservation non-regression; and no-duplicate-`kds.order` non-
+regression.
+
+**Total: 521 tests** (up from 514). No database migration required -
+logic-only change to an existing method's own decision conditions.
+
+**Required before this can be closed**: the client's own live re-test
+of both mandatory scenarios, confirming Send after an immediate
+decrease is a genuine no-op and repeated Send stays idempotent.
+
+---
+
 ## v7.26.0 — New Workflow Integrity Issue: Unsent Removal Can Leave POS and KDS Inconsistent
 
 **A genuine workflow integrity gap, confirmed live on POS order
