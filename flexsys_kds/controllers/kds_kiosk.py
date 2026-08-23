@@ -35,6 +35,7 @@ frontend internals (several of which have already turned out to differ
 from stock Odoo elsewhere in this module).
 """
 import hmac
+import logging
 from datetime import timedelta
 
 from odoo import fields, http
@@ -42,6 +43,8 @@ from odoo.exceptions import UserError
 from odoo.http import request
 
 from .kds import _kds_error
+
+_logger = logging.getLogger(__name__)
 
 # UX DECISION - see controllers/kds.py's own COMPLETED_GRACE_MINUTES for
 # the full rationale, including the dev request this specific value (5
@@ -80,12 +83,51 @@ def _effective_stage(lines):
 
 
 def _station_from_token(env, station_code, token):
+    # RUNTIME DIAGNOSTIC ("Final Cleanup Bug - Printer Only kiosk still
+    # accessible"), added per the client's own explicit request for
+    # runtime proof, not another static review: every static re-read of
+    # this exact function has confirmed the operating_mode ==
+    # 'printer_only' check is genuinely present, unconditional, and
+    # correctly reached by all four public kiosk routes - but a static
+    # review cannot prove what actually happens on THIS SPECIFIC
+    # deployment's own live request, against THIS SPECIFIC database.
+    # This logging answers, directly from the real, running request,
+    # exactly the five questions asked: (1) which station resolves,
+    # (2)/(3) its own real operating_mode value at request time, (4)
+    # confirms this is where operating_mode is actually checked, (5)
+    # confirms this exact function ran for this exact request. Search
+    # the Odoo server log for "FLEXSYS_KIOSK_AUTH" after reproducing
+    # the report once - INFO level, so it appears in a standard log
+    # without needing to raise the logger's own level first. Safe to
+    # leave in permanently (a handful of short log lines per kiosk
+    # request is negligible) or remove once the root cause is
+    # confirmed - functionally inert either way, this changes nothing
+    # about the actual auth decision itself, only what gets logged
+    # alongside it.
+    _logger.info("FLEXSYS_KIOSK_AUTH: request station_code=%r token_prefix=%r",
+                 station_code, (token or '')[:8])
     if not station_code or not token:
+        _logger.info("FLEXSYS_KIOSK_AUTH: REJECTED - station_code or token missing/empty")
         return None
     station = env['kds.station'].sudo().search([
         ('code', '=', station_code), ('active', '=', True),
     ], limit=1)
-    if not station or not station.kiosk_token or not hmac.compare_digest(station.kiosk_token, token):
+    if not station:
+        _logger.info("FLEXSYS_KIOSK_AUTH: REJECTED - no active station found for "
+                      "code=%r (in ANY company)", station_code)
+        return None
+    _logger.info(
+        "FLEXSYS_KIOSK_AUTH: resolved station id=%s name=%r code=%r company_id=%s/%r "
+        "operating_mode=%r kiosk_disabled=%r",
+        station.id, station.name, station.code, station.company_id.id,
+        station.company_id.name, station.operating_mode, station.kiosk_disabled)
+    if not station.kiosk_token or not hmac.compare_digest(station.kiosk_token, token):
+        _logger.info(
+            "FLEXSYS_KIOSK_AUTH: REJECTED - token mismatch for station id=%s (the token in "
+            "the URL does not match this station's own CURRENT kiosk_token - if this is "
+            "unexpected, the URL may belong to a DIFFERENT station that happens to share "
+            "the same code in a different company, or the token was regenerated)",
+            station.id)
         return None
     # UI/DATA FIX ("Master Change Request", item 5, "Public Kiosk
     # Configuration Improvement"): "Add Disable Public Access option" -
@@ -98,6 +140,8 @@ def _station_from_token(env, station_code, token):
     # (useful for temporarily taking a station's kiosk offline without
     # having to reconfigure every device with a new URL afterward).
     if station.kiosk_disabled:
+        _logger.info("FLEXSYS_KIOSK_AUTH: REJECTED - station id=%s has kiosk_disabled=True",
+                      station.id)
         return None
     # UI/DATA FIX ("Final Cleanup Request", item 1, "Printer Only -
     # Remove Public Kiosk"): "Direct access using an existing/old
@@ -112,8 +156,20 @@ def _station_from_token(env, station_code, token):
     # that happens to be hidden if the page were somehow still
     # reached. A station in 'kds_only' or 'kds_printer' mode is
     # completely unaffected - only 'printer_only' is rejected here.
+    #
+    # RUNTIME DIAGNOSTIC (continued): this is answer (4) to the
+    # client's own question - "أين يتم فحص operating_mode قبل Render
+    # للـKiosk؟" - exactly here, reading station.operating_mode fresh
+    # from the record resolved just above (never cached/stale within
+    # this request - a brand new ORM search ran moments earlier).
     if station.operating_mode == 'printer_only':
+        _logger.info(
+            "FLEXSYS_KIOSK_AUTH: REJECTED - station id=%s operating_mode=%r == 'printer_only'",
+            station.id, station.operating_mode)
         return None
+    _logger.info(
+        "FLEXSYS_KIOSK_AUTH: ALLOWED - station id=%s operating_mode=%r (not printer_only, "
+        "not disabled, token matched)", station.id, station.operating_mode)
     return station
 
 
@@ -137,7 +193,48 @@ class FlexSysKdsKioskController(http.Controller):
             'station_code': station.code,
             'token': token,
         }
-        return request.make_response(html, headers=[('Content-Type', 'text/html; charset=utf-8')])
+        return request.make_response(
+            html,
+            headers=[
+                ('Content-Type', 'text/html; charset=utf-8'),
+                # REAL BUG FIX ("Final Cleanup Bug - Printer Only kiosk
+                # still opens with an old token"), confirmed live:
+                # _station_from_token() itself was re-verified,
+                # character by character, against every one of the four
+                # public kiosk routes below - the operating_mode ==
+                # 'printer_only' check is genuinely present and
+                # unconditional in the one, single, central function
+                # every one of them calls, with no alternate code path
+                # anywhere in this codebase that resolves a station
+                # without going through it (confirmed by a full
+                # codebase search for every @http.route this module
+                # defines). Since the backend logic itself checks out
+                # correctly on every static re-read, the most likely
+                # explanation for a still-succeeding request against a
+                # station now correctly rejected server-side is the
+                # BROWSER (or an intermediate cache/proxy) serving a
+                # stored copy of this exact page from an earlier,
+                # still-valid visit, without ever re-issuing the
+                # request to this server at all - this response
+                # previously carried no cache directives, leaving the
+                # browser free to decide for itself. These headers
+                # remove that ambiguity: no browser, proxy, or CDN in
+                # front of Odoo may serve a stored copy of this
+                # response under any circumstance - every single
+                # request for this URL must reach this exact handler,
+                # every time, so a station's own CURRENT operating_mode
+                # is always what gets checked, never a stale cached
+                # answer from before it changed. This is enforced
+                # entirely server-side, via a standard HTTP response
+                # header - not a JavaScript redirect, not client-side
+                # state, not anything the browser could choose to
+                # ignore or a device already showing the page could
+                # route around.
+                ('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0'),
+                ('Pragma', 'no-cache'),
+                ('Expires', '0'),
+            ],
+        )
 
     @http.route('/flexsyskds/public/api/orders', type='jsonrpc', auth='public', csrf=False)
     def kiosk_orders(self, station_code, token):

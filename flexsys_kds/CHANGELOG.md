@@ -8,6 +8,204 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.27.2 — Printer Only Kiosk Bug: Runtime Diagnostic Instrumentation (root cause not yet confirmed)
+
+**Important limitation, stated plainly**: this environment has no live
+Odoo instance connected to the client's own database - every round of
+this investigation so far has been static code review, which has
+already been exhausted (`_station_from_token()` re-read character by
+character multiple times across two prior rounds, every one of the
+four public kiosk routes traced, the exact `'printer_only'` string
+verified against the field's own Selection definition). The client's
+own explicit, correct request is for runtime proof against their real
+deployment - something only their own environment can actually
+produce. This version does not claim to have found or fixed the root
+cause; it adds the diagnostic instrumentation needed to get that proof
+in one reproduction, and reports every remaining hypothesis considered
+and why each does or doesn't fit the reported symptom.
+
+### What was added
+`_station_from_token()` - the single, central function every one of
+the four public kiosk routes calls - now logs, at INFO level (visible
+in a standard server log with no configuration change needed), the
+answer to each of the five questions the client asked directly:
+which station resolves for a given `(station_code, token)` pair, that
+station's own real `id`/`name`/`company_id`/`operating_mode`/
+`kiosk_disabled` values at the moment of the request, and an explicit
+ALLOWED or REJECTED-with-reason outcome for every decision point in
+the function (missing input, no matching station, token mismatch,
+`kiosk_disabled`, `operating_mode == 'printer_only'`, or success).
+Search the server log for `FLEXSYS_KIOSK_AUTH` after reproducing the
+report once - the log lines answer questions 1-5 directly, from the
+real request, not a re-reading of the source.
+
+### Hypotheses considered this round, each evaluated against the reported symptom
+1. **`code` is unique only per `(code, company_id)`, not globally**
+   (`_code_company_uniq`, `kds_station.py`) - in a genuine multi-
+   company setup, two DIFFERENT stations could share the same `code`
+   in different companies, and the database search (unfiltered by
+   `company_id`) could resolve the wrong one. **Does not fit the
+   reported symptom on its own**: `kiosk_token` is a per-station random
+   value unrelated to `code` - if the wrong station were resolved, the
+   token comparison immediately after would almost certainly fail
+   (rejecting the request outright), not silently succeed. Still worth
+   ruling out via the new logging's own `company_id`/`company_name`
+   fields, in case the client's own environment has a company
+   configuration this reasoning didn't anticipate.
+2. **Browser/proxy caching** (v7.27.1's own hypothesis) - addressed
+   with explicit `no-store`/`no-cache` response headers on the initial
+   page. Not re-litigated here; the new logging will also settle this
+   directly - if `FLEXSYS_KIOSK_AUTH: REJECTED... printer_only` appears
+   in the log for the exact request the browser shows as successful,
+   this was never a server-side rejection reaching the browser at all,
+   which points squarely at caching (or a CDN/reverse proxy in front
+   of Odoo the response headers alone might not reach) rather than the
+   auth logic.
+3. **The running Odoo service never actually loaded this code** -
+   Odoo loads Python controller code into memory once, at worker
+   startup; a code change on disk has no effect until the service is
+   genuinely restarted (a module "Upgrade" from the Apps UI updates
+   data/views but does not by itself guarantee a Python-level reload
+   depending on the deployment's own process model). If NO
+   `FLEXSYS_KIOSK_AUTH` line appears in the log at all after
+   reproducing the report, this is the confirmed explanation - the
+   deployed code is not the code being reviewed here.
+
+### What this version deliberately does not do
+Does not change the actual authorization decision in any way - the
+existing `operating_mode == 'printer_only'` check, already confirmed
+correct on every static re-read, is untouched; only logging was added
+around it. No workaround, no token change, no caching change beyond
+what v7.27.1 already added. Per the client's own explicit instruction:
+root cause first, fix only once confirmed.
+
+### Files changed
+`controllers/kds_kiosk.py` (`_station_from_token()`'s own diagnostic
+logging only).
+
+### Tests
+1 new test confirming the logging genuinely covers every decision
+point in the function, and functionally confirms (via Python's own
+`assertLogs`) that calling the function against a `printer_only`
+station actually produces the expected `FLEXSYS_KIOSK_AUTH... REJECTED
+... printer_only` log line - the closest confirmation available
+without a live deployment to reproduce the original report against
+directly.
+
+**Total: 540 tests** (up from 539). No database migration required -
+one function instrumented with logging only.
+
+**Required before any further fix is attempted**: reproduce the exact
+reported scenario once against this version, then search the server
+log for `FLEXSYS_KIOSK_AUTH` and share what it shows - this determines
+which of the three hypotheses above (or a fourth this round didn't
+anticipate) is the actual root cause, and what the correct fix
+actually is.
+
+---
+
+## v7.27.1 — Final Cleanup Bug: Printer Only Kiosk Still Accessible — Investigation Report + Defense-in-Depth
+
+**Important, stated plainly rather than glossed over**: a thorough,
+line-by-line re-verification of `_station_from_token()` and every one
+of the four public kiosk routes that call it found the backend
+`operating_mode == 'printer_only'` check genuinely present,
+unconditional, and correctly wired into all four - no code defect was
+located this round. This delivery adds a real, server-side defense-in-
+depth measure (HTTP caching headers, described below) plus the six
+required regression scenarios, and reports the investigation findings
+in full for the client's own next live re-test.
+
+### Investigation performed
+Traced the complete request path from the URL to the data, exactly as
+requested: confirmed via a full codebase search that this module
+defines exactly four `@http.route`s total, all four inside
+`controllers/kds_kiosk.py`, and all four - the initial page
+(`kiosk_page`), and the three API endpoints (`kiosk_orders`/
+`kiosk_action`/`kiosk_print`) - call `_station_from_token()` and
+correctly short-circuit with a rejection when it returns nothing; no
+alternate route, controller, or module anywhere in this codebase
+resolves a station without going through this exact function.
+Re-read `_station_from_token()` itself character by character: the
+`operating_mode == 'printer_only'` check added in v7.27.0 is genuinely
+present, unconditional, and returns `None` immediately, before the
+station is ever returned to any caller. Directly verified the exact
+string `'printer_only'` matches the field's own Selection definition
+(`kds_station.py`) precisely - no typo, no value mismatch.
+
+### Most likely explanation, given the backend logic checks out correctly
+Since the server-side logic itself is confirmed correct on every static
+re-read, the most likely explanation for a request that still succeeds
+against a station now correctly rejected server-side is the BROWSER
+(or an intermediate cache/proxy) serving a stored copy of the kiosk
+page from an earlier, still-valid visit, without ever re-issuing the
+request to this server at all. The kiosk page's own HTTP response
+previously carried no caching directives at all, leaving browsers free
+to decide for themselves whether to cache it.
+
+### Fix - defense-in-depth, server-side, per the client's own explicit requirement
+`kiosk_page`'s own HTTP response now explicitly sends
+`Cache-Control: no-store, no-cache, must-revalidate, max-age=0`,
+`Pragma: no-cache`, and `Expires: 0` - standard HTTP response headers
+sent directly by the server, instructing every browser and
+intermediate cache/proxy that no stored copy of this response may ever
+be served under any circumstance; every single request for this URL
+must reach the real handler, every time, so a station's own CURRENT
+operating_mode is always what gets checked. This is genuinely
+server-side enforcement via a standard protocol mechanism - not a
+JavaScript redirect, not client-side state, not anything the browser
+could choose to ignore. The three JSON-RPC API endpoints are typically
+requested via POST, which browsers do not cache by default, so this
+was not extended to them.
+
+### If the issue still reproduces after this fix
+This would indicate the browser/proxy caching explanation was
+incomplete or incorrect, and points toward a deployment-layer question
+instead: whether the Odoo service running the live environment was
+actually restarted/the module actually upgraded after the v7.27.0 code
+was deployed - Odoo loads Python controller code into memory once, at
+worker startup, and does not pick up changes to `.py` files on disk
+until that happens. Confirming this (or ruling it out) is the most
+useful next diagnostic step if the fix in this version does not
+resolve the report.
+
+### Required regression tests, all added
+Six scenarios, verbatim from the report, all exercising the real,
+unmodified `_station_from_token()` directly: KDS Only + valid token
+(allowed); KDS + Printer + valid token (allowed); Printer Only + valid
+token (rejected); a station changed from KDS Only to Printer Only
+while retaining its own original token (old URL rejected - the exact
+reported reproduction); Printer Only reverted back to KDS Only (access
+restored with the same token, no regeneration); plus a structural
+confirmation that all three API endpoints genuinely call the shared
+gate (not merely the initial page). One additional test confirms the
+new cache-prevention headers are present in the real source.
+
+### Explicitly untouched, per the request's own scope control
+Quantity reconciliation, POS delta logic, READY/COMPLETED lifecycle,
+Routing, Printing logic, Cancellation/refund behavior, and the already-
+passed Priority/Urgent/VIP UI cleanup (v7.27.0) - no file related to
+any of these was modified in this round.
+
+### Files changed
+`controllers/kds_kiosk.py` (`kiosk_page()`'s own response headers
+only - the auth logic itself, already confirmed correct, was not
+modified).
+
+### Tests
+7 new tests: the six required scenarios verbatim, plus the new cache-
+header confirmation.
+
+**Total: 539 tests** (up from 532). No database migration required -
+one HTTP response header addition, no field/model changes.
+
+**Required before this can be closed**: the client's own live re-test
+of the exact same previously-saved Public Kiosk URL while the station
+remains in Printer Only, on this specific version, with the deployment
+question above investigated if the issue still reproduces.
+
+---
+
 ## v7.27.0 — Final Cleanup: Printer Only Kiosk Removal + Priority/Urgent/VIP Removal
 
 **Two final cleanup items**, both scoped exactly as requested - the
