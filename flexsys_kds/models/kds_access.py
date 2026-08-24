@@ -13,9 +13,7 @@ ACTION_MIN_GROUP = {
     'hold': 'flexsys_kds.group_kds_operator',
     'cancel': 'flexsys_kds.group_kds_supervisor',
     'reopen': 'flexsys_kds.group_kds_supervisor',
-    'move_station': 'flexsys_kds.group_kds_supervisor',
     'reprint': 'flexsys_kds.group_kds_supervisor',
-    'change_priority': 'flexsys_kds.group_kds_supervisor',
     'print_full_order': 'flexsys_kds.group_kds_supervisor',
     'override': 'flexsys_kds.group_kds_administrator',
 }

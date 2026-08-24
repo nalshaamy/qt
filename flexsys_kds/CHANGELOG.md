@@ -8,6 +8,1082 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ---
 
 
+## v7.29.5 — Regression Round 2: One Real Production Bug + Nine Test-Setup Fixes
+
+**Real Odoo.sh CI results, with actual Pass/Fail/Error counts, again
+traced to their real root cause by direct code reading and, for the
+hardest case, an actual Python simulation of the exact decision logic
+run before writing any fix - not guessed.**
+
+### Real production bug found and fixed: missing `qty_delta` on a new delta line
+
+Confirmed by direct reading, then by re-deriving the exact reported
+scenario: `_flexsys_kds_diff_lines()`'s own ready/completed branch
+creates a brand-new delta line for a genuine quantity increase, but
+its own `create({...})` call never included `qty_delta` - it silently
+kept the field's own default (`0.0`) instead of `delta_qty`, so a
+kitchen screen's own "UPDATED (+N)" display for that new line would
+have shown `+0` instead of the real increase. A genuine, pre-existing
+defect - not introduced by any recent change - only now surfaced
+because Odoo.sh's own 5-failure CI halt was previously masking it
+behind unrelated failures. `last_kds_sent_qty` was already correctly
+set automatically by `kds.order.line`'s own `create()` override; only
+`qty_delta` itself was missing. Fixed in `models/pos_order.py` - one
+key added to the existing `create()` call, no other logic touched.
+
+### Test-setup defects (5), traced and fixed, zero production changes
+
+- **`test_final_bugfix_non_regression_completed_quantity_delta_still_plus2`**:
+  asserted `order.state == 'draft'` but called `_create_pos_order(...)`
+  without passing `state='draft'` explicitly - that helper's own
+  default is `'paid'`. Fixed by passing `state='draft'` explicitly.
+  (A merge error was made and immediately caught/fixed while applying
+  this - the same structural check this project now runs after every
+  test-file edit confirmed the fix was clean.)
+- **8 more Direct Sale/sync_from_ui tests** found via a systematic,
+  full-file search for the exact same class of defect already fixed
+  in v7.29.4 (using `_create_active_pos_order()`, which sends
+  immediately as part of its own setup, while the test's own actual
+  scenario requires a genuinely never-sent order):
+  `test_sync_from_ui_no_send_no_kds`,
+  `test_sync_from_ui_order_action_triggers_kds`,
+  `test_sync_from_ui_malformed_entries_are_skipped_defensively`,
+  `test_failed_sync_can_be_retried_and_succeeds`,
+  `test_send_generation_default_state_authorizes_nothing`,
+  `test_direct_sale_ordinary_edit_without_send_no_kds`,
+  `test_table_send_preparation_uuid_mismatch_multiple_orders_skips_safely`
+  (both orders), `test_no_preparation_single_order_still_skips` - all
+  switched to the existing `_create_never_sent_pos_order()` helper.
+  Found proactively this round (a full-file search for the pattern,
+  not just the ones CI happened to report) specifically to avoid the
+  "fix 5, discover 5 more" cycle Odoo.sh's own halt-after-5 behavior
+  otherwise produces.
+- **`test_explicit_send_signal_double_fire_is_idempotent`**: the
+  hardest case this round - traced for an extended investigation,
+  confirmed by an actual Python simulation of the exact decision logic
+  (not a mental trace) before concluding anything. Root cause: the
+  test's own final assertion compared the total event increase against
+  only the count of `line_added`-typed events - an incorrect formula
+  given the real, longstanding design (confirmed unrelated to any
+  recent change): `kds.order.line`'s own `create()` override
+  unconditionally logs a separate `order_routed` event for every
+  newly-created line (the routing decision itself), IN ADDITION to
+  `_flexsys_kds_diff_lines()`'s own explicit `line_added` logging for
+  the same new line - two genuinely different events for one addition,
+  by design. The simulation reproduced the exact reported numbers (2
+  events for one genuine addition, not 1) once this second event
+  source was included. Fixed by testing idempotency directly instead:
+  capture the event count after the genuine call, then confirm the
+  redundant call adds exactly zero further events - re-verified by
+  simulation to produce the expected equal counts.
+
+### Structural safety re-verified after every edit this round, including a caught-and-fixed error
+
+The same AST-based structural check introduced after an earlier
+round's own editing incident (method-name enumeration via two
+independent methods cross-checked for an exact match; every `test_*`
+function scanned for more than one standalone string-literal
+expression) caught a real merge error made while fixing the `state`
+mismatch test in this same round - fixed immediately before
+proceeding. Final verification: 230 test methods via two independent
+enumeration methods, exact match, zero merge signals, zero empty
+bodies.
+
+### Files changed
+`models/pos_order.py` (one `qty_delta` key added to an existing
+`create()` call - no other logic touched), `tests/test_pos_sync.py`
+(9 tests updated: 1 for the `state='draft'` fix, 8 for the
+`_create_never_sent_pos_order()` swap, 1 rewritten for the idempotency
+assertion formula).
+
+### Validation performed - same limitation as every prior CI round
+**This environment still has no live Odoo instance.** Both the
+production fix and every test fix were verified by direct code
+tracing and, for the hardest case, an actual executed Python
+simulation of the real decision logic against the exact reported
+numbers - not guessed. Plus `py_compile`, XML/JS syntax checks, and
+the AST-based structural sweep. This is not the same as an actual Odoo
+test-runner execution. **The client's own live Odoo.sh CI run remains
+the authoritative source for actual Pass/Fail/Error results.**
+
+**Total: 558 tests** (unchanged - all 9 test changes were fixes to
+existing tests, no tests added or removed). No database migration
+required - one field-value fix in an existing `create()` call, no
+schema changes.
+
+---
+
+## v7.29.4 — Regression Fixes: Delta Sync Idempotency + Direct Sale Test Setup
+
+**Real Odoo.sh CI results provided, with actual Pass/Fail/Error
+counts** - both regressions traced to their real root cause by direct
+code reading before any change was made, exactly as required.
+
+### 1 - Direct Sale authorization regression: a test-setup defect, NOT a production authorization weakness
+
+**Confirmed directly**: `_create_active_pos_order()` (the helper all
+four failing tests used) calls `order.flexsys_kds_register_send()` as
+part of its own setup - a genuine, fully authorized Send that ALREADY
+populates `kds_order_id` before each test's own actual Direct Sale
+scenario (missing preparation key, uuid mismatch, batch-scope leakage,
+no Send at all) ever runs. Every failing test's own final
+`assertFalse(order.kds_order_id)` was therefore checking a
+`kds_order_id` already created by the test's own setup helper - a
+defect present in these four tests since they were first written, not
+introduced by any recent production change, only now surfaced because
+Odoo.sh's own CI halts after 5 failures and earlier, unrelated
+failures were previously masking these from ever being reached.
+
+**Fixed entirely in the test file** - a new helper,
+`_create_never_sent_pos_order()`, identical to
+`_create_active_pos_order()` except it never calls
+`flexsys_kds_register_send()`, so these tests correctly start from a
+genuinely never-sent order and their own final assertion actually
+verifies the authorization logic itself. Updated:
+`test_direct_sale_context_missing_preparation_key_does_not_authorize`,
+`test_direct_sale_context_uuid_mismatch_multiple_orders_does_not_authorize`
+(both orders in the batch),
+`test_direct_sale_context_never_authorizes_a_different_order_in_same_batch`
+(both `order_a` and `order_b` - `order_a` needed the fix too, since
+using the Send-on-setup helper meant its own `assertTrue(order_a.kds_order_id)`
+was also not actually verifying the authorization logic ran
+successfully, just that setup had already populated it), and
+`test_direct_sale_no_send_still_creates_nothing_after_fix`.
+
+**Zero changes to any Direct Sale authorization logic in production** -
+`_flexsys_kds_process_sync_from_ui()` and every guard within it are
+completely untouched, exactly as required.
+
+**A real editing error made and caught during this same fix**: an
+automated multi-replacement script failed partway through (one
+`assert` on expected occurrence count triggered before the file was
+written), and a manual follow-up edit briefly dropped one test's own
+`def` line while restructuring around it - caught immediately by the
+same AST-based structural check this project now runs after every
+test-file edit (introduced specifically after a similar incident in an
+earlier round), and fixed before proceeding. Final structural
+verification: 230 test methods via two independent enumeration
+methods, exact match, zero merge signals, zero empty bodies.
+
+### 2 - Delta Sync Idempotency regression: a real, confirmed production defect
+
+**Traced precisely, mathematically, before writing any fix**: once a
+delta line exists for a `pos_order_line_id` (created by the
+ready/completed branch on an earlier sync) and becomes what the
+`existing` dict matches against on a later sync, the OTHER branch
+(`elif changed and kline.state != 'cancelled':`, for a non-historical/
+`new`/`preparing` line) re-enters every single time it's called -
+`changed` (computed once, at the top of the loop, from `kline.qty !=
+line.qty`) compares only that ONE delta line's own partial share
+against the FULL POS total, exactly the same class of mistake already
+fixed for the ready/completed branch (`qty_really_changed`) but never
+applied here. The branch's own internal `effective_qty` calculation
+(subtracting historical siblings) is already correct - but nothing
+checked whether `effective_qty` had actually changed at all before
+unconditionally writing and logging an audit event. Confirmed against
+the exact reported test: after the delta line settles at
+`qty=7`/`last_kds_sent_qty=7`, two further idempotent
+`_flexsys_kds_diff_lines()` calls each re-entered this branch, each
+wrote the same, unchanged value, and each logged a fresh audit event -
+5 events becoming 7, exactly matching the CI's own reported numbers.
+
+**Fixed in production** (`models/pos_order.py`,
+`_flexsys_kds_diff_lines()`'s own non-historical branch): a single
+guard added immediately after `effective_qty` is computed - `if
+effective_qty == kline.last_kds_sent_qty and kline.note == _pos_note(line)
+and kline.variant_info == _pos_line_variant_info(line): continue` -
+skipping the write and audit event entirely when nothing has actually
+changed, the same "did anything real change" question
+`qty_really_changed` already answers correctly for the other branch,
+asked here too. Every genuine increase, decrease, or note/variant
+change on a non-historical line is completely unaffected - the guard
+only ever fires when there is genuinely nothing to do.
+
+### Files changed
+`models/pos_order.py` (`_flexsys_kds_diff_lines()`'s own non-historical
+branch - one guard added, no other logic touched),
+`tests/test_pos_sync.py` (one new helper added, four Direct Sale tests
+updated to use it).
+
+### Validation performed - same limitation as every prior CI round
+**This environment still has no live Odoo instance.** Both fixes were
+verified by direct code tracing and mathematical re-derivation of the
+exact reported scenario before being written, plus `py_compile`, XML/
+JS syntax checks, and the AST-based structural sweep. This is not the
+same as an actual Odoo test-runner execution. **The client's own live
+Odoo.sh CI run remains the authoritative source for actual Pass/Fail/
+Error results.**
+
+**Total: 558 tests** (unchanged - one new helper method added, but
+helpers are not counted as tests; no test added or removed this
+round, four tests updated in place). No database migration required -
+one production guard clause added, no field/schema changes.
+
+---
+
+## v7.29.3 — CI Test Suite Reconciliation Round 2 + Production Fix (Last POS Line Removal)
+
+**Two production files genuinely changed this round** - both for a
+real, confirmed defect, per the client's own explicit exception to
+"do not change production code"; every other change is test-file
+reconciliation only.
+
+### A - Test Suite Reconciliation Round 2 (7 tests updated)
+
+- **`test_bug_exact_reported_scenario_hot_americano_hot_italy`** and
+  **`test_ui_data_fields_do_not_affect_send_gate_or_delta_logic`**:
+  both used `order.write({'note': ...})` - confirmed, from this same
+  file's own already-documented real runtime error
+  (`_pos_note()`'s own docstring: "'pos.order' object has no attribute
+  'note'"), that `note` is not a real field on `pos.order` in this
+  Odoo 19 build. Replaced with `internal_note` - a genuinely existing
+  field, already used elsewhere in this same test file as part of a
+  real `sync_from_ui` payload. No new field added to production.
+- **`test_bug_on_send_boundary_multiple_edits_before_send_reconcile_once`**:
+  traced the real code precisely, step by step, before rewriting:
+  `5 -> 4` is a genuine decrease (syncs immediately, one audit event),
+  `4 -> 7` is a genuine increase (stays fully deferred, zero events -
+  the immediate-sync path is only ever invoked for a decrease at all),
+  `7 -> 3` is again a genuine decrease relative to KDS's own
+  last-synced value (syncs immediately, one more event). By the final
+  Send, KDS already exactly matches the final POS state - a correct,
+  idempotent no-op. Rewritten to assert exactly this sequence,
+  including explicit event-count checks at each step.
+- **Four "Delta Sync legacy reset" tests**
+  (`test_qty_change_after_send_updates_line_and_reopens_if_ready`,
+  `test_delta_sync_line_reset_creates_an_audit_event`,
+  `test_delta_sync_resets_timestamps_correctly`,
+  `test_delta_sync_is_idempotent_on_repeated_calls`): all rewritten to
+  assert the current, deliberate design - the original Ready/Completed
+  line is NEVER reset to New and NEVER has its own timestamps cleared;
+  a genuine increase creates a separate, new delta line instead
+  (`state='new'`, its own independent, unset timestamps), confirmed by
+  direct tracing of `_flexsys_kds_diff_lines()`'s own ready/completed
+  branch. One audit-search pattern fix found and corrected in the same
+  pass: `'like', 'added as a new delta line%'` was checking for a
+  prefix match against text that does not actually start with that
+  phrase - corrected to `'%added as a new delta line%'`.
+  `test_delta_sync_line_reset_notifies_the_station` (same area, not
+  named by the client) was re-checked and needs no change - it only
+  asserts "does not raise," unaffected by which design is current.
+
+### B - Production Fix: Last POS Line Removal (confirmed real defect)
+
+**`models/pos_order.py`**, `_flexsys_kds_sync()`: the `'send'`-trigger
+gate's own `ready = is_send_write and self.state != 'cancel' and
+bool(self.lines)` meant an order whose LAST POS line was deleted
+entirely (`self.lines` becomes empty) never reached
+`_flexsys_kds_diff_lines()` at all - confirmed, before changing
+anything, that that method's own "line missing from
+current_ids"/`pending_removal` handling was already fully equipped to
+correctly cancel the remaining `kds.order.line` and log a
+`line_removed` audit event; the only actual defect was this gate never
+letting it run. Fixed exactly as specified: `ready = (is_send_write and
+self.state != 'cancel' and (bool(self.lines) or bool(self.kds_order_id)))`.
+An order that was never sent before (no `kds_order_id`) and has zero
+lines still correctly creates nothing - confirmed by a new dedicated
+test. Only the `'send'`-trigger branch was changed, per the request's
+own scope - the `'payment'`-trigger branch was left untouched.
+
+### C - Guard against reopening an order with zero remaining production
+
+**`models/kds_order.py`**, `_system_reopen_if_production_incomplete()`:
+traced `_compute_is_expeditor_ready()` precisely and confirmed a second,
+related real defect - `bool(required_lines) and all(...)` evaluates to
+**False**, not True, when `required_lines` (every non-cancelled line)
+is empty, since `bool([])` short-circuits the `and`. That is the
+correct answer for what `is_expeditor_ready` itself actually means
+("is every required line ready" - vacuously not satisfied with zero
+lines to check), but it meant the existing `if
+order.is_expeditor_ready: continue` guard did NOT skip when every line
+had just been cancelled by the fix above - the method would have
+incorrectly reopened the now-empty order back to `'preparing'`. Fixed
+with the exact guard specified: `required_lines =
+order.line_ids.filtered(lambda l: l.state != 'cancelled'); if not
+required_lines: continue`, checked separately and before the existing
+`is_expeditor_ready` check, since that field's own correct meaning
+cannot itself distinguish "vacuously nothing to check" from "genuinely
+still incomplete."
+
+### Regression test added, verbatim as required
+`test_completed_order_last_line_removed_cancels_and_does_not_reopen`:
+Completed KDS order -> delete last POS line -> Send -> confirms the
+`kds.order.line` is cancelled, a `line_removed` audit event exists,
+and the order does NOT reopen to `preparing`. Two further tests added
+alongside it: `test_never_sent_empty_order_does_not_create_kds_ticket`
+(confirms the fix's own explicit non-goal - an order never sent
+before, with zero lines, still creates nothing) and
+`test_completed_order_with_surviving_sibling_line_still_reopens_correctly_if_incomplete`
+(confirms the ordinary case these two fixes must NOT affect - a
+Completed order with a genuinely incomplete surviving line must still
+correctly reopen).
+
+### Structural safety re-verified after this round's own edits
+The same AST-based structural sweep introduced after a real editing
+error in an earlier round (method-name enumeration via two independent
+methods cross-checked for an exact match; every `test_*` function
+scanned for more than one standalone string-literal expression, a
+definitive merge signal) was re-run against the full, now-larger
+`test_pos_sync.py` after all of this round's own edits - zero merge
+signals, zero empty bodies, exact count match (230 test methods both
+ways).
+
+### Files changed
+`models/pos_order.py` (`_flexsys_kds_sync()`'s own gate condition
+only), `models/kds_order.py`
+(`_system_reopen_if_production_incomplete()`'s own guard only),
+`tests/test_pos_sync.py` (7 tests rewritten, 3 new tests added).
+
+### Validation performed - same limitation as every prior CI round, stated again
+**This environment still has no live Odoo instance.** Everything
+above is real, but it is static verification - `py_compile`, XML/JS
+syntax checks, and the AST-based structural sweep. This is not the
+same as an actual Odoo test-runner execution, which alone can produce
+true Pass/Fail/Error counts and catch ORM-level errors this analysis
+cannot see. **The client's own live Odoo.sh CI run remains the
+authoritative source for actual results.** This delivery's own
+confidence: every one of the five reported failures traces to a
+specific, identified cause (three test-assumption mismatches, one real
+production gate defect, one real production reopen-guard defect) with
+a fix verified against the real, current code by direct reading; the
+two production changes are each scoped to exactly the condition
+described, with no other logic in either method touched.
+
+**Total: 558 tests** (up from 555 - no tests removed this round, 3
+added). No database migration required - the two production changes
+are logic-only, no field/schema changes.
+
+---
+
+## v7.29.2 — CI Test Suite Reconciliation, Round 2 (client-identified corrections)
+
+**Test-file changes only. Zero production files modified**, exactly
+as in v7.29.1. Both corrections below were identified by the client's
+own review of v7.29.1, and both were genuine defects in that round's
+own work - confirmed by direct code tracing before touching anything,
+not applied on request alone.
+
+### 1 - `line_change` value for a first-Send line was wrong in v7.29.1's own fix
+**The client was correct, and v7.29.1's own prior analysis was wrong.**
+Traced the real code path a genuine first Send takes, precisely:
+`_flexsys_kds_sync()` branches on `if not self.kds_order_id` - a
+brand-new order (no `kds_order_id` yet) goes through
+`_flexsys_kds_create()` -> `_flexsys_kds_create_lines()`, whose own
+`line_vals` dict never includes a `'line_change'` key at all - it
+stays at the field's own default, `'none'` (`kds_order_line.py`).
+`line_change='added'` is set explicitly only in the separate
+`_flexsys_kds_diff_lines()`'s own `new_line_vals` branch - reached
+only for an order that already HAS a `kds_order_id`, i.e. a genuinely
+new product added AFTER the first Send, never the first Send's own
+lines. v7.29.1's own fix incorrectly asserted `'added'` for the
+first-Send line, having traced only `_flexsys_kds_diff_lines()`
+without confirming that function is not actually the one a genuine
+first Send calls. Corrected in
+`test_accumulated_changes_sync_correctly_on_next_send`:
+`burger_line.line_change` is now asserted as `'none'` right after the
+first Send, `'updated'` after that same line is modified and re-sent,
+and `'added'` for `cappuccino_line` (genuinely added after the first
+Send) - exactly the three-state distinction the client's own report
+described.
+
+### 2 - Test D's own `def` line was lost during v7.29.1's own test_bug_c removal
+**Confirmed exactly as the client described.** The same class of
+editing error already caught and fixed once during v7.29.1's own work
+(losing `test_bug_a`'s own `def` line while removing an adjacent test)
+recurred at a second, different location during that same round,
+undetected by the structural check applied at the time - that check
+only verified every `test_*` function has a non-empty body, which
+does not catch two functions merged into one (the merged function is
+not empty; it has extra content instead).
+`test_bug_d_pending_changes_become_visible_correctly_on_next_send`'s
+own `def` line was lost while removing
+`test_bug_c_line_removal_after_first_send_invisible_until_next_send`
+immediately before it - Test D's own docstring and full body had
+silently become part of `test_bug_b_qty_change_after_first_send_invisible_until_next_send`
+(the function immediately preceding the removed comment block),
+merging two genuinely distinct tests into one without any syntax
+error (`py_compile` cannot detect a semantically-wrong but
+syntactically-valid merge). Fixed by restoring the missing `def` line,
+correctly separating `test_bug_b` (now ends cleanly at its own,
+original final assertion) from `test_bug_d` (now its own, independent
+test again, with its own already-correct body - the stale
+`kds_last_processed_send_signal` assertion inside it had already been
+correctly removed in v7.29.1's own work and required no further
+change here).
+
+### Stronger structural verification added this round, specifically because of defect 2
+A single "does every test have a non-empty body" check is not enough
+to catch a merge - it was already applied in v7.29.1 and missed this
+exact defect. This round added two further checks, run against both
+modified files: (1) two independent method-name enumeration methods
+(AST traversal vs. a regex sweep) cross-checked to produce identical
+counts and identical name sets - a merge changes the count without
+necessarily emptying any body; (2) every `test_*` function's own body
+scanned for more than one standalone string-literal expression (a
+second "docstring-shaped" statement mid-function is a definitive merge
+signal, since a well-formed function has exactly one, if any, at the
+very start). Both came back clean for both files after the fix.
+
+### Files changed
+`tests/test_pos_sync.py` only. **Zero production files modified.**
+
+### Validation performed - same limitation as v7.29.1, stated again
+**This environment still has no live Odoo instance.** Everything
+above is real, but it is static verification - `py_compile`, XML/JS
+syntax checks, and now two additional structural checks specifically
+targeting the class of error this round found. This is not the same
+as an actual Odoo test-runner execution. **The client's own live
+Odoo.sh CI run remains the authoritative source for actual
+Passed/Failed/Error results.**
+
+**Total: 555 tests** (up from 554 - `test_bug_d` is now correctly
+counted as its own independent test again, having been silently
+merged into `test_bug_b` since v7.29.1). No database migration
+required - test-file changes only.
+
+---
+
+## v7.29.1 — CI Test Suite Reconciliation (Odoo.sh)
+
+**Test-file changes only. Zero production files modified** - every
+one of the five reported failures was a stale test assumption, not a
+production defect; per the client's own explicit instruction, no
+production behavior was changed to make an old test pass where the
+current behavior is deliberate and already covered by newer tests.
+
+### `tests/test_permissions.py`
+
+- **`test_deep_cleanup_real_workflow_engine_unaffected`**: was calling
+  `order.action_complete(bypass_check=True)` directly - bypassing the
+  real multi-station completion guard (that method correctly refuses
+  to run unless `is_fully_completed` is already true, per its own
+  documented "BUG-07 is still not implemented as requested" fix)
+  rather than exercising it. Fixed by completing through the real,
+  correct path instead: `order.line_ids.action_complete()`, which
+  internally cascades to the order-level completion once every line is
+  genuinely done - `is_fully_completed` is satisfied by construction,
+  no bypass needed because the guard is never actually bypassed.
+  `action_complete()` itself (`kds_order.py`) was not touched.
+- **`test_reprint_allowed_for_supervisor_at_station`**: was missing a
+  printer on the station, and `create_reprint()`'s own required-printer
+  check (deliberate, documented production behavior - "Do NOT create
+  kds.print.job... Do NOT increase Print # / Reprint count" with no
+  printer configured) correctly rejected it. Fixed by creating and
+  linking a printer to the station inside this test's own fixture only
+  (not the shared `common.py` `setUpClass`, which deliberately leaves
+  `station_kitchen` printer-less for other tests -
+  `test_printing.py`'s own `NoPrinterConfiguredError` coverage
+  specifically depends on that absence). `create_reprint()` itself
+  (`kds_print_job.py`) was not touched.
+
+### `tests/test_pos_sync.py`
+
+- **`test_accumulated_changes_sync_correctly_on_next_send`**: the
+  first-send assertion (`line_change == 'added'` right after the
+  initial send) was already correct as written - every line on a
+  genuine first Send is new to KDS by construction, and the
+  `new_line_vals` branch in `_flexsys_kds_diff_lines()` treats a
+  first-send line and a genuinely-new-product-added-later line
+  identically (neither is a bug; there is no technical distinction
+  between them). What was missing was the other half of the
+  requirement: after that same line is genuinely modified and
+  re-sent, it must transition to `'updated'`, never remain/re-appear
+  as `'added'`. Added that missing assertion.
+- **`test_bug_on_send_boundary_qty_zero_stays_unchanged_until_send`**
+  and **`test_bug_c_line_removal_after_first_send_invisible_until_next_send`**:
+  removed. Both asserted the opposite of current, deliberate production
+  behavior - a `1 -> 0` change with no further Send used to stay
+  invisible until the next Send; v7.26.0's own "New Workflow Integrity
+  Issue" fix deliberately replaced that with immediate decrease
+  reconciliation, per the client's own explicit requirement at the
+  time. Current, authoritative coverage of this exact scenario already
+  exists in `test_final_reconciliation_1_to_0_still_cancels_correctly`
+  and the `test_unsent_removal_*` suite - removed rather than
+  "fixed" to assert the opposite, to avoid duplicating that coverage
+  under stale names.
+- **`test_bug_d_pending_changes_become_visible_correctly_on_next_send`**:
+  its own final assertion checked
+  `order.kds_last_processed_send_signal` against a legacy raw JSON
+  value - but `flexsys_kds_register_send()` (the method this test's
+  own order uses throughout) never writes to that field at all; it
+  calls `_flexsys_kds_sync(is_send_write=True)` directly.
+  `kds_last_processed_send_signal` is written only by the separate
+  `sync_from_ui()` path. Removed the stale assertion on a field this
+  test's own code path never touches.
+- **`test_bug_stale_send_signal_repeated_after_first_send_does_not_leak`**:
+  removed. Same `kds_last_processed_send_signal` misunderstanding as
+  above, plus a deeper one: `flexsys_kds_register_send()` carries no
+  "repeated stale value" concept at all - calling it IS the Send
+  signal, with no de-duplication logic in that path by design.
+  Confirmed, tracing the real authorization logic in
+  `_flexsys_kds_process_sync_from_ui()`, that signature-based
+  de-duplication is scoped exclusively to the Direct Sale context path
+  (`context.preparation` + `current_order_uuid`) - and is already
+  correctly, thoroughly covered by the existing
+  `test_direct_sale_signature_deduplicates_repeated_same_content_delivery`.
+  Removed rather than rewritten to avoid duplicating that exact
+  coverage under a second name.
+
+### A real editing error found and fixed during this same round
+While removing `test_bug_stale_send_signal_repeated_after_first_send_does_not_leak`,
+an imprecise line-range replacement initially deleted the `def` line
+of the immediately following test
+(`test_bug_a_new_line_after_first_send_invisible_until_next_send`)
+while leaving its own body intact - a structurally valid but
+semantically broken merge that `py_compile` alone did not catch (no
+syntax error, since the resulting file was still valid Python). Caught
+by a follow-up AST-based structural check (verifying every `test_*`
+function has a real, non-empty body, and that method counts stayed
+consistent) run specifically because of this incident - fixed by
+restoring the missing `def` line. This structural check is now part of
+this round's own validation process, described below.
+
+### Files changed
+`tests/test_permissions.py`, `tests/test_pos_sync.py` only. **Zero
+production files modified.**
+
+### Validation performed - stated precisely, not just "tests pass"
+**Important limitation, stated plainly**: this environment has no live
+Odoo instance. What follows is real, but it is static verification -
+`py_compile` (every Python file), XML well-formedness (every file), JS
+syntax checking (every file), and a custom AST-based structural sweep
+confirming every `test_*` method has a genuine, non-empty body and no
+duplicate/merged definitions exist anywhere in either modified file
+(added specifically after catching the editing error above). This is
+NOT the same as an actual Odoo test-runner execution, which alone can
+produce true Pass/Fail/Error counts, catch ORM-level errors, runtime
+exceptions, or assertion failures this analysis cannot see. **The
+client's own live Odoo.sh CI run remains the authoritative source for
+actual Passed/Failed/Error results** - this delivery's own confidence
+is: every one of the five originally-reported failures traces to a
+specific, identified stale assumption with a concrete fix; the fixes
+are consistent with the real, current production code (verified by
+direct reading, not guessed); and no other file in the entire test
+suite was touched, so no other test's own behavior could have changed
+as a side effect.
+
+**Total: 554 tests** (down from 558 - three tests removed as
+duplicating newer, more accurate coverage, no new tests added this
+round since the task was reconciliation, not new coverage). No
+database migration required - test-file changes only.
+
+---
+
+## v7.29.0 — Arabic Localization & RTL Specification (Part 1)
+
+**Important limitation, stated plainly upfront**: this environment has
+no live Odoo instance. Every item in this request requiring live UI
+verification, actual thermal/Print Agent output, or visual RTL
+rendering (items 17, 18, 19, and the printing half of item 12) is
+explicitly NOT claimed as verified - only what could be genuinely
+confirmed by static analysis, AST-accurate parsing, and structural
+tests is reported as done. This delivery covers items 1-13 and 15;
+items 14 (full completeness audit), 16 (regression confirmation beyond
+this round's own new tests), 17, 18, 19 require the client's own live
+environment and are reported as open in the next section.
+
+### 1/2 - Translation architecture + inventory regeneration
+No `odoo-bin --i18n-export` available in this environment, so the
+inventory was regenerated by the closest accurate substitute: an
+AST-based scan (not a text/regex guess) of every `_()` call site in
+current production Python, cross-referenced against the existing
+`ar.po`. Found 81 genuine current msgids, 4 stale entries removed
+(including the exact one the report named -
+`"Connection test simulated OK for %s"`, from the now-deleted
+`action_test_connection()` - plus `"Cancelled: %s"`, superseded by a
+more detailed message, `"FlexSys KDS"`, no longer an actual `_()` call
+site anywhere, and the header), 29 existing valid translations
+preserved, 52 new translations added. Both `ar.po` and
+`flexsys_kds.pot` rebuilt from this same accurate inventory.
+Structurally validated: msgid/msgstr counts match, no empty
+translations, no unbalanced quotes.
+
+### 3/5 - Internal KDS translation architecture + language source
+`static/src/js/kds_i18n.js` restructured into `KDS_LABELS_EN`/
+`KDS_LABELS_AR` (35 keys each, confirmed identical key sets) plus
+`getKdsLabels(lang)` - exactly the "small dedicated glossary lookup
+local to this module" the original anti-collision fix's own comment
+already recommended, never Odoo's shared `_t()` catalog (the confirmed
+cause of the original `_t("NEW")` collision). `kds_app.js` was already
+safely resolving the real Odoo user's own language (`user.lang`, with
+a `session_info` fallback - never the browser) for its own RTL
+detection; that same `lang` value now also drives `getKdsLabels(lang)`
+- one single language source for both concerns, never two that could
+disagree. `KdsOrderCard` (a separate component, with its own `setup()`)
+had the identical, previously-undiscovered gap - hardcoded to English
+`KDS_LABELS` regardless of user language - fixed the same way.
+
+### 4/5 - Public Kiosk translation architecture + language source
+New `kiosk_language` field on `kds.station` (Selection: `en`/`ar`,
+default `en` - an existing station that has never touched this field
+renders identically to before, zero behavior change). The public kiosk
+has no authenticated Odoo user session (`auth='public'`) - there is no
+"logged-in user's language" to read, so an explicit,
+administrator-configured station-level setting is the correct source
+instead, per the request's own fallback instruction. A parallel
+`KIOSK_LABELS_EN`/`KIOSK_LABELS_AR` dictionary was added directly in
+the kiosk's own embedded JS, selected once from the server-injected
+`kiosk_lang` value. Every example the report named explicitly
+(ALL/NEW/PREPARING/READY/COMPLETED/CANCELLED/START/COMPLETE/"No orders
+for this filter."/Branch/Time/Enter Fullscreen) is now translated - a
+full sweep confirmed zero hardcoded English status/action strings
+remain outside the dictionary itself. Employee/Company/POS filters,
+also listed in the report's own examples, do not actually exist in the
+kiosk (Internal Screen only) - nothing to translate there; noted
+explicitly rather than silently ignored.
+
+### 6/7 - Approved terminology + glossary cleanup
+`i18n/GLOSSARY.md`'s own introduction rewritten to accurately describe
+the new dictionary-based architecture (previously described `_t()`
+extraction, no longer how either screen's own operational labels
+work). The client's own full approved terminology table added as the
+new authoritative baseline section. Three additional stale entries
+found and removed beyond what the prior cleanup round already caught:
+"Moved Between Stations" (the audit event only `action_move_station()`
+- already deleted - ever generated), "Devices & Users" (an
+unimplemented Phase 2 menu that doesn't exist in the current product),
+and "Test Connection" (`action_test_connection()` - already deleted).
+
+### 8/9/10 - RTL + bidi
+Found, during investigation, that the Internal Screen's own SCSS
+(`kds_style.scss`) was already deliberately built RTL-safe from an
+earlier round - logical properties throughout, flexbox layouts that
+reverse automatically with the `dir` attribute (already wired to
+`isRtl` on the root element), Cairo already in the font stack. The
+Public Kiosk had none of this: `dir="ltr"` was hardcoded regardless of
+language, and its own font stack had no Arabic-capable font at all -
+both fixed (`dir`/`lang` now driven by the same `kiosk_lang`/
+`kiosk_dir` values, Cairo added ahead of the existing Latin fallback,
+loaded as a system font like the Internal Screen already does, not a
+remote `@import`, since a kiosk device may be offline). Per item 8's
+own explicit "do not blindly reverse... quantities/timers must remain
+visually stable" - `unicode-bidi: isolate` added to both screens' own
+quantity (`2 × product`) and timer display classes. Per item 9 (order
+identifiers) - `direction: ltr; unicode-bidi: isolate` added to both
+screens' own order-number classes. Per item 10 (delta markers) - both
+screens' own `+2`/`-1` construction now wraps the sign+number in
+Unicode isolation marks (`\u2066`/`\u2069`, LRI/PDI).
+
+### 11 - Cancellation/historical status
+The Internal Screen's own remaining hardcoded `"CANCELLED"` literal
+(a QWeb template badge, missed by the original JS-only anti-collision
+audit since it lives in XML, not JS) found and fixed to read from the
+same `KDS_LABELS` dictionary as every other status label - was
+literally always English regardless of user language until now.
+Reconciliation behavior itself (quantity-to-zero cancellation, historic
+preparation record preservation) is completely untouched - confirmed
+by this round's own tests, and by the explicit non-touching of any
+Python file in that logic's own area.
+
+### 13 - No hard-coded Arabic business logic
+No `if (lang === "ar") { ... }` pattern was introduced anywhere -
+every localization decision routes through one of the two centralized
+dictionary-lookup functions (`getKdsLabels()` for the Internal Screen,
+the `KIOSK_LANG === 'ar' ? ... : ...` single ternary for the kiosk,
+evaluated exactly once). A third language later means a third
+dictionary object and one more line in each lookup - no call site
+anywhere else changes.
+
+### 15 - No removed features reintroduced
+Confirmed directly: `ar.po` contains zero mentions of "priority" (case-
+insensitive) or `kds.order.status` - the new translations added this
+round cover only currently-active product functionality.
+
+### Explicitly open - requires the client's own live environment
+- **Item 14** (full Python/XML/JS/Kiosk translation completeness
+  inventory with Translated/Intentionally-untranslated/Technical
+  classification) - not produced this round; the AST-based Python
+  coverage check (item 2) is a strong start but XML view-label/
+  selection-label coverage genuinely requires Odoo's own export tool.
+- **Item 12** (Arabic printing/thermal compatibility) - cannot be
+  tested without a live Print Agent and physical printer; explicitly
+  not assumed working from browser rendering alone, per that item's
+  own instruction.
+- **Items 17/18/19** (PO check via Odoo's own tooling, module upgrade,
+  live UI tests across all nine required screens, the nine required
+  Arabic runtime scenarios, and final commercial acceptance) - all
+  require a live Odoo 19 instance this environment does not have.
+
+### Explicitly untouched, per item 16
+Quantity reconciliation, immediate quantity decreases, POS Send
+behavior, cancellation, refunds, routing, multi-station logic, KDS
+state transitions, printing claim/lease, Operating Mode enforcement,
+and Public Kiosk access security - no file in any of these areas
+modified; the only kiosk-controller changes are labels/`dir`/`lang`/
+CSS, confirmed by this round's own tests to leave the actual auth/
+business logic completely unchanged.
+
+### Files changed
+`i18n/ar.po`, `i18n/flexsys_kds.pot` (regenerated), `i18n/GLOSSARY.md`
+(restructured + cleaned), `static/src/js/kds_i18n.js` (bilingual
+dictionaries), `static/src/js/kds_app.js`, `static/src/js/
+kds_order_card.js` (language-aware label resolution), `static/src/xml/
+kds_templates.xml` (one remaining hardcoded status label fixed),
+`static/src/scss/kds_style.scss` (bidi isolation rules),
+`models/kds_station.py` (new `kiosk_language` field), `views/
+kds_station_views.xml` (field exposed in form), `controllers/
+kds_kiosk.py` (kiosk-side translation dictionary, `dir`/`lang`, font
+stack, bidi isolation), `tests/test_workflow.py` (new tests).
+
+### Tests
+12 new tests covering: dictionary key-parity (both screens), safe
+language-source resolution (both screens, no browser inference),
+`kiosk_language` field defaults/type, correct `dir`/`lang` rendering
+per language, kiosk dictionary language-switching with the client's
+own named labels present in Arabic, bidi isolation markers present in
+both screens' own delta-marker and order-number code, Arabic-capable
+font stack, zero stale removed-feature translations, PO structural
+validity, and full current-code msgid coverage (a regression guard so
+a future `_()` string added without a translation is caught by the
+suite).
+
+**Total: 558 tests** (up from 546). No database migration required for
+the new field - a new Selection column with a default value needs none
+on either fresh install or upgrade.
+
+**Required before this can be closed**: the client's own live testing
+of items 17/18/19 exactly as specified, plus item 12's own independent
+printing verification and item 14's own completeness audit - none of
+which this environment can produce.
+
+---
+
+## v7.28.1 — Deep Dead Code & Commercial Cleanup (Part 2)
+
+**Continuation of the commercial cleanup - code cleanup + documentation
+consistency only, per the request's own explicit scope.** No new
+features, no refactoring of stabilized core behavior.
+
+### 1 - Remaining confirmed dead actions: DELETED, with client approval
+- **`action_dispatch()`** (`kds_print_job.py`) - already self-
+  documented as no longer the active Print Agent path
+  (`_claim_pending_jobs()`'s own atomic claim/lease is the only
+  supported dispatch mechanism). The one test that used it (purely as
+  a same-effect setup shortcut, not testing its own behavior
+  specifically) was updated to call `_claim_pending_jobs()` directly -
+  the actual supported runtime path, per "update tests to use the
+  actual supported runtime setup instead of preserving a dead
+  production method for test convenience."
+- **`action_move_station()`** (`kds_order_line.py`) + its own
+  `move_station` permission entry (`kds_access.py`) - confirmed zero
+  callers from Python runtime/controllers/XML/JS/UI/cron, and the
+  client's own explicit confirmation that no external RPC contract for
+  it exists or is documented.
+
+Both were reported (not deleted) in the prior round's own VERIFY
+table, per that round's own explicit instruction not to delete
+immediately - this round executes the deletion now that the client has
+explicitly reviewed and approved it.
+
+### Additional dead code found during this round's own systematic sweep
+`_reconcile_expeditor_on_production_change()` (`kds_order.py`) - not
+caught by the prior round's own "CURRENTLY UNUSED" text search (it
+used different wording), found instead via a programmatic scan for
+every function whose name appears nowhere except its own definition.
+Already self-documented as "DEPRECATED... kept as a thin alias... in
+case something outside this module still references the old name" -
+a private (underscore-prefixed) internal method, never part of any
+public API surface, with zero actual callers anywhere. The real,
+current method (`_system_reopen_if_production_incomplete()`) is
+completely unaffected.
+
+Every other candidate the same programmatic scan surfaced
+(`_check_sla_config`, `agent_ack`, `agent_claim_jobs`, `get_stations`,
+`kds_standalone_link`, every migration's own `migrate()`) was confirmed
+to be genuine Odoo framework dynamic invocation
+(`@api.constrains`/`@http.route`/the standard migration entry point
+name) - correctly kept, not deleted.
+
+Broken comment references created by these deletions were corrected.
+
+### 2/3 - Documentation consistency sweep + Release Status restructure
+
+**`RELEASE_STATUS.md` fully rewritten**, not incrementally patched -
+the previous version had grown into a ~2,800-line mix of current state
+and blow-by-blow development history across every batch/round of this
+project, with genuine contradictions the request correctly identified
+(a model described as both "removed" and "exists but not live" in
+different sections). Restructured into the exact sections requested:
+Current Version, Core Features, Operating Modes, Printing, KDS
+Lifecycle, Routing, POS Delta/Reconciliation, Cancellation/Refund,
+Public Kiosk, Security, Automated Test Count, Known Limitations,
+Commercial Readiness Status. All development history it used to carry
+remains fully available in this CHANGELOG (140 entries, untouched) -
+nothing was lost, only moved to where it belongs, per "Development
+history belongs in CHANGELOG or Git."
+
+**`README.md`**: two stale test-count references (171, from long before
+this cleanup work began) updated to the current, real count (546). A
+"Known Limitations" bullet describing `kds.order.status`/
+`kds.order.status.transition` as "exist but are not live" removed
+entirely - those models no longer exist in the codebase at all, removed
+in the prior round. Version-history references to `v5.2.1`-`v5.5.1`
+(a live-testing anecdote) were confirmed to genuinely exist at that
+point in this CHANGELOG's own history and were left as-is - accurate,
+not stale.
+
+**`docs/ARCHITECTURE.md`**: the model reference table's own row for
+`kds.order.status`/`kds.order.status.transition` removed - those models
+are gone, the row describing them as "foundation data" was actively
+misleading.
+
+**`i18n/GLOSSARY.md`** (item 4, "Glossary Cleanup Before Arabic
+Translation"): the entire `kds.order` → `priority` terminology table
+(Normal/Priority/Urgent/VIP) removed, along with the "Priority Changed"
+audit-event-type row and the `filterPriority` frontend-string row -
+none of these terms appear anywhere in the current product's own UI.
+
+Every remaining mention of "priority" across README/ARCHITECTURE
+(three short mentions, all in the exact same context: "`state`,
+`priority`, and every timestamp" as an example of a protected,
+write-guarded field) was verified to be genuinely accurate as written -
+the `priority` FIELD itself is still real and still protected against
+direct writes (a real, current behavior), even though the feature
+built on top of it has been fully removed - removing these specific
+mentions would have made the documentation less accurate, not more.
+
+### 6 - XML/Security orphan sweep: verified programmatically, zero found
+A script cross-referenced every `ir.model.access.csv` entry's own
+`model_id:id` against every model actually defined in `models/*.py` -
+zero orphaned ACL entries. Every menu item's own `action=` attribute
+was cross-referenced against every actually-defined action - zero
+unresolved references. A full text search confirmed no remaining
+security/view reference anywhere to the removed workflow-status models,
+the removed Priority action, or the removed printer test action -
+matching this item's own three explicitly-named checks exactly.
+
+### 7 - JS/OWL/CSS: verified clean, confirmed from the prior round
+A fresh, full sweep of every frontend file (JS, XML templates, SCSS)
+for any remaining Priority-related state/filter/badge/handler found
+none - every remaining mention of the word "priority" is either a
+harmless English-language comment (e.g. "takes priority" describing
+card-visual precedence, part of the real, active READY/COMPLETED
+visual logic) or the same accurate field-protection mention noted
+above. Nothing altered - KDS layout, filters, SLA indicators, delta
+markers, READY/COMPLETED behavior, and kiosk UI all confirmed
+untouched.
+
+### 8 - Manifest & dependency sweep
+`base`/`web`/`point_of_sale`/`product` re-verified: `product` is
+directly justified (`views/product_views.xml` inherits
+`product.product_template_form_view`/`product.product_category_form_view`
+directly - a real, explicit dependency, not an indirect one that could
+be dropped). No dependency removed.
+
+### 9/10 - Development migrations + Priority fields: no change this round
+Both already correctly classified in the prior round's own report
+(migrations: development-history-only, none required for a fresh
+commercial install; `priority` field: kept for upgrade safety, schema
+decision deferred to the commercial baseline build) - this request
+confirms the same classification stands and asks for no further action
+this round, which is exactly what happened.
+
+### 11 - Explicitly untouched
+Quantity reconciliation, immediate decrease handling, `1 -> 0`
+cancellation, POS Send delta logic, refund handling, cancellation
+history, multi-station logic, READY -> COMPLETED lifecycle, routing,
+Operating Modes, Public Kiosk Printer Only enforcement, Print Agent
+atomic claim/lease, and Expeditor/Packing - no file in any of these
+areas modified.
+
+### Files changed
+`models/kds_print_job.py`, `models/kds_order_line.py`,
+`models/kds_access.py`, `models/kds_order.py` (deletions + broken-
+reference fixes); `tests/test_printing.py`, `tests/test_permissions.py`
+(test updates + new tests); `README.md`, `docs/ARCHITECTURE.md`,
+`i18n/GLOSSARY.md`, `RELEASE_STATUS.md` (documentation).
+
+### Files deleted
+None this round (all deletions were in-file method/permission removals,
+not whole-file deletions).
+
+### Methods removed
+`action_dispatch()`, `action_move_station()`,
+`_reconcile_expeditor_on_production_change()`.
+
+### XML/security records removed
+The `move_station` permission entry (`ACTION_MIN_GROUP` dict in
+`kds_access.py` - not an XML/CSV record, but the equivalent Python-side
+permission mapping for the removed action).
+
+### Tests
+5 new tests (deletion confirmations for both actions + the permission
+entry + the newly-found deprecated alias, plus a non-regression test
+confirming the atomic claim/lease mechanism itself is completely
+unaffected), 1 test updated to use the real supported runtime path
+instead of the removed method.
+
+**Total: 546 tests** (up from 541). No database migration required -
+in-file method/permission removals and documentation only.
+
+---
+
+## v7.28.0 — Deep Dead Code & Commercial Cleanup (Part 1)
+
+**Code cleanup only, per the request's own explicit scope - no new
+features, no change to stabilized runtime behavior.** This is a large,
+multi-part request; this round completes every item that had a clear,
+verifiable answer, and reports (without executing) on every item the
+request itself said to verify/classify first.
+
+### Section 1 - Priority / Urgent / VIP Legacy: DELETED
+`action_change_priority()` (kds_order.py), the `change_priority`
+permission entry (kds_access.py), and the two tests that only existed
+to preserve the removed action (test_permissions.py) - confirmed zero
+active callers anywhere outside those tests. The underlying `priority`
+FIELD and the `priority_changed` audit event type are deliberately
+KEPT (not deleted) - see the field-removal report below for why schema
+removal is a separate decision.
+
+### Section 2 - Confirmed Dead Methods: DELETED
+- `_flexsys_kds_should_treat_as_send()` (pos_order.py) - confirmed zero
+  callers, exactly as its own docstring already stated.
+- `_is_genuine_send_signal()` (pos_order.py) - found during this same
+  investigation to have ALSO lost its own last caller once the method
+  above was removed (the real, active mechanism is
+  `_extract_preparation_content_signature()`, confirmed still called).
+- `action_test_connection()` (kds_printer.py) - the earlier round's own
+  decision to keep it "for a possible future testing/demo need" is
+  explicitly overridden by this request ("Do not keep simulation/demo
+  functionality in the production commercial addon"). Zero active
+  callers confirmed.
+- `_system_reset_for_delta_sync()` (kds_order_line.py) - found during
+  the requested full-codebase search for "CURRENTLY UNUSED"/"kept for
+  future" markers; its own docstring already confirmed it: "nothing in
+  this module currently calls it."
+
+9 broken comment references to these four removed methods (across
+kds_order.py, kds_order_line.py, pos_order.py, test_pos_sync.py,
+test_workflow.py, docs/PRINT_AGENT.md, views/kds_printer_views.xml)
+were corrected to describe the actual current behavior rather than
+naming a method that no longer exists.
+
+### Section 3 - VERIFY BEFORE DELETE: reported, NOT deleted this round
+Per the request's own explicit instruction not to delete these
+immediately. See the required table below.
+
+### Section 4 - Workflow Status Foundation: DELETED
+`kds.order.status`/`kds.order.status.transition` (models, views,
+`data/kds_workflow_status_data.xml`, 6 ACL entries, the menu comment
+referencing them). Confirmed via both models' own docstrings ("NOT
+read by the actual workflow engine, the KDS screens, or the SLA
+engine... zero effect on runtime behavior") and a full codebase search
+finding zero references from `kds_order.py`/`kds_order_line.py`/any
+controller/any JS file - the real runtime workflow
+(New -> Accepted -> Preparing -> Ready -> Completed, driven entirely
+by `ORDER_TRANSITIONS`/`LINE_TRANSITIONS`) never read from these
+models at all, exactly as the request's own understanding stated.
+
+### Section 5 - Runtime Diagnostic Cleanup: DONE
+The `FLEXSYS_KIOSK_AUTH` logging added during the Printer Only kiosk
+investigation (now confirmed resolved at runtime) is kept but
+rebalanced: routine request/success messages reduced from INFO to
+DEBUG (a real kiosk device polling this function repeatedly no longer
+floods production logs at INFO), while genuine rejections (bad token,
+missing station, `kiosk_disabled`, `printer_only`) are raised to
+WARNING - kept visible in production by default, per "Do not remove
+useful security warnings for genuinely rejected or suspicious access."
+
+### Section 7 - Manifest Cleanup: DONE
+Removed a large block of development-history commentary from the
+`assets` section (multiple rounds of a since-resolved POS-startup-
+crash investigation) - the file's own functional purpose (why exactly
+one file lives in the `point_of_sale._assets_pos` bundle) is now
+stated in one short paragraph instead. Replaced the placeholder
+`https://flexsys.example.com` with the real website. `name`/`summary`/
+`author`/`license`/`depends`/`data`/`assets`/`installable`/
+`application`/`auto_install`/`post_init_hook` reviewed - all already
+correct commercial metadata, no further changes needed there.
+
+### Section 9 - Printer Metadata Fields: KEEP — Agent contract
+`port`/`usb_identifier`/`serial_number` confirmed genuinely exposed in
+the Printer form view (`kds_printer_views.xml`) as manually-entered
+documentation of the physical printer's own real connection details -
+not read by any Odoo-side Python logic (confirmed, no reference
+anywhere in the print payload or any controller), but that's exactly
+the nature of an external Print Agent contract: information a human
+configuring the actual physical agent process needs to reference, not
+something Odoo itself computes or transmits automatically. Kept, not
+removed.
+
+### Section 8 - Development Migrations: classified, not deleted from Git
+All four existing migrations (`19.0.7.7.4`, `19.0.7.8.0`, `19.0.7.9.2`,
+`19.0.7.22.0`) are **development-history only** - each one exists
+specifically to backfill a field/behavior for an installation upgrading
+FROM an internal development version that predates it. A first
+commercial installation of `19.0.1.0.0` is always a fresh install
+(`post_init_hook`, which already runs correctly on fresh installs, not
+migrations), never an upgrade from any of these internal development
+versions, so none of them apply to that path. Zero migrations are
+"Required for first commercial baseline." Left in place in Git per the
+request's own explicit instruction - not removed from the package this
+round, only classified for the client's own approval before exclusion.
+
+### Sections 6, 10, 11 - partially addressed, reported honestly rather than claimed complete
+- **Section 6 (Development-History Comment Cleanup)**: only the 9
+  broken references directly created by this round's own deletions
+  were fixed (a correctness requirement, not just tidiness). A full
+  sweep of every historical "confirmed live"/round-number/old-bug-
+  number comment across this project's own multi-month history is a
+  much larger undertaking than fits safely in this round alongside the
+  actual deletions - attempting it here risked either missing genuinely
+  load-bearing technical context (several of these comments explain
+  real Odoo-core behavior discovered through hard debugging, not just
+  "round 4 failed") or introducing errors editing files this round
+  didn't otherwise need to touch. Recommended as its own, focused,
+  lower-risk follow-up pass.
+- **Section 10 (XML/Security/Assets Orphan Audit)**: performed
+  specifically for everything removed this round (the workflow-status
+  views/ACLs/menu reference, confirmed fully orphan-free above) - a
+  full reverse-reference sweep of the ENTIRE existing XML/security/
+  asset surface (independent of anything deleted this round) was not
+  attempted, for the same reason as section 6: too large and too risky
+  to do safely as a side effect of this round's own primary work.
+- **Section 11 (Imports/Dependencies)**: a scoped check on every file
+  actually modified this round confirmed no newly-orphaned imports were
+  left behind; a full unused-import sweep across the entire codebase,
+  and a full manifest `depends` justification review, were not
+  attempted this round for the same reason.
+
+### Explicitly untouched, per the request's own "DO NOT TOUCH" list
+Quantity reconciliation, immediate decrease handling, `1 -> 0`
+cancellation, POS Send delta logic, refund handling, cancellation
+history, multi-station READY logic, routing engine, READY -> COMPLETED
+lifecycle, Operating Mode behavior, Public Kiosk Printer Only
+enforcement, Printer atomic claim/lease, Expeditor/Packing runtime, and
+station/company isolation - no file in any of these areas was modified
+in this round except the diagnostic-logging rebalancing in
+`controllers/kds_kiosk.py` (section 5, explicitly requested, and
+confirmed to leave the actual `operating_mode == 'printer_only'`
+authorization decision completely untouched - logging only).
+
+### Files changed
+`models/kds_order.py`, `models/kds_access.py`, `models/kds_order_line.py`,
+`models/pos_order.py`, `models/kds_printer.py` (deletions + broken-
+reference fixes); `models/kds_order_status.py`,
+`models/kds_order_status_transition.py`, `views/kds_order_status_views.xml`,
+`data/kds_workflow_status_data.xml` (deleted files); `models/__init__.py`,
+`__manifest__.py`, `security/ir.model.access.csv`,
+`views/kds_menus.xml` (registration/reference cleanup);
+`controllers/kds_kiosk.py` (logging levels); `docs/PRINT_AGENT.md`,
+`views/kds_printer_views.xml` (comment fixes); `tests/test_permissions.py`,
+`tests/test_workflow.py`, `tests/test_pos_sync.py`, `tests/test_printing.py`,
+`tests/test_station_kpi.py` (test updates + new tests).
+
+### Tests
+6 new tests (workflow-status-removal confirmation + real-workflow non-
+regression, diagnostic-logging-level confirmation), plus 3 pre-existing
+tests updated (not silently left to fail) to assert the new, correct
+state instead of the old one.
+
+**Total: 541 tests** (up from 540, net of 2 removed + 6 added - a small
+net change reflecting genuine deletions, not a large new-feature
+addition). No database migration added for this round's own deletions
+- removing unused models/fields from a development database the
+request explicitly said not to touch aggressively yet.
+
+---
+
 ## v7.27.2 — Printer Only Kiosk Bug: Runtime Diagnostic Instrumentation (root cause not yet confirmed)
 
 **Important limitation, stated plainly**: this environment has no live

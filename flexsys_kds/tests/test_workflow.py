@@ -1356,14 +1356,14 @@ class TestWorkflow(FlexSysKdsTestCommon):
         what's actually under test here is _effective_stage()'s own
         classification logic, which operates purely on kds.order.line
         state, independent of how those lines got there. Also
-        deliberately does not attempt to simulate a Ready line reset
-        back to Preparing via a qty change (the real production path for
-        that - _system_reset_for_delta_sync() - actually resets a
-        modified Ready line to 'new', not 'preparing'; see
-        pos_order.py's own call site) - a line simply left mid-
-        preparation, with a second line added alongside it, already
-        gives the exact "one new, one further along" mix this is
-        testing, without needing to fabricate an inaccurate path.
+        deliberately does not attempt to simulate a Ready line's own
+        state changing via a qty change - the real production path for
+        that never resets a Ready line's own state at all (a separate
+        delta line is created instead, see pos_order.py's own
+        ready/completed branch) - a line simply left mid-preparation,
+        with a second line added alongside it, already gives the exact
+        "one new, one further along" mix this is testing, without
+        needing to fabricate an inaccurate path.
         """
         order = self._order()
         order.action_accept()
@@ -1961,20 +1961,25 @@ class TestWorkflow(FlexSysKdsTestCommon):
         self.assertNotIn('Priority/Urgent/VIP', arch)
         self.assertNotIn("name=\"priority\"", arch)
 
-    def test_final_cleanup_priority_field_and_action_still_exist_in_backend(self):
-        """Required 'Upgrade Safety': 'Legacy database fields may
-        remain internally... provided that: They are no longer exposed
-        in the UI... No new workflow depends on them.' Confirms the
-        underlying field and action are deliberately KEPT (not deleted
-        - a real DB schema removal was explicitly not required, and
-        would have carried real upgrade/migration risk for existing
-        installations), just no longer exposed anywhere in the UI -
-        confirmed above. action_change_priority()'s own existing
-        behavior/audit-logging (test_permissions.py's own
-        test_action_change_priority_works_and_is_audited) is completely
-        unaffected by this round - not modified at all."""
+    def test_deep_cleanup_priority_field_kept_action_removed(self):
+        """UPDATED for "Deep Dead Code & Commercial Cleanup Request",
+        item 1 ("Priority / Urgent / VIP Legacy"): the earlier version
+        of this test ("Final Cleanup Request") confirmed BOTH the
+        field and action_change_priority() were deliberately kept -
+        this request explicitly asks for the action itself removed
+        ("action_change_priority()... Remove active backend leftovers"),
+        while the underlying `priority` FIELD stays for now, per this
+        same request's own "Do not aggressively remove database
+        fields... Report them separately before schema removal" -
+        confirmed as a schema-removal candidate for the future
+        commercial baseline in this round's own report, not deleted
+        here. Confirms the field remains, the action genuinely does
+        not."""
         self.assertIn('priority', self.env['kds.order']._fields)
-        self.assertTrue(hasattr(self.env['kds.order'], 'action_change_priority'))
+        self.assertFalse(hasattr(self.env['kds.order'], 'action_change_priority'),
+                          "action_change_priority() must be genuinely removed - no active "
+                          "caller existed anywhere outside its own now-removed tests.")
+
 
     def test_final_cleanup_kds_screen_operational_sorting_no_longer_uses_priority(self):
         """Required: 'No priority-based operational behavior or sorting
@@ -2223,3 +2228,239 @@ class TestWorkflow(FlexSysKdsTestCommon):
             content = f.read()
         self.assertIn('background: #232b36;', content)
         self.assertIn('border: 1px solid #2a3340;', content)
+
+    # -----------------------------------------------------------------
+    # LOCALIZATION ("Arabic Localization & RTL Specification"): tests
+    # for the Internal KDS Screen's own new bilingual dictionary
+    # architecture, the Public Kiosk's own new station-level language
+    # source, and bidi/RTL protections, per item 17's own "regenerate/
+    # check PO files... automated tests pass" requirement. Live UI
+    # verification with an Arabic Odoo user, actual thermal-printer
+    # Arabic output, and visual RTL rendering all genuinely require a
+    # live Odoo 19 instance and are explicitly NOT claimed as verified
+    # here - see the delivery's own final report.
+    # -----------------------------------------------------------------
+    def test_localization_kds_i18n_has_complete_parallel_dictionaries(self):
+        """Confirms KDS_LABELS_EN and KDS_LABELS_AR have EXACTLY the
+        same set of keys - no key present in one and missing from the
+        other, which would silently render 'undefined' for that label
+        in whichever language is missing it."""
+        import os
+        module_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        path = os.path.join(module_dir, 'static', 'src', 'js', 'kds_i18n.js')
+        with open(path, encoding='utf-8') as f:
+            content = f.read()
+        import re
+        en_block = re.search(r'KDS_LABELS_EN = \{(.*?)\n\};', content, re.DOTALL).group(1)
+        ar_block = re.search(r'KDS_LABELS_AR = \{(.*?)\n\};', content, re.DOTALL).group(1)
+        en_keys = set(re.findall(r'(\w+):', en_block))
+        ar_keys = set(re.findall(r'(\w+):', ar_block))
+        self.assertEqual(en_keys, ar_keys,
+                          "KDS_LABELS_EN and KDS_LABELS_AR must have identical key sets - "
+                          "missing keys silently render undefined in that language.")
+        self.assertGreater(len(en_keys), 20, "Sanity check: the dictionary should have a "
+                                              "substantial number of keys, not an empty stub.")
+
+    def test_localization_kds_app_uses_real_odoo_user_language_not_browser(self):
+        """Required, item 5: 'Internal KDS: Use the logged-in Odoo
+        user's active language... Do not infer language from browser
+        text direction alone.' Structural check confirming kds_app.js
+        resolves language from the real `user` service, and that
+        getKdsLabels() is called with that same resolved value - not
+        from navigator.language or any browser-only signal."""
+        import os
+        module_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        path = os.path.join(module_dir, 'static', 'src', 'js', 'kds_app.js')
+        with open(path, encoding='utf-8') as f:
+            content = f.read()
+        self.assertIn('user.lang', content)
+        self.assertIn('getKdsLabels(lang)', content)
+        self.assertNotIn('navigator.language', content)
+
+    def test_localization_order_card_uses_same_safe_language_source(self):
+        """Confirms KdsOrderCard (a separate component from the main
+        screen, with its own setup()) resolves language the exact same
+        safe way - not KDS_LABELS_EN by accident, and not a different,
+        untested mechanism."""
+        import os
+        module_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        path = os.path.join(module_dir, 'static', 'src', 'js', 'kds_order_card.js')
+        with open(path, encoding='utf-8') as f:
+            content = f.read()
+        self.assertIn('user.lang', content)
+        self.assertIn('getKdsLabels(lang)', content)
+
+    def test_localization_kiosk_language_field_defaults_to_english(self):
+        """Required, item 5: 'Public Kiosk - define a minimal explicit
+        language source rather than hard-coding Arabic based on the
+        browser.' Confirms the new kiosk_language field exists, is a
+        Selection (not free text, so it's trivially extendable to a
+        third language later), and defaults to 'en' - so an existing
+        station that has never touched this field renders its own
+        kiosk exactly as it always has, with zero behavior change."""
+        station = self.env['kds.station'].create({
+            'name': 'Localization Default Test', 'code': 'LOCDEFAULT',
+        })
+        self.assertEqual(station.kiosk_language, 'en')
+        field = self.env['kds.station']._fields['kiosk_language']
+        self.assertEqual(field.type, 'selection')
+        self.assertIn('ar', dict(field.selection))
+
+    def test_localization_kiosk_renders_correct_dir_and_lang_attributes(self):
+        """Confirms the kiosk's own HTML root element gets dir='rtl'
+        lang='ar' for an Arabic station and dir='ltr' lang='en' for an
+        English one - required for functional RTL (item 8), not just
+        translated text."""
+        import re
+        from odoo.addons.flexsys_kds.controllers.kds_kiosk import _KIOSK_HTML_TEMPLATE
+        vals = {
+            'station_name': 'Test', 'branch_name': '', 'company_name': '',
+            'station_code': 'X', 'token': 'y',
+            'branch_label': 'Branch', 'time_label': 'Time',
+        }
+        result_en = _KIOSK_HTML_TEMPLATE % {**vals, 'kiosk_lang': 'en', 'kiosk_dir': 'ltr'}
+        result_ar = _KIOSK_HTML_TEMPLATE % {**vals, 'kiosk_lang': 'ar', 'kiosk_dir': 'rtl'}
+        self.assertIn('<html lang="en" dir="ltr">', result_en)
+        self.assertIn('<html lang="ar" dir="rtl">', result_ar)
+
+    def test_localization_kiosk_labels_dictionary_selected_by_station_language(self):
+        """Confirms the kiosk's own embedded JS actually switches to
+        KIOSK_LABELS_AR when kiosk_lang is 'ar', and that a sample of
+        the client's own explicitly-named labels (ALL, NEW, PREPARING,
+        READY, COMPLETED, CANCELLED, START, COMPLETE, 'No orders for
+        this filter.') are present in Arabic in that dictionary."""
+        import re
+        from odoo.addons.flexsys_kds.controllers.kds_kiosk import _KIOSK_HTML_TEMPLATE
+        vals = {
+            'station_name': 'Test', 'branch_name': '', 'company_name': '',
+            'station_code': 'X', 'token': 'y', 'kiosk_lang': 'ar', 'kiosk_dir': 'rtl',
+            'branch_label': 'الفرع', 'time_label': 'الوقت',
+        }
+        result = _KIOSK_HTML_TEMPLATE % vals
+        self.assertIn("KIOSK_LANG === 'ar' ? KIOSK_LABELS_AR", result)
+        for arabic_term in ('الكل', 'جديد', 'قيد التحضير', 'جاهز', 'مكتمل', 'ملغى',
+                             'بدء', 'إكمال', 'لا توجد طلبات لهذا الفلتر.'):
+            self.assertIn(arabic_term, result)
+
+    def test_localization_delta_marker_has_bidi_isolation(self):
+        """Required, item 10: 'Do not allow RTL rendering to visually
+        reverse: +2 or -1. Use bidi isolation if necessary.' Confirms
+        both the Internal Screen's own lineChangeLabel() and the
+        kiosk's own matching qtyDeltaSuffix() wrap the sign+quantity in
+        Unicode isolation marks (LRI/PDI)."""
+        import os
+        module_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(module_dir, 'static', 'src', 'js', 'kds_order_card.js'),
+                  encoding='utf-8') as f:
+            card_content = f.read()
+        self.assertIn('\\u2066', card_content)
+        self.assertIn('\\u2069', card_content)
+        with open(os.path.join(module_dir, 'controllers', 'kds_kiosk.py'),
+                  encoding='utf-8') as f:
+            kiosk_content = f.read()
+        self.assertIn('\\u2066', kiosk_content)
+        self.assertIn('\\u2069', kiosk_content)
+
+    def test_localization_order_numbers_use_bidi_isolation_css(self):
+        """Required, item 9: 'Order identifiers must render in a stable
+        readable direction.' Confirms both screens' own order-number
+        CSS classes force direction:ltr + unicode-bidi:isolate."""
+        import os
+        module_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(module_dir, 'static', 'src', 'scss', 'kds_style.scss'),
+                  encoding='utf-8') as f:
+            scss_content = f.read()
+        self.assertIn('.fs-order-number, .fs-ordered-ref { direction: ltr; unicode-bidi: isolate; }',
+                       scss_content)
+        with open(os.path.join(module_dir, 'controllers', 'kds_kiosk.py'),
+                  encoding='utf-8') as f:
+            kiosk_content = f.read()
+        self.assertIn('direction:ltr; unicode-bidi:isolate', kiosk_content)
+
+    def test_localization_kiosk_font_stack_supports_arabic(self):
+        """Required, item 12: 'characters are not disconnected... no
+        square/tofu glyphs.' Confirms the kiosk's own embedded font
+        stack includes Cairo (Arabic-capable) ahead of the Latin-only
+        fallback, matching the Internal Screen's own existing choice."""
+        import os
+        module_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(module_dir, 'controllers', 'kds_kiosk.py'),
+                  encoding='utf-8') as f:
+            content = f.read()
+        self.assertIn("font-family:'Cairo','Segoe UI',Tahoma,sans-serif", content)
+
+    def test_localization_ar_po_has_no_stale_removed_feature_entries(self):
+        """Required, item 15: 'Do not reintroduce removed features
+        through translation... Priority/Urgent/VIP and deleted workflow
+        foundation terminology must not return.' Also confirms the
+        specific stale entry the client's own report named
+        ("Connection test simulated OK for %s") is genuinely gone."""
+        import os
+        module_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(module_dir, 'i18n', 'ar.po'), encoding='utf-8') as f:
+            content = f.read()
+        self.assertNotIn('Connection test simulated OK', content)
+        self.assertNotIn('priority', content.lower())
+        self.assertNotIn('kds.order.status', content)
+
+    def test_localization_ar_po_is_structurally_valid(self):
+        """Required, item 17: 'no malformed PO entries.' Confirms every
+        msgid has a matching msgstr line, and no msgstr is empty for a
+        non-header entry - a malformed or incomplete PO file would fail
+        Odoo's own import silently or with an unhelpful error."""
+        import os
+        import re
+        module_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(module_dir, 'i18n', 'ar.po'), encoding='utf-8') as f:
+            content = f.read()
+        msgid_count = len(re.findall(r'^msgid "', content, re.MULTILINE))
+        msgstr_count = len(re.findall(r'^msgstr "', content, re.MULTILINE))
+        self.assertEqual(msgid_count, msgstr_count)
+        entries = re.findall(r'msgid "((?:\\.|[^"\\])*)"\nmsgstr "((?:\\.|[^"\\])*)"', content)
+        empty = [e for e in entries if e[0] and not e[1]]
+        self.assertEqual(empty, [], "No non-header msgid may have an empty translation.")
+
+    def test_localization_every_current_python_msgid_has_a_translation(self):
+        """Required, item 2: 'Synchronize ar.po with the current code.'
+        Programmatically confirms every _() call site in current
+        production Python has a corresponding, non-empty entry in
+        ar.po - the same AST-accurate check used to originally build
+        this file, re-run here as a regression guard so a future _()
+        string added without updating ar.po is caught by the test
+        suite rather than discovered live."""
+        import ast
+        import os
+        import re
+        module_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        current_msgids = set()
+        for root, dirs, files in os.walk(module_dir):
+            dirs[:] = [d for d in dirs if d not in ('tests', '__pycache__', 'i18n', '.git')]
+            for fname in files:
+                if fname.endswith('.py'):
+                    path = os.path.join(root, fname)
+                    with open(path, encoding='utf-8') as f:
+                        source = f.read()
+                    try:
+                        tree = ast.parse(source, filename=path)
+                    except SyntaxError:
+                        continue
+                    for node in ast.walk(tree):
+                        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                                and node.func.id == '_' and node.args
+                                and isinstance(node.args[0], ast.Constant)
+                                and isinstance(node.args[0].value, str)):
+                            current_msgids.add(node.args[0].value)
+
+        with open(os.path.join(module_dir, 'i18n', 'ar.po'), encoding='utf-8') as f:
+            po_content = f.read()
+        po_msgids = set()
+        for block in re.split(r'\n\n+', po_content)[1:]:
+            m_id = re.search(r'msgid\s+"((?:\\.|[^"\\])*)"', block)
+            m_str = re.search(r'msgstr\s+"((?:\\.|[^"\\])*)"', block)
+            if m_id and m_str and m_str.group(1):
+                po_msgids.add(m_id.group(1).replace('\\"', '"'))
+
+        missing = current_msgids - po_msgids
+        self.assertEqual(missing, set(),
+                          "Every current _() msgid must have a non-empty ar.po translation: %s"
+                          % missing)

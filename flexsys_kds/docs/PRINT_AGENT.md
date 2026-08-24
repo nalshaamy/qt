@@ -34,16 +34,11 @@ this printer. It has never verified, and does not verify, that the
 physical printer itself is powered on, has paper, or is genuinely
 reachable at this exact moment - only that your agent process was
 recently able to talk to Odoo about this printer. An earlier on-screen
-"Mark as Online" button (`action_test_connection()` in
-`models/kds_printer.py`) let anyone flip this to `online` manually,
-with no connectivity check of any kind - that button is removed from
-the Printer form's own UI as of this fix, precisely because it made
-`status` an unreliable mix of "a real agent genuinely reported success"
-and "someone clicked a button." The underlying method itself still
-exists in the codebase (unused by any current view) rather than being
-deleted outright, in case a future testing/demo scenario genuinely
-needs it again - but it is no longer part of the normal, day-to-day
-production UI.
+"Mark as Online" button let anyone flip this to `online` manually,
+with no connectivity check of any kind - that button, and the
+underlying method it called, are both fully removed as of this fix,
+precisely because it made `status` an unreliable mix of "a real agent
+genuinely reported success" and "someone clicked a button."
 
 ## Why a separate agent
 

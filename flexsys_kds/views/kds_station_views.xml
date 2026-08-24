@@ -164,6 +164,17 @@
                             </div>
                             <group>
                                 <field name="kiosk_url" readonly="1"/>
+                                <!-- LOCALIZATION ("Arabic Localization
+                                     & RTL Specification", item 5): the
+                                     explicit, administrator-configured
+                                     language source for this station's
+                                     own Public Kiosk screen - see the
+                                     field's own docstring
+                                     (kds_station.py) for why the
+                                     public kiosk can't reuse the
+                                     Internal Screen's "logged-in
+                                     user's language" approach at all. -->
+                                <field name="kiosk_language"/>
                                 <!-- UI/DATA FIX ("Master Change
                                      Request", item 5): the two new
                                      fields requested - a way to

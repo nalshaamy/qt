@@ -160,56 +160,6 @@ class KdsPrinter(models.Model):
             },
         }
 
-    def action_test_connection(self):
-        """AUDIT FIX ("Printer Connection Test - Known Limitation",
-        DOCUMENTATION/FUTURE): this does NOT verify real physical printer
-        connectivity - it never has. Odoo's role in printing is managing
-        Print Jobs, the atomic Claim/Lease mechanism, and the versioned
-        print payload contract (see
-        kds.print.job._claim_pending_jobs()/._print_payload()) - actually
-        talking to a physical printer (ESC/POS, network socket, IoT box,
-        etc.) is the external Print Agent's job, a separate process not
-        included in this module (see docs/PRINT_AGENT.md's own
-        "Architecture at a glance" section).
-
-        UI/DATA FIX ("Master Change Request", item 14, "Printer Form
-        Cleanup"): "REMOVE من Production UI: Mark as Online (No Real
-        Connectivity Check)." The button that called this method is
-        removed from the printer form's own view (kds_printer_views.xml)
-        - see docs/PRINT_AGENT.md's own new "What 'Status: Online'
-        actually means" section for the full reasoning: this button let
-        anyone flip `status` to 'online' with zero connectivity
-        verification, mixed in with the same field genuinely being set
-        by a real agent's own successful job report
-        (controllers/kds.py's own agent_result()) - an unreliable,
-        misleading mix exactly matching item 13's own concern that
-        "Online" must never imply the physical printer itself is
-        verified reachable.
-
-        The method itself is deliberately kept in the codebase rather
-        than deleted outright - purely for a future testing/demo
-        scenario that might still genuinely need a manual override like
-        this, reachable via Developer Mode or a direct RPC call if ever
-        needed again - but it is no longer part of the normal,
-        day-to-day production UI.
-        """
-        self.ensure_one()
-        self.write({'last_seen': fields.Datetime.now(), 'status': 'online'})
-        return {
-            'type': 'ir.actions.client',
-            'tag': 'display_notification',
-            'params': {
-                'title': _('FlexSys KDS'),
-                'message': _(
-                    "'%s' marked Online. This does NOT verify a real physical "
-                    "connection - only the external Print Agent, once connected, "
-                    "can confirm that."
-                ) % self.name,
-                'type': 'warning',
-                'sticky': True,
-            },
-        }
-
     def action_set_default(self):
         self.ensure_one()
         self.station_id.printer_ids.write({'is_default': False})

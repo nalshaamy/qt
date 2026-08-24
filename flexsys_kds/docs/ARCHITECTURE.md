@@ -66,7 +66,6 @@ so any future entry point inherits it automatically.
 | `kds.printer` | A physical printer tied to a station; holds the shared secret an external Print Agent authenticates with. |
 | `kds.print.job` | The print queue - see [PRINT_AGENT.md](PRINT_AGENT.md). |
 | `kds.event` | The audit log - every transition, override, and system correction. |
-| `kds.order.status` / `kds.order.status.transition` | Foundation data for a possible future configurable workflow - **not currently read by the runtime engine**; see the models' own docstrings. |
 | `kds.access.mixin` | Shared station-scope and action-tier permission checks, inherited by every model that needs them. |
 
 ## Controllers

@@ -1,6 +1,6 @@
 {
     'name': 'FlexSys KDS',
-    'version': '19.0.7.27.2',
+    'version': '19.0.7.29.5',
     'category': 'Point of Sale',
     'summary': 'Multi-station Kitchen Display System for Odoo POS',
     'description': """
@@ -37,14 +37,13 @@ full development history.
 Technical module name: flexsys_kds
     """,
     'author': 'FlexSys',
-    'website': 'https://flexsys.example.com',
+    'website': 'https://flexsyssa.com',
     'license': 'LGPL-3',
     'depends': ['base', 'web', 'point_of_sale', 'product'],
     'data': [
         'security/kds_security.xml',
         'security/ir.model.access.csv',
         'data/kds_data.xml',
-        'data/kds_workflow_status_data.xml',
         'views/kds_printer_views.xml',
         'views/kds_station_views.xml',
         'views/kds_routing_rule_views.xml',
@@ -52,7 +51,6 @@ Technical module name: flexsys_kds
         'views/kds_printer_hub_views.xml',
         'views/kds_order_views.xml',
         'views/kds_event_views.xml',
-        'views/kds_order_status_views.xml',
         'views/kds_pos_config_views.xml',
         'views/product_views.xml',
         'views/kds_screen_templates.xml',
@@ -68,46 +66,13 @@ Technical module name: flexsys_kds
             'flexsys_kds/static/src/js/kds_app.js',
             'flexsys_kds/static/src/xml/kds_templates.xml',
         ],
-        # REAL BUG FIX ("LIVE NETWORK TRACE - EXACT ODOO 'ORDER / SEND
-        # TO PREPARATION' SERVER PATH CONFIRMED"): the two frontend
-        # patches that previously lived in this bundle
-        # (flexsys_kds_pos_send_signal.js,
-        # flexsys_kds_pos_send_signal_order_model.js - v7.9.3/v7.9.6)
-        # were REMOVED (in v7.11.0), confirmed no longer needed: a live
-        # browser Network trace showed zero effect from either patch for
-        # the "Order" confirmation-dialog action, while the SAME trace
-        # confirmed the actual RPC call for that action is
-        # pos.order.sync_from_ui - a server-side entry point every POS
-        # save goes through, overridden directly in models/pos_order.py
-        # instead.
-        #
-        # REAL BUG FIX ("BLOCKER - 19.0.7.13.0 BREAKS POS STARTUP"):
-        # v7.13.0's own attempt to reintroduce this bundle (a single
-        # file incrementing kds_send_generation, paired with a
-        # models/pos_order.py::_load_pos_data_fields() override meant
-        # to expose that field to the POS session) is confirmed live to
-        # have broken POS startup entirely
-        # ("TypeError: Cannot read properties of undefined (reading
-        # 'currency_id')" inside Odoo's own PosStore.processServerData()).
-        # Both pieces were removed - see models/pos_order.py's own
-        # matching comment (kds_send_generation's field docstring) for
-        # the complete root-cause discussion. The
-        # _load_pos_data_fields() override specifically was the
-        # confirmed problem - the sendOrderInPreparation() hook point
-        # itself was never implicated and has since been reused safely
-        # below.
-        #
-        # REAL BUG FIX ("Offline Recovery - نتيجة الاختبار الحي"):
-        # reintroduced here, deliberately minimal - exactly ONE file,
-        # patching the SAME confirmed-safe sendOrderInPreparation()
-        # hook point (no field-loading override this time - the
-        # confirmed cause of the v7.13.0 crash) to persist an explicit
-        # "Pending Kitchen Send" warning in plain browser localStorage
-        # (entirely independent of any Odoo data model or field) when a
-        # Send fails while offline, and to re-show that warning on
-        # reconnect. No silent auto-retry, no false success indication
-        # - see that file's own top-of-file comment for the complete
-        # explanation.
+        # A single, deliberately minimal frontend patch on Odoo's own
+        # sendOrderInPreparation() hook point: persists a "Pending
+        # Kitchen Send" warning in plain browser localStorage (no Odoo
+        # data model/field involved) if a Send fails while offline, and
+        # re-shows it on reconnect - no silent auto-retry, no false
+        # success indication. See that file's own top-of-file comment
+        # for the full behavior.
         'point_of_sale._assets_pos': [
             'flexsys_kds/static/src/js/flexsys_kds_offline_send_warning.js',
         ],

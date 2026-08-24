@@ -83,50 +83,41 @@ def _effective_stage(lines):
 
 
 def _station_from_token(env, station_code, token):
-    # RUNTIME DIAGNOSTIC ("Final Cleanup Bug - Printer Only kiosk still
-    # accessible"), added per the client's own explicit request for
-    # runtime proof, not another static review: every static re-read of
-    # this exact function has confirmed the operating_mode ==
-    # 'printer_only' check is genuinely present, unconditional, and
-    # correctly reached by all four public kiosk routes - but a static
-    # review cannot prove what actually happens on THIS SPECIFIC
-    # deployment's own live request, against THIS SPECIFIC database.
-    # This logging answers, directly from the real, running request,
-    # exactly the five questions asked: (1) which station resolves,
-    # (2)/(3) its own real operating_mode value at request time, (4)
-    # confirms this is where operating_mode is actually checked, (5)
-    # confirms this exact function ran for this exact request. Search
-    # the Odoo server log for "FLEXSYS_KIOSK_AUTH" after reproducing
-    # the report once - INFO level, so it appears in a standard log
-    # without needing to raise the logger's own level first. Safe to
-    # leave in permanently (a handful of short log lines per kiosk
-    # request is negligible) or remove once the root cause is
-    # confirmed - functionally inert either way, this changes nothing
-    # about the actual auth decision itself, only what gets logged
-    # alongside it.
-    _logger.info("FLEXSYS_KIOSK_AUTH: request station_code=%r token_prefix=%r",
-                 station_code, (token or '')[:8])
+    # DIAGNOSTIC LOGGING ("Deep Dead Code & Commercial Cleanup Request",
+    # item 5, "Runtime Diagnostic Cleanup"): the Printer Only enforcement
+    # issue has now been verified successfully at runtime - the
+    # investigation this logging was added for is closed. Reduced from
+    # INFO to DEBUG for routine request/success messages, per "Normal
+    # Kiosk polling/access must not generate excessive INFO logs" (a
+    # real kiosk device polls this function on essentially every screen
+    # refresh - INFO-level logging on every one of those calls, forever,
+    # is exactly the noise this item asks to avoid). Genuine rejections
+    # are kept at WARNING - "Do not remove useful security warnings for
+    # genuinely rejected or suspicious access" - a rejected kiosk
+    # request (bad token, disabled station, printer_only) is real
+    # security-relevant signal worth keeping visible in production logs
+    # by default, unlike routine successful polling.
+    _logger.debug("FLEXSYS_KIOSK_AUTH: request station_code=%r token_prefix=%r",
+                  station_code, (token or '')[:8])
     if not station_code or not token:
-        _logger.info("FLEXSYS_KIOSK_AUTH: REJECTED - station_code or token missing/empty")
+        _logger.warning("FLEXSYS_KIOSK_AUTH: REJECTED - station_code or token missing/empty")
         return None
     station = env['kds.station'].sudo().search([
         ('code', '=', station_code), ('active', '=', True),
     ], limit=1)
     if not station:
-        _logger.info("FLEXSYS_KIOSK_AUTH: REJECTED - no active station found for "
-                      "code=%r (in ANY company)", station_code)
+        _logger.warning("FLEXSYS_KIOSK_AUTH: REJECTED - no active station found for "
+                         "code=%r (in ANY company)", station_code)
         return None
-    _logger.info(
+    _logger.debug(
         "FLEXSYS_KIOSK_AUTH: resolved station id=%s name=%r code=%r company_id=%s/%r "
         "operating_mode=%r kiosk_disabled=%r",
         station.id, station.name, station.code, station.company_id.id,
         station.company_id.name, station.operating_mode, station.kiosk_disabled)
     if not station.kiosk_token or not hmac.compare_digest(station.kiosk_token, token):
-        _logger.info(
+        _logger.warning(
             "FLEXSYS_KIOSK_AUTH: REJECTED - token mismatch for station id=%s (the token in "
-            "the URL does not match this station's own CURRENT kiosk_token - if this is "
-            "unexpected, the URL may belong to a DIFFERENT station that happens to share "
-            "the same code in a different company, or the token was regenerated)",
+            "the URL does not match this station's own CURRENT kiosk_token)",
             station.id)
         return None
     # UI/DATA FIX ("Master Change Request", item 5, "Public Kiosk
@@ -140,8 +131,8 @@ def _station_from_token(env, station_code, token):
     # (useful for temporarily taking a station's kiosk offline without
     # having to reconfigure every device with a new URL afterward).
     if station.kiosk_disabled:
-        _logger.info("FLEXSYS_KIOSK_AUTH: REJECTED - station id=%s has kiosk_disabled=True",
-                      station.id)
+        _logger.warning("FLEXSYS_KIOSK_AUTH: REJECTED - station id=%s has kiosk_disabled=True",
+                         station.id)
         return None
     # UI/DATA FIX ("Final Cleanup Request", item 1, "Printer Only -
     # Remove Public Kiosk"): "Direct access using an existing/old
@@ -156,18 +147,14 @@ def _station_from_token(env, station_code, token):
     # that happens to be hidden if the page were somehow still
     # reached. A station in 'kds_only' or 'kds_printer' mode is
     # completely unaffected - only 'printer_only' is rejected here.
-    #
-    # RUNTIME DIAGNOSTIC (continued): this is answer (4) to the
-    # client's own question - "أين يتم فحص operating_mode قبل Render
-    # للـKiosk؟" - exactly here, reading station.operating_mode fresh
-    # from the record resolved just above (never cached/stale within
-    # this request - a brand new ORM search ran moments earlier).
+    # Verified working correctly at runtime (see CHANGELOG for the
+    # confirmed investigation outcome).
     if station.operating_mode == 'printer_only':
-        _logger.info(
+        _logger.warning(
             "FLEXSYS_KIOSK_AUTH: REJECTED - station id=%s operating_mode=%r == 'printer_only'",
             station.id, station.operating_mode)
         return None
-    _logger.info(
+    _logger.debug(
         "FLEXSYS_KIOSK_AUTH: ALLOWED - station id=%s operating_mode=%r (not printer_only, "
         "not disabled, token matched)", station.id, station.operating_mode)
     return station
@@ -192,6 +179,23 @@ class FlexSysKdsKioskController(http.Controller):
             'company_name': station.company_id.name or '',
             'station_code': station.code,
             'token': token,
+            # LOCALIZATION ("Arabic Localization & RTL Specification"),
+            # item 5, "Public Kiosk - Use an explicit supported
+            # Kiosk/Station language source": station.kiosk_language,
+            # never the browser's own Accept-Language header or any
+            # client-side guess - see that field's own docstring
+            # (kds_station.py) for the full reasoning.
+            # LOCALIZATION, item 5: the Branch/Time labels sit in the
+            # static HTML markup (rendered server-side via this same %
+            # substitution), outside the <script> block where
+            # KIOSK_LABELS lives - resolved here in Python instead, from
+            # the exact same station.kiosk_language source, so both the
+            # markup and the script agree on language with zero
+            # possibility of drift between them.
+            'kiosk_lang': station.kiosk_language,
+            'kiosk_dir': 'rtl' if station.kiosk_language == 'ar' else 'ltr',
+            'branch_label': 'الفرع' if station.kiosk_language == 'ar' else 'Branch',
+            'time_label': 'الوقت' if station.kiosk_language == 'ar' else 'Time',
         }
         return request.make_response(
             html,
@@ -514,7 +518,7 @@ class FlexSysKdsKioskController(http.Controller):
 
 
 _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="%(kiosk_lang)s" dir="%(kiosk_dir)s">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -538,7 +542,17 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
      added later accidentally reintroduces the delay by missing it. */
   *{box-sizing:border-box; touch-action:manipulation;} html,body{margin:0;padding:0;height:100%%;}
   body{
-    background:var(--fs-bg); color:#eef2f7; font-family:'Segoe UI',Tahoma,sans-serif;
+    /* LOCALIZATION ("Arabic Localization & RTL Specification"), item
+       12/8: same approach as the Internal Screen's own matching font
+       stack (static/src/scss/kds_style.scss) - "Cairo" covers Arabic
+       glyphs cleanly (no disconnected letters, no tofu/square glyphs),
+       falling back to the existing Latin-only stack when unavailable.
+       Relies on the font being available as a system font, exactly
+       like the Internal Screen already does, rather than a remote
+       @import - a kiosk device may run offline/on a restricted
+       network, where a failed remote font fetch is worse than a
+       graceful local fallback. */
+    background:var(--fs-bg); color:#eef2f7; font-family:'Cairo','Segoe UI',Tahoma,sans-serif;
     overflow:hidden; transition:background .2s;
   }
   /* Light mode (toggle button in header): only the page/grid background
@@ -659,7 +673,12 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
   .card.cancelled .card-head{ background:#5a6472; }
   .card-title-row{ display:flex; align-items:flex-start; gap:10px; }
   .accent-bar{ width:4px; height:34px; background:rgba(255,255,255,.55); border-radius:2px; flex-shrink:0; }
-  .order-no{ font-size:28px; font-weight:800; line-height:1; }
+  /* LOCALIZATION ("Arabic Localization & RTL Specification"), item 9:
+     same fix as the Internal Screen's own matching .fs-order-number
+     rule (static/src/scss/kds_style.scss) - forces order numbers/POS
+     references to always render left-to-right, immune to the
+     surrounding Arabic (RTL) kiosk language's own bidi context. */
+  .order-no{ font-size:28px; font-weight:800; line-height:1; direction:ltr; unicode-bidi:isolate; }
   .ordered-ref{ font-size:11px; opacity:.75; margin-top:4px; font-family:monospace; }
   .chips-row{ display:flex; gap:7px; margin-top:12px; flex-wrap:wrap; }
   .chip{
@@ -778,8 +797,8 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
     <span class="logo">FlexSys <b>KDS</b></span>
     <span class="station-badge">%(station_name)s</span>
     <div class="header-info">
-      <div>Branch<b id="branchName">%(branch_name)s</b></div>
-      <div>Time<b id="clock">--:--</b></div>
+      <div>%(branch_label)s<b id="branchName">%(branch_name)s</b></div>
+      <div>%(time_label)s<b id="clock">--:--</b></div>
     </div>
   </div>
   <div class="company-badge" id="companyBadge">%(company_name)s</div>
@@ -797,6 +816,35 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
 </div>
 
 <script>
+// LOCALIZATION ("Arabic Localization & RTL Specification"), item 4,
+// "Public Kiosk Translation" + item 13, "No Hard-Coded Arabic Business
+// Logic": a single, centralized dictionary lookup - exactly what item
+// 13 asks for instead of `if (lang === "ar") { label = "..."; }`
+// scattered through this file's own runtime logic below. Selected ONCE,
+// here, from the explicit station-level language source (item 5) the
+// server already resolved and injected - never re-derived from the
+// browser anywhere else in this file. Every value uses the client's
+// own approved terminology table (item 6) exactly. Adding a third
+// language later means adding one more object here and one more
+// KIOSK_LABELS = ... line - no other line in this file changes.
+const KIOSK_LABELS_EN = {
+  filterAll: 'ALL', filterNew: 'NEW', filterPreparing: 'PREPARING',
+  filterReady: 'READY', filterCompleted: 'COMPLETED', filterCancelled: 'CANCELLED',
+  actionStart: 'START', actionReady: 'READY', actionComplete: 'COMPLETE',
+  noOrders: 'No orders for this filter.',
+  branchLabel: 'Branch', timeLabel: 'Time', wasStage: 'was',
+  enterFullscreen: 'Enter fullscreen', exitFullscreen: 'Exit fullscreen',
+};
+const KIOSK_LABELS_AR = {
+  filterAll: 'الكل', filterNew: 'جديد', filterPreparing: 'قيد التحضير',
+  filterReady: 'جاهز', filterCompleted: 'مكتمل', filterCancelled: 'ملغى',
+  actionStart: 'بدء', actionReady: 'جاهز', actionComplete: 'إكمال',
+  noOrders: 'لا توجد طلبات لهذا الفلتر.',
+  branchLabel: 'الفرع', timeLabel: 'الوقت', wasStage: 'كان',
+  enterFullscreen: 'فتح ملء الشاشة', exitFullscreen: 'الخروج من ملء الشاشة',
+};
+const KIOSK_LANG = %(kiosk_lang)r;
+const KIOSK_LABELS = KIOSK_LANG === 'ar' ? KIOSK_LABELS_AR : KIOSK_LABELS_EN;
 const STATION_CODE = %(station_code)r;
 const TOKEN = %(token)r;
 let ORDERS = [];
@@ -942,7 +990,7 @@ function updateFullscreenIcon() {
   // fullscreen, tap to exit; expand = currently windowed, tap to enter)
   // - same "show what happens next" convention as the theme toggle.
   btn.innerHTML = isFullscreen ? ICON_COMPRESS : ICON_EXPAND;
-  btn.setAttribute('aria-label', isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen');
+  btn.setAttribute('aria-label', isFullscreen ? KIOSK_LABELS.exitFullscreen : KIOSK_LABELS.enterFullscreen);
 }
 function toggleFullscreen() {
   if (!document.fullscreenElement) {
@@ -1068,7 +1116,7 @@ function counts() {
 
 function renderFilters() {
   const c = counts();
-  const defs = [['all','ALL',c.all],['new','NEW',c.new],['preparing','PREPARING',c.preparing],['ready','READY',c.ready],['completed','COMPLETED',c.completed]];
+  const defs = [['all',KIOSK_LABELS.filterAll,c.all],['new',KIOSK_LABELS.filterNew,c.new],['preparing',KIOSK_LABELS.filterPreparing,c.preparing],['ready',KIOSK_LABELS.filterReady,c.ready],['completed',KIOSK_LABELS.filterCompleted,c.completed]];
   document.getElementById('filters').innerHTML = defs.map(([k,label,n]) => `
     <button class="fbtn ${FILTER===k?'active':''}" onclick="setFilter('${k}')">${label} <span class="fcount">${n}</span></button>
   `).join('');
@@ -1125,7 +1173,12 @@ function cleanVariantInfo(text) {
 function qtyDeltaSuffix(l) {
   if (l.line_change !== 'updated' || !l.qty_delta) return '';
   const sign = l.qty_delta > 0 ? '+' : '';
-  return ` (${sign}${l.qty_delta})`;
+  // LOCALIZATION ("Arabic Localization & RTL Specification"), item 10,
+  // "Delta Markers" - same fix as the Internal Screen's own matching
+  // lineChangeLabel() (kds_order_card.js): \u2066/\u2069 (LRI/PDI) keep
+  // the sign+number rendering left-to-right and visually attached as
+  // one unit under Arabic (RTL) kiosk language too.
+  return ` (\u2066${sign}${l.qty_delta}\u2069)`;
 }
 
 function lineNextAction(state) {
@@ -1196,7 +1249,7 @@ function stationLifecycle(order) {
 function mainAction(order) {
   // A fully-cancelled order (every line cancelled, order.state itself
   // 'cancelled') has nothing left to action at all.
-  if (order.state === 'cancelled') return {action: null, label: 'CANCELLED'};
+  if (order.state === 'cancelled') return {action: null, label: KIOSK_LABELS.filterCancelled};
   // REAL BUG FIX, confirmed live on Odoo.sh (BUG-08, point 2: "No
   // Active Work = No Workflow Actions... authoritative from backend
   // payload/workflow eligibility, not only hidden with CSS"): a station
@@ -1207,7 +1260,7 @@ function mainAction(order) {
   // station that still needs a READY tap.
   const lifecycle = stationLifecycle(order);
   if (!lifecycle.hasActiveWork && lifecycle.allCancelled) {
-    return {action: null, label: 'CANCELLED'};
+    return {action: null, label: KIOSK_LABELS.filterCancelled};
   }
   // BUG-10 FIX: driven by the same single authoritative
   // order.effective_stage every tab filter/count now uses (see
@@ -1218,11 +1271,11 @@ function mainAction(order) {
   // `state` field, so Kitchen's own button is correct independent of
   // whatever Coffee/Bar are still doing on the same order.
   switch (order.effective_stage) {
-    case 'new': return {action: 'start', label: 'START'};
-    case 'preparing': return {action: 'ready', label: 'READY'};
-    case 'ready': return {action: 'complete_station', label: 'COMPLETE'};
-    case 'completed': return {action: null, label: 'COMPLETED'};
-    default: return {action: null, label: 'CANCELLED'};
+    case 'new': return {action: 'start', label: KIOSK_LABELS.actionStart};
+    case 'preparing': return {action: 'ready', label: KIOSK_LABELS.actionReady};
+    case 'ready': return {action: 'complete_station', label: KIOSK_LABELS.actionComplete};
+    case 'completed': return {action: null, label: KIOSK_LABELS.filterCompleted};
+    default: return {action: null, label: KIOSK_LABELS.filterCancelled};
   }
 }
 
@@ -1252,7 +1305,7 @@ function render() {
   }
 
   const grid = document.getElementById('grid');
-  if (!orders.length) { grid.innerHTML = '<div class="empty">No orders for this filter.</div>'; return; }
+  if (!orders.length) { grid.innerHTML = `<div class="empty">${KIOSK_LABELS.noOrders}</div>`; return; }
 
   grid.innerHTML = orders.map(order => {
     // Card frame color: blue = normal/active, red = late (even if it did
@@ -1284,10 +1337,10 @@ function render() {
     // timestamps) instead of order.effective_stage, which no longer
     // carries that information - looking it up there now would
     // incorrectly read "CANCELLED (was undefined)".
-    const stageLabel = {new: 'NEW', preparing: 'PREPARING', ready: 'READY', completed: 'COMPLETED'};
-    const statusText = order.state === 'cancelled' ? 'CANCELLED'
-      : isCancelledTerminal ? `CANCELLED (was ${stageLabel[lifecycle.lastStage]})`
-      : stageLabel[order.effective_stage] || 'PREPARING';
+    const stageLabel = {new: KIOSK_LABELS.filterNew, preparing: KIOSK_LABELS.filterPreparing, ready: KIOSK_LABELS.filterReady, completed: KIOSK_LABELS.filterCompleted};
+    const statusText = order.state === 'cancelled' ? KIOSK_LABELS.filterCancelled
+      : isCancelledTerminal ? `${KIOSK_LABELS.filterCancelled} (${KIOSK_LABELS.wasStage} ${stageLabel[lifecycle.lastStage]})`
+      : stageLabel[order.effective_stage] || KIOSK_LABELS.filterPreparing;
     const isReadyOrDone = order.effective_stage === 'ready' || order.effective_stage === 'completed';
     // REAL BUG FIX ("Batch 4 Live Test - Fix #1, Public Kiosk:
     // Completed Late Visual"), confirmed live on order KDS/26/0106: an

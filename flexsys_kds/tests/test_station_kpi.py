@@ -460,16 +460,20 @@ class TestStationKpi(FlexSysKdsTestCommon):
         self.assertIn('no-cache', source)
         self.assertIn('must-revalidate', source)
 
-    def test_final_cleanup_runtime_diagnostic_logging_present(self):
-        """RUNTIME DIAGNOSTIC ("Final Cleanup Bug - Runtime proof
-        requested"), confirms the diagnostic logging added to
-        _station_from_token() genuinely covers every decision point in
-        the function - resolved station identity, its own real
-        operating_mode value, and the explicit ALLOWED/REJECTED outcome
-        for the operating_mode check specifically - so a single
-        reproduction on the live environment, with the server log
-        searched for "FLEXSYS_KIOSK_AUTH", answers the five questions
-        asked directly from the real, running request."""
+    def test_deep_cleanup_diagnostic_logging_reduced_appropriately(self):
+        """UPDATED for "Deep Dead Code & Commercial Cleanup Request",
+        item 5 ("Runtime Diagnostic Cleanup"): "The Printer Only
+        enforcement issue has now been verified successfully at
+        runtime... Remove temporary investigation logging, or reduce
+        useful diagnostic messages to DEBUG. Normal Kiosk polling/access
+        must not generate excessive INFO logs. Do not remove useful
+        security warnings for genuinely rejected or suspicious access."
+        Confirms routine request/success messages were reduced to DEBUG
+        (so a real device polling this function repeatedly does not
+        flood production logs at INFO), while a genuine rejection - the
+        exact printer_only case the earlier investigation centered on -
+        is still logged, now at WARNING (security-relevant signal kept
+        visible by default), not silently removed."""
         import inspect
         from odoo.addons.flexsys_kds.controllers import kds_kiosk as kiosk_controller
         source = inspect.getsource(kiosk_controller._station_from_token)
@@ -480,17 +484,19 @@ class TestStationKpi(FlexSysKdsTestCommon):
         # execute) whenever it's called - a basic sanity check that the
         # instrumentation doesn't accidentally short-circuit before the
         # log call, verified by actually calling it and checking the
-        # log output.
+        # log output at its own new, correct level.
         import logging
         from odoo.addons.flexsys_kds.controllers.kds_kiosk import _station_from_token
         station = self.env['kds.station'].create({
             'name': 'Diagnostic Test Station', 'code': 'DIAGTEST', 'operating_mode': 'printer_only',
         })
         logger = logging.getLogger('odoo.addons.flexsys_kds.controllers.kds_kiosk')
-        with self.assertLogs(logger, level='INFO') as captured:
+        with self.assertLogs(logger, level='WARNING') as captured:
             result = _station_from_token(self.env, 'DIAGTEST', station.kiosk_token)
         self.assertFalse(result)
         combined_log = ' '.join(captured.output)
         self.assertIn('FLEXSYS_KIOSK_AUTH', combined_log)
         self.assertIn('printer_only', combined_log)
         self.assertIn('REJECTED', combined_log)
+        self.assertIn('WARNING', combined_log,
+                       "A genuine rejection must be logged at WARNING, not silently removed.")

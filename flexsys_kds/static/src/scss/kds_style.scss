@@ -379,6 +379,17 @@ body.o_flexsys_kiosk {
     flex-shrink: 0;
 }
 
+// LOCALIZATION ("Arabic Localization & RTL Specification"), item 9,
+// "Mixed Arabic / English / Numeric Content": "Order identifiers must
+// render in a stable readable direction. Use appropriate bidi/
+// isolation handling where required." Order numbers/POS references
+// (e.g. "2634-3-000011") mix digits and separator characters that
+// Unicode's own bidi algorithm can treat ambiguously inside a
+// surrounding RTL (Arabic) context - `direction: ltr` plus
+// `unicode-bidi: isolate` forces this element to always render its own
+// content left-to-right and never reorder/merge with the RTL text
+// around it, regardless of which language is active.
+.fs-order-number, .fs-ordered-ref { direction: ltr; unicode-bidi: isolate; }
 .fs-order-number { font-size: 26px; font-weight: 800; line-height: 1; }
 .fs-ordered-ref { font-size: 11px; opacity: 0.75; margin-top: 4px; font-family: monospace; }
 
@@ -545,6 +556,15 @@ body.o_flexsys_kiosk {
 .fs-line-main { flex: 1; min-width: 0; }
 .fs-line-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .fs-line-title { font-weight: 800; font-size: 15px; color: #1a2330; }
+// LOCALIZATION ("Arabic Localization & RTL Specification"), item 8:
+// "Do not blindly reverse operational layout if doing so makes the
+// KDS harder to scan... Numeric quantities should remain clearly
+// readable... Timers must remain visually stable." Both mix a number
+// with text/symbols ("2 × Tart strawberries", "04:12") - isolating
+// them keeps the quantity/timer digits in a stable, predictable visual
+// order regardless of the surrounding RTL/LTR context, the same
+// reasoning already applied to order numbers and delta markers above.
+.fs-line-title, .fs-chip-timer { unicode-bidi: isolate; }
 
 .fs-variant-pill {
     background: #fdecd2;

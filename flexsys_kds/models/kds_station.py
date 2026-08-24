@@ -27,6 +27,34 @@ class KdsStation(models.Model):
         ('kds_printer', 'KDS + Printer'),
     ], default='kds_printer', required=True)
 
+    # LOCALIZATION ("Arabic Localization & RTL Specification"), item 5,
+    # "Language Source - Public Kiosk: Use an explicit supported
+    # Kiosk/Station language source... If not, define a minimal
+    # explicit language source rather than hard-coding Arabic based on
+    # the browser. The architecture should allow future additional
+    # languages without rewriting the Kiosk." The public kiosk has no
+    # authenticated Odoo user session at all (auth='public') - there is
+    # no "logged-in user's own language" to read the way the Internal
+    # KDS Screen does (see kds_app.js's own use of the `user` service) -
+    # so a station-level, administrator-configured setting is the
+    # correct explicit source instead, exactly as this item's own
+    # fallback instruction describes. Defaults to English - a station
+    # that has never touched this new field renders its own kiosk
+    # exactly as it always has, with zero behavior change for any
+    # existing installation. A plain Selection (not free text) keeps
+    # this trivially extendable to a third language later - one more
+    # option here, one more dictionary in the kiosk's own translation
+    # layer, no architecture change.
+    kiosk_language = fields.Selection([
+        ('en', 'English'),
+        ('ar', 'العربية (Arabic)'),
+    ], default='en', required=True,
+        help="Language for this station's own Public Kiosk screen. "
+             "Independent of the Internal KDS Screen, which always uses "
+             "the logged-in Odoo user's own language instead - the "
+             "public kiosk has no logged-in user to read a language "
+             "from.")
+
     pos_config_ids = fields.Many2many(
         'pos.config', string='POS Configs',
         help="POS points of sale this station receives orders from. Empty = all."

@@ -1,7 +1,8 @@
 /** @odoo-module **/
 
 import { Component } from "@odoo/owl";
-import { KDS_LABELS } from "./kds_i18n";
+import { user } from "@web/core/user";
+import { getKdsLabels } from "./kds_i18n";
 
 export class KdsOrderCard extends Component {
     static template = "flexsys_kds.OrderCard";
@@ -21,7 +22,21 @@ export class KdsOrderCard extends Component {
     };
 
     setup() {
-        this.labels = KDS_LABELS;
+        // LOCALIZATION ("Arabic Localization & RTL Specification"),
+        // item 5: same safe language resolution as kds_app.js's own
+        // matching setup() - `user.lang` from @web/core/user, with the
+        // same session_info fallback and final "en_US" default - never
+        // inferred from the browser. This component is always rendered
+        // inside the same authenticated backend session as the parent
+        // screen, so the same source applies here too.
+        let lang = "en_US";
+        try {
+            lang = user.lang || (odoo.session_info && odoo.session_info.user_context
+                && odoo.session_info.user_context.lang) || "en_US";
+        } catch (e) {
+            lang = "en_US";
+        }
+        this.labels = getKdsLabels(lang);
     }
 
     // BUG-09 FIX ("POS Quantity Delta Is Not Explicitly Communicated to
@@ -35,7 +50,17 @@ export class KdsOrderCard extends Component {
         const label = line.line_change_label || line.line_change;
         if (line.line_change !== "updated" || !line.qty_delta) return label;
         const sign = line.qty_delta > 0 ? "+" : "";
-        return `${label} (${sign}${line.qty_delta})`;
+        // LOCALIZATION ("Arabic Localization & RTL Specification"),
+        // item 10, "Delta Markers": "Do not allow RTL rendering to
+        // visually reverse: +2 or -1. Use bidi isolation if necessary."
+        // \u2066 (LRI - Left-to-Right Isolate) / \u2069 (PDI - Pop
+        // Directional Isolate) wrap the sign+number so it always
+        // renders left-to-right and stays visually attached as one
+        // unit, regardless of whether this label sits inside an
+        // Arabic (RTL) or English (LTR) surrounding context - the
+        // numeric sign and quantity are never reordered or split by
+        // the browser's own bidi algorithm.
+        return `${label} (\u2066${sign}${line.qty_delta}\u2069)`;
     }
 
     // CANCELLATION VISIBILITY (dev request): a cancelled line must never

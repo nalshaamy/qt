@@ -185,7 +185,7 @@
                         <div class="fs-line-title-row">
                             <span class="fs-line-title"><t t-esc="line.qty"/> × <t t-esc="line.product_name"/></span>
                             <span class="fs-variant-pill" t-if="line.variant_info and line.state !== 'cancelled'" t-esc="cleanVariantInfo(line.variant_info)"/>
-                            <span class="fs-line-badge fs-line-badge-cancelled" t-if="line.state === 'cancelled'">CANCELLED</span>
+                            <span class="fs-line-badge fs-line-badge-cancelled" t-if="line.state === 'cancelled'" t-esc="labels.filterCancelled"/>
                             <span class="fs-line-badge" t-elif="line.line_change and line.line_change !== 'none'"
                                   t-esc="lineChangeLabel(line)"/>
                         </div>

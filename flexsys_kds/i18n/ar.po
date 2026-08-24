@@ -2,11 +2,20 @@
 # Covers the Python-side _()-wrapped strings only - see i18n/GLOSSARY.md
 # for selection labels / view / JS strings and how to complete those.
 #
+# REGENERATED ("Arabic Localization & RTL Specification", item 2,
+# "Regenerate Translation Inventory"): rebuilt against the current,
+# cleaned codebase - every msgid below is confirmed, via AST-accurate
+# parsing (not a text guess), to have an actual _() call site in the
+# current production Python. Stale entries from removed functionality
+# (e.g. the removed printer connection-test simulation message, from
+# the now-deleted action_test_connection()) have been removed.
+# Existing valid Arabic translations were preserved wherever their own
+# msgid still exists.
 msgid ""
 msgstr ""
 "Project-Id-Version: flexsys_kds\n"
-"POT-Creation-Date: 2026-08-07 19:20+0000\n"
-"PO-Revision-Date: 2026-08-07 19:20+0000\n"
+"POT-Creation-Date: 2026-08-24 00:00+0000\n"
+"PO-Revision-Date: 2026-08-24 00:00+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -14,199 +23,487 @@ msgstr ""
 "Plural-Forms: nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5);\n"
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_order_line.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "%(product)s (qty %(old_qty)s, previously %(state)s) fully cancelled - POS quantity decrease absorbed this entire portion"
+msgstr "تم إلغاء %(product)s بالكامل (الكمية %(old_qty)s، كانت %(state)s) - امتص تخفيض الكمية في نقطة البيع هذا الجزء بالكامل"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "%(product)s fully refunded after original line was already completed - informational only, no production change"
+msgstr "تم استرداد %(product)s بالكامل بعد أن كان السطر الأصلي مكتملًا بالفعل - للعلم فقط، لا تغيير على الإنتاج"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "%(product)s fully removed from POS order (quantity: %(qty)s -> 0, cancelled_qty: %(qty)s)"
+msgstr "تمت إزالة %(product)s بالكامل من طلب نقطة البيع (الكمية: %(qty)s -> 0، الكمية الملغاة: %(qty)s)"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "%(product)s modified after original line was already %(state)s (qty %(old_qty)s -> %(new_qty)s) - added as a new delta line instead of rewriting existing production history"
+msgstr "تم تعديل %(product)s بعد أن كان السطر الأصلي %(state)s بالفعل (الكمية %(old_qty)s -> %(new_qty)s) - أُضيف كسطر فرق جديد بدلاً من إعادة كتابة سجل الإنتاج الحالي"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "%(product)s partially refunded after original line was already completed (qty %(old_qty)s -> %(new_qty)s) - informational only, no production change"
+msgstr "تم استرداد %(product)s جزئيًا بعد أن كان السطر الأصلي مكتملًا بالفعل (الكمية %(old_qty)s -> %(new_qty)s) - للعلم فقط، لا تغيير على الإنتاج"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "%(product)s reduced after original line was already %(state)s (qty %(old_qty)s -> %(new_qty)s) - quantity reduced in place, no production reopened"
+msgstr "تم تخفيض %(product)s بعد أن كان السطر الأصلي %(state)s بالفعل (الكمية %(old_qty)s -> %(new_qty)s) - تم تخفيض الكمية في مكانها، دون إعادة فتح الإنتاج"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "%(product)s reduced after original line was already completed and the POS order closed (qty %(old_qty)s -> %(new_qty)s) - no new preparation delta created, completed history preserved"
+msgstr "تم تخفيض %(product)s بعد أن كان السطر الأصلي مكتملًا وأُغلق طلب نقطة البيع (الكمية %(old_qty)s -> %(new_qty)s) - لم يُنشأ فرق تحضير جديد، وسجل الإكمال محفوظ"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "%(product)s reduced by refund (qty %(old_qty)s -> %(new_qty)s, refund order %(ref)s)"
+msgstr "تم تخفيض %(product)s بسبب استرداد (الكمية %(old_qty)s -> %(new_qty)s، طلب الاسترداد %(ref)s)"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
 #, python-format
 msgid "%(qty)s x %(product)s -> %(station)s"
 msgstr "%(qty)s x %(product)s <- %(station)s"
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "%s added after order was sent"
 msgstr "تمت إضافة %s بعد إرسال الطلب"
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "%s updated (qty/notes changed after send)"
 msgstr "تم تعديل %s (تغيّرت الكمية أو الملاحظات بعد الإرسال)"
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_print_job.py:0
+#: code:addons/flexsys_kds/dels/kds_printer.py:0
+#, python-format
+msgid "(%(length)d characters - select and copy the line above only)"
+msgstr "(%(length)d حرفًا - حدد وانسخ السطر أعلاه فقط)"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_print_job.py:0
 #, python-format
 msgid "A reason is required to reprint a FlexSys KDS ticket."
 msgstr "يجب تحديد سبب لإعادة طباعة تذكرة FlexSys KDS."
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_order_line.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
-msgid "Cancelled: %s"
-msgstr "أُلغي: %s"
+msgid "CONFIGURATION ERROR: Auto Print is enabled for station '%s' but it has no printer configured - no print job was created. Add a printer to this station or disable Auto Print."
+msgstr "خطأ في الإعداد: الطباعة التلقائية مفعّلة للمحطة '%s' لكن لا توجد طابعة مُعدَّة لها - لم تُنشأ مهمة طباعة. أضف طابعة لهذه المحطة أو عطّل الطباعة التلقائية."
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_printer.py:0
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
 #, python-format
-msgid "Connection test simulated OK for %s"
-msgstr "اختبار الاتصال (محاكاة) ناجح لـ %s"
+msgid "Cancelled: %(qty)s x %(product)s - %(reason)s"
+msgstr "ملغى: %(qty)s x %(product)s - %(reason)s"
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_print_job.py:0
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
+#, python-format
+msgid "Cancelled: %(qty)s x %(product)s - %(reason)s (removed from POS after the original line was already completed - order remains Completed, no production reopened)"
+msgstr "ملغى: %(qty)s x %(product)s - %(reason)s (أُزيل من نقطة البيع بعد أن كان السطر الأصلي مكتملًا - الطلب يبقى مكتملًا، دون إعادة فتح الإنتاج)"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_expeditor_task.py:0
+#, python-format
+msgid "Expeditor/Packing"
+msgstr "التجهيز النهائي/التعبئة"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_expeditor_task.py:0
+#, python-format
+msgid "Expeditor/Packing override"
+msgstr "تجاوز التجهيز النهائي/التعبئة"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order.py:0
+#, python-format
+msgid "Expeditor/Packing task created - all production lines Ready"
+msgstr "أُنشئت مهمة التجهيز النهائي/التعبئة - جميع سطور الإنتاج جاهزة"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_print_job.py:0
 #, python-format
 msgid "Fallback to backup printer '%s' after repeated failures"
 msgstr "التحويل إلى الطابعة البديلة '%s' بعد تكرار الفشل"
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_printer.py:0
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
 #, python-format
-msgid "FlexSys KDS"
-msgstr "FlexSys KDS"
+msgid "FlexSys KDS: %s cannot be changed by writing directly - use the Accept/Start/Ready/Cancel/Hold actions instead."
+msgstr "FlexSys KDS: لا يمكن تغيير %s بالكتابة المباشرة - استخدم إجراءات قبول/بدء/جاهز/إلغاء/تعليق بدلاً من ذلك."
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_order_line.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
+#, python-format
+msgid "FlexSys KDS: %s cannot be changed by writing directly - use the Accept/Start/Ready/Cancel/Hold/Reopen actions instead."
+msgstr "FlexSys KDS: لا يمكن تغيير %s بالكتابة المباشرة - استخدم إجراءات قبول/بدء/جاهز/إلغاء/تعليق/إعادة فتح بدلاً من ذلك."
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
 #, python-format
 msgid "FlexSys KDS: cannot cancel line '%(product)s' (already %(state)s)."
 msgstr "FlexSys KDS: لا يمكن إلغاء الصنف '%(product)s' (حالته الحالية %(state)s)."
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_order_line.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
+#, python-format
+msgid "FlexSys KDS: cannot complete order %(name)s yet - %(stations)s still has active production. Each station must reach Ready and Complete independently; the overall order only completes once every station has."
+msgstr "FlexSys KDS: لا يمكن إكمال الطلب %(name)s بعد - لا تزال %(stations)s قيد الإنتاج. يجب أن تصل كل محطة إلى جاهز وتُكمل بشكل مستقل؛ يكتمل الطلب الكلي فقط بعد أن تُكمل كل المحطات."
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_expeditor_task.py:0
+#, python-format
+msgid "FlexSys KDS: cannot complete the Expeditor/Packing task for order %s - a required production line is no longer Ready. Refresh and try again once production is complete."
+msgstr "FlexSys KDS: لا يمكن إكمال مهمة التجهيز النهائي/التعبئة للطلب %s - أحد سطور الإنتاج المطلوبة لم يعد جاهزًا. أعد التحميل وحاول مجددًا بعد اكتمال الإنتاج."
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order.py:0
+#, python-format
+msgid "FlexSys KDS: cannot finalize order %s via Expeditor - a required production line is not yet Ready."
+msgstr "FlexSys KDS: لا يمكن إنهاء الطلب %s عبر التجهيز النهائي - أحد سطور الإنتاج المطلوبة ليس جاهزًا بعد."
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
 #, python-format
 msgid "FlexSys KDS: cannot move line '%(product)s' from '%(old)s' to '%(new)s'."
 msgstr "FlexSys KDS: لا يمكن نقل الصنف '%(product)s' من '%(old)s' إلى '%(new)s'."
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
 #, python-format
 msgid "FlexSys KDS: cannot move order %(name)s from '%(old)s' to '%(new)s'."
 msgstr "FlexSys KDS: لا يمكن نقل الطلب %(name)s من '%(old)s' إلى '%(new)s'."
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/controllers/kds.py:0
-#: code:addons/flexsys_kds/controllers/kds.py:0
-#: code:addons/flexsys_kds/controllers/kds.py:0
-#: code:addons/flexsys_kds/controllers/kds.py:0
+#: code:addons/flexsys_kds/dels/kds_expeditor_task.py:0
+#, python-format
+msgid "FlexSys KDS: cannot move the Expeditor/Packing task for order %(order)s from '%(old)s' to '%(new)s'."
+msgstr "FlexSys KDS: لا يمكن نقل مهمة التجهيز النهائي/التعبئة للطلب %(order)s من '%(old)s' إلى '%(new)s'."
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order.py:0
+#, python-format
+msgid "FlexSys KDS: order %s has no active Expeditor/Packing station - use the normal per-station Complete action instead."
+msgstr "FlexSys KDS: الطلب %s ليس له محطة تجهيز نهائي/تعبئة نشطة - استخدم إجراء الإكمال العادي لكل محطة بدلاً من ذلك."
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "Fully refunded in POS (refund order %s)"
+msgstr "مُسترَد بالكامل في نقطة البيع (طلب الاسترداد %s)"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
 #, python-format
 msgid "Invalid printer or agent key"
 msgstr "طابعة أو مفتاح وكيل (agent key) غير صالح"
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/controllers/kds.py:0
-#: code:addons/flexsys_kds/controllers/kds.py:0
-#: code:addons/flexsys_kds/controllers/kds.py:0
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
 #, python-format
 msgid "Job not found for this printer"
 msgstr "مهمة الطباعة غير موجودة لهذه الطابعة"
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_print_job.py:0
+#: code:addons/flexsys_kds/dels/kds_print_job.py:0
 #, python-format
 msgid "MANAGER ALERT: print job failed with no backup printer available (%s)"
 msgstr "تنبيه للمدير: فشلت مهمة الطباعة ولا توجد طابعة بديلة متاحة (%s)"
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_order_line.py:0
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
 #, python-format
 msgid "Manual override (line)"
 msgstr "تجاوز يدوي (صنف)"
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
+#, python-format
+msgid "Manual print of full order requested for station '%s'."
+msgstr "طُلبت طباعة يدوية للطلب الكامل للمحطة '%s'."
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "New preparation revision for %(product)s after %(state)s original (delta qty %(qty)s)"
+msgstr "مراجعة تحضير جديدة لـ %(product)s بعد أن كان الأصل %(state)s (فرق الكمية %(qty)s)"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_print_job.py:0
+#, python-format
+msgid "No printer is configured for this station."
+msgstr "لا توجد طابعة مُعدَّة لهذه المحطة."
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order.py:0
 #, python-format
 msgid "Only Ready or Completed orders can be reopened."
 msgstr "يمكن إعادة فتح الطلبات الجاهزة أو المكتملة فقط."
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_printer.py:0
+#, python-format
+msgid "Only a KDS Administrator can view the Print Agent Key."
+msgstr "يمكن فقط لمسؤول KDS عرض مفتاح وكيل الطباعة."
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order.py:0
+#, python-format
+msgid "Order cancelled"
+msgstr "أُلغي الطلب"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order.py:0
 #, python-format
 msgid "Order created from %s"
 msgstr "تم إنشاء الطلب من %s"
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/controllers/kds.py:0
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
 #, python-format
 msgid "Order line not found."
 msgstr "سطر الطلب غير موجود."
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/controllers/kds.py:0
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
 #, python-format
 msgid "Order not found."
 msgstr "الطلب غير موجود."
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/controllers/kds.py:0
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
 #, python-format
 msgid "Order or station not found."
 msgstr "الطلب أو المحطة غير موجودة."
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_print_job.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
+#, python-format
+msgid "Order reopened - production work is active again (%s). Previously completed lines retain their own history unchanged."
+msgstr "أُعيد فتح الطلب - عمل الإنتاج نشط مجددًا (%s). السطور المكتملة سابقًا تحتفظ بسجلها الخاص دون تغيير."
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order.py:0
+#, python-format
+msgid "POS Delta Sync or a production line was reopened"
+msgstr "مزامنة فرق نقطة البيع أو إعادة فتح سطر إنتاج"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "POS order %s modified after send"
+msgstr "تم تعديل طلب نقطة البيع %s بعد الإرسال"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_printer.py:0
+#, python-format
+msgid "Print Agent Key"
+msgstr "مفتاح وكيل الطباعة"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_print_job.py:0
 #, python-format
 msgid "Print job retry %(n)d/%(max)d after failure: %(error)s"
 msgstr "إعادة محاولة الطباعة %(n)d/%(max)d بعد الفشل: %(error)s"
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
+#, python-format
+msgid "Printing is not enabled for this station."
+msgstr "الطباعة غير مفعّلة لهذه المحطة."
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order.py:0
+#, python-format
+msgid "Printing unavailable: no printer is configured for station '%s' - no print job was created."
+msgstr "الطباعة غير متاحة: لا توجد طابعة مُعدَّة للمحطة '%s' - لم تُنشأ مهمة طباعة."
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "Product changed after original line was already completed (%(old)s -> %(new)s) - added as a new line instead of rewriting history"
+msgstr "تغيّر المنتج بعد أن كان السطر الأصلي مكتملًا (%(old)s -> %(new)s) - أُضيف كسطر جديد بدلاً من إعادة كتابة السجل"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "Product changed on POS line (re-routing)"
+msgstr "تغيّر المنتج على سطر نقطة البيع (إعادة توجيه)"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "Product changed on line: now routed %(product)s -> %(station)s"
+msgstr "تغيّر المنتج على السطر: تم توجيه %(product)s -> %(station)s"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "Quantity reduced in POS after this portion was already %s"
+msgstr "تم تخفيض الكمية في نقطة البيع بعد أن كان هذا الجزء بالفعل %s"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "Quantity reduced to zero in POS"
+msgstr "تم تخفيض الكمية إلى صفر في نقطة البيع"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "Quantity reduced to zero in POS while order still active"
+msgstr "تم تخفيض الكمية إلى صفر في نقطة البيع بينما الطلب لا يزال نشطًا"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "Removed from POS order (was already completed)"
+msgstr "أُزيل من طلب نقطة البيع (كان مكتملًا بالفعل)"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "Removed from POS order after send"
+msgstr "أُزيل من طلب نقطة البيع بعد الإرسال"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "Removed from POS order after the order was already completed"
+msgstr "أُزيل من طلب نقطة البيع بعد أن كان الطلب مكتملًا بالفعل"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order.py:0
 #, python-format
 msgid "Reopened from %s"
 msgstr "أُعيد فتحه من %s"
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_print_job.py:0
+#: code:addons/flexsys_kds/dels/kds_print_job.py:0
 #, python-format
 msgid "Reprint requested (%(reason)s)%(note)s"
 msgstr "تم طلب إعادة الطباعة (%(reason)s)%(note)s"
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/controllers/kds.py:0
+#: code:addons/flexsys_kds/dels/kds_station.py:0
+#, python-format
+msgid "Station '%(station)s': Late Threshold (%(late)s%%) must be greater than the Warning Threshold (%(warning)s%%)."
+msgstr "المحطة '%(station)s': يجب أن تكون نسبة التأخر (%(late)s%%) أكبر من نسبة التحذير (%(warning)s%%)."
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_station.py:0
+#, python-format
+msgid "Station '%s': Target Preparation Time must be greater than 0 minutes."
+msgstr "المحطة '%s': يجب أن يكون زمن التحضير المستهدف أكبر من 0 دقيقة."
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_station.py:0
+#, python-format
+msgid "Station '%s': Warning Threshold must be greater than 0%%."
+msgstr "المحطة '%s': يجب أن تكون نسبة التحذير أكبر من 0%%."
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
 #, python-format
 msgid "Station not available."
 msgstr "المحطة غير متاحة."
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_order_line.py:0
+#: code:addons/flexsys_kds/dels/kds_printer.py:0
+#, python-format
+msgid "This printer has no Print Agent Key set."
+msgstr "لا يوجد مفتاح وكيل طباعة مُعيَّن لهذه الطابعة."
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
 #, python-format
 msgid "UNROUTED"
 msgstr "غير موجّه"
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/controllers/kds.py:0
-#: code:addons/flexsys_kds/controllers/kds.py:0
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
 #, python-format
 msgid "Unknown action"
 msgstr "إجراء غير معروف"
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
 #, python-format
 msgid "You are not assigned to any station involved in order %s."
 msgstr "أنت غير مرتبط بأي محطة من محطات الطلب %s."
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_access.py:0
+#: code:addons/flexsys_kds/dels/kds_access.py:0
 #, python-format
 msgid "You are not assigned to station '%s'."
 msgstr "أنت غير مرتبط بالمحطة '%s'."
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/controllers/kds.py:0
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
 #, python-format
 msgid "You do not have a FlexSys KDS role."
 msgstr "ليس لديك دور في FlexSys KDS."
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_access.py:0
+#: code:addons/flexsys_kds/dels/kds_access.py:0
 #, python-format
 msgid "You do not have permission to perform '%s' in FlexSys KDS."
 msgstr "ليست لديك صلاحية تنفيذ '%s' في FlexSys KDS."
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_access.py:0
+#: code:addons/flexsys_kds/dels/kds_access.py:0
 #, python-format
 msgid "Your user is not assigned to any FlexSys KDS station. Ask an administrator to assign you to '%s' or another station."
 msgstr "مستخدمك غير مرتبط بأي محطة في FlexSys KDS. اطلب من مسؤول النظام ربطك بمحطة '%s' أو محطة أخرى."
 
 #. module: flexsys_kds
-#: code:addons/flexsys_kds/models/kds_order_line.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
+#, python-format
+msgid "Your user is not assigned to any FlexSys KDS station. Ask an administrator to assign you to a station before you can act on order %s."
+msgstr "مستخدمك غير مُعيَّن لأي محطة FlexSys KDS. اطلب من المسؤول تعيينك لمحطة قبل أن تتمكن من التصرف بالطلب %s."
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
+#, python-format
+msgid "agent_id is required to claim jobs"
+msgstr "مطلوب agent_id للمطالبة بالمهام"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order.py:0
+#, python-format
+msgid "another station"
+msgstr "محطة أخرى"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
+#, python-format
+msgid "line \"%s\" manually reopened back to Preparing"
+msgstr "أُعيد فتح السطر \"%s\" يدويًا إلى قيد التحضير"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
+#, python-format
+msgid "new item \"%s\" added after order was already Ready/Completed"
+msgstr "أُضيف صنف جديد \"%s\" بعد أن كان الطلب جاهزًا/مكتملًا بالفعل"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
 #, python-format
 msgid "no reason given"
 msgstr "لم يُذكر سبب"

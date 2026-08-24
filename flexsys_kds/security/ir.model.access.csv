@@ -27,12 +27,6 @@ access_kds_order_type_tag_settings,kds.order.type.tag.settings,model_kds_order_t
 access_kds_order_source_tag_operator,kds.order.source.tag.operator,model_kds_order_source_tag,group_kds_operator,1,0,0,0
 access_kds_order_source_tag_admin,kds.order.source.tag.admin,model_kds_order_source_tag,group_kds_administrator,1,1,1,1
 access_kds_order_source_tag_settings,kds.order.source.tag.settings,model_kds_order_source_tag,base.group_system,1,1,1,1
-access_kds_order_status_operator,kds.order.status.operator,model_kds_order_status,group_kds_operator,1,0,0,0
-access_kds_order_status_admin,kds.order.status.admin,model_kds_order_status,group_kds_administrator,1,1,1,1
-access_kds_order_status_settings,kds.order.status.settings,model_kds_order_status,base.group_system,1,1,1,1
-access_kds_order_status_transition_operator,kds.order.status.transition.operator,model_kds_order_status_transition,group_kds_operator,1,0,0,0
-access_kds_order_status_transition_admin,kds.order.status.transition.admin,model_kds_order_status_transition,group_kds_administrator,1,1,1,1
-access_kds_order_status_transition_settings,kds.order.status.transition.settings,model_kds_order_status_transition,base.group_system,1,1,1,1
 access_kds_expeditor_task_operator,kds.expeditor.task.operator,model_kds_expeditor_task,group_kds_operator,1,1,1,0
 access_kds_expeditor_task_admin,kds.expeditor.task.admin,model_kds_expeditor_task,group_kds_administrator,1,1,1,1
 access_kds_expeditor_task_settings,kds.expeditor.task.settings,model_kds_expeditor_task,base.group_system,1,1,1,1

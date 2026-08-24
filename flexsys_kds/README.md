@@ -19,7 +19,7 @@ off.** See [RELEASE_STATUS.md](RELEASE_STATUS.md) for the full
 item-by-item mapping of that request's own structure to what's actually
 verified versus what still needs a human on a live Odoo 19 instance
 before this release can be tagged - in short: every automatable check
-(171 tests, `py_compile`/XML well-formedness/JS syntax on every file)
+(546 tests, `py_compile`/XML well-formedness/JS syntax on every file)
 passes, and every known live-runtime bug found so far has been fixed
 (see CHANGELOG.md's v5.2.1 through v5.5.1 entries for that history) -
 but a live two-screen realtime check, a visual density/breadcrumb
@@ -269,7 +269,7 @@ different authentication models:
   already caught and fixed several real bugs static checks couldn't
   (see CHANGELOG.md's v5.2.1 through v5.5.1 entries) - a useful
   reminder that static verification and an actual running instance
-  catch genuinely different classes of problems. 171 automated test
+  catch genuinely different classes of problems. 546 automated test
   methods exist and are known to be internally consistent
   (`py_compile`/XML well-formedness/JS syntax checked on every file on
   every change), but actually *running* the suite
@@ -285,11 +285,6 @@ different authentication models:
   building and deploying a separate process against the documented
   protocol - see [docs/PRINT_AGENT.md](docs/PRINT_AGENT.md). Explicitly
   out of scope for this release's closure, per its own gap analysis.
-- **`kds.order.status`/`kds.order.status.transition` exist but are not
-  live.** Foundation data for a possible future fully-configurable
-  workflow, deliberately not wired into the actual runtime engine for
-  this release - editing them has no effect. See the models' own
-  docstrings if picking this back up later.
 - **Device enrollment / QR pairing / PWA / device management / display
   modes / sound preferences (Phase 2) have not been started**, per
   explicit instruction that these must not delay this release.

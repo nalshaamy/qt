@@ -174,22 +174,6 @@ class TestPermissions(FlexSysKdsTestCommon):
         self.assertEqual(order.state, 'preparing')
         self.assertTrue(order.preparation_start_time)
 
-    def test_action_change_priority_works_and_is_audited(self):
-        order = self._order_at_kitchen()
-        self.assertEqual(order.priority, 'normal')
-        order.action_change_priority('vip')
-        self.assertEqual(order.priority, 'vip')
-        events = self.env['kds.event'].search([
-            ('order_id', '=', order.id), ('event_type', '=', 'priority_changed')])
-        self.assertTrue(events, "Priority change should be audit-logged.")
-
-    def test_action_change_priority_denied_for_operator(self):
-        # change_priority is Supervisor+ per ACTION_MIN_GROUP.
-        user = self._make_kds_user('priority_op', self.group_operator, self.station_kitchen)
-        order = self._order_at_kitchen().with_user(user)
-        with self.assertRaises(AccessError):
-            order.action_change_priority('vip')
-
     # -----------------------------------------------------------------
     # Audit finding 3/Record Rules & Station Scope (HIGH): read/search/
     # read_group must be scoped by station assignment too, not just the
@@ -328,12 +312,28 @@ class TestPermissions(FlexSysKdsTestCommon):
                 order, self.station_kitchen, reason='kitchen_request')
 
     def test_reprint_allowed_for_supervisor_at_station(self):
+        """TEST SUITE RECONCILIATION ("CI test failures on Odoo.sh"):
+        create_reprint()'s own required-printer check (kds_print_job.py)
+        is deliberate, documented production behavior ("Do NOT create
+        kds.print.job... Do NOT increase Print # / Reprint count" when
+        no printer is configured - see that method's own comment) and
+        must not be removed just to make this test pass. Fixed by
+        creating and linking a printer to the station INSIDE this
+        test's own fixture (not the shared common.py setUpClass, which
+        deliberately leaves station_kitchen printer-less for other
+        tests - e.g. test_printing.py's own NoPrinterConfiguredError
+        coverage - that specifically depend on that absence)."""
+        printer = self.env['kds.printer'].create({
+            'name': 'Test Reprint Printer', 'station_id': self.station_kitchen.id,
+            'is_default': True,
+        })
         user = self._make_kds_user('sup_reprint', self.group_supervisor, self.station_kitchen)
         order = self._order_at_kitchen()
         job = self.env['kds.print.job'].with_user(user).create_reprint(
             order, self.station_kitchen, reason='kitchen_request')
         self.assertEqual(job.job_type, 'reprint')
         self.assertEqual(job.station_id, self.station_kitchen)
+        self.assertEqual(job.printer_id, printer)
 
     def test_wrong_station_operator_denied_without_bypass(self):
         """1 of 3 required scenarios: normal unauthorized user -> denied.
@@ -444,3 +444,125 @@ class TestPermissions(FlexSysKdsTestCommon):
             found,
             "A record-rule-scoped search for a station-scoped Operator in Company B must "
             "never return an order belonging to Company A, even by exact id.")
+
+    # -----------------------------------------------------------------
+    # DEEP CLEANUP ("Deep Dead Code & Commercial Cleanup Request"),
+    # section 4 ("Workflow Status Foundation"): kds.order.status/
+    # kds.order.status.transition (models, views, seed data, ACLs) are
+    # now fully removed - confirmed by both models' own docstrings
+    # ("NOT read by the actual workflow engine... zero effect on
+    # runtime behavior") and a full codebase search finding zero
+    # references from kds_order.py/kds_order_line.py/any controller/
+    # any JS file. The actual runtime workflow
+    # (New -> Accepted -> Preparing -> Ready -> Completed, driven
+    # entirely by ORDER_TRANSITIONS/LINE_TRANSITIONS in kds_order.py/
+    # kds_order_line.py) is completely unaffected.
+    # -----------------------------------------------------------------
+    def test_deep_cleanup_workflow_status_models_removed(self):
+        """Confirms both models are genuinely gone from the registry -
+        not just hidden from the UI."""
+        self.assertNotIn('kds.order.status', self.env)
+        self.assertNotIn('kds.order.status.transition', self.env)
+
+    def test_deep_cleanup_workflow_status_menu_reference_removed(self):
+        """Confirms the earlier round's own comment (documenting that
+        the configuration menu for these models had already been
+        removed) no longer references a deleted view/model."""
+        import os
+        module_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(module_dir, 'views', 'kds_menus.xml'), encoding='utf-8') as f:
+            content = f.read()
+        self.assertNotIn('kds_order_status', content)
+
+    def test_deep_cleanup_real_workflow_engine_unaffected(self):
+        """Non-regression: confirms the ACTUAL runtime workflow -
+        completely independent of the removed models, which never
+        drove it in the first place - still works correctly end to
+        end. New -> Accepted -> Preparing -> Ready -> Completed.
+
+        TEST SUITE RECONCILIATION ("CI test failures on Odoo.sh"):
+        this test's own final step used to call
+        order.action_complete(bypass_check=True) directly - bypassing
+        the real multi-station completion guard entirely, rather than
+        exercising it. That guard (action_complete() refusing to run
+        unless is_fully_completed is already true - see its own
+        docstring, "BUG-07 is still not implemented as requested") is
+        deliberate, correct production behavior and must not be
+        weakened or removed just to make this test pass. Fixed by
+        completing through the real, correct path instead: each
+        line's own action_complete() (kds_order_line.py) - the
+        authoritative per-station completion unit - which internally
+        cascades to the order-level action_complete() once every line
+        is done, with is_fully_completed already satisfied by
+        construction. No bypass needed because the guard is never
+        actually being bypassed - it's being correctly satisfied."""
+        order = self._order_at_kitchen()
+        self.assertEqual(order.state, 'new')
+        order.action_accept()
+        self.assertEqual(order.state, 'accepted')
+        order.action_start_preparing()
+        self.assertEqual(order.state, 'preparing')
+        order.line_ids.action_accept()
+        order.line_ids.action_start()
+        order.line_ids.action_ready()
+        self.assertEqual(order.state, 'ready')
+        order.line_ids.action_complete()
+        self.assertEqual(order.state, 'completed')
+
+    # -----------------------------------------------------------------
+    # DEEP CLEANUP ("Dead Code Cleanup Part 2"), item 1: both items the
+    # previous round's own VERIFY table reported on are now removed,
+    # per the client's own explicit approval - action_dispatch()
+    # (confirmed self-documented as no longer the active Print Agent
+    # path) and action_move_station() (confirmed zero callers anywhere,
+    # and the client's own explicit confirmation that no external RPC
+    # contract for it exists or is documented).
+    # -----------------------------------------------------------------
+    def test_deep_cleanup_part2_action_dispatch_removed(self):
+        self.assertFalse(hasattr(self.env['kds.print.job'], 'action_dispatch'),
+                          "action_dispatch() must be genuinely removed - the atomic "
+                          "_claim_pending_jobs() is the only supported dispatch path now.")
+
+    def test_deep_cleanup_part2_action_move_station_removed(self):
+        self.assertFalse(hasattr(self.env['kds.order.line'], 'action_move_station'),
+                          "action_move_station() must be genuinely removed - no active "
+                          "caller and no confirmed external RPC contract for it exists.")
+
+    def test_deep_cleanup_part2_move_station_permission_removed(self):
+        from odoo.addons.flexsys_kds.models.kds_access import ACTION_MIN_GROUP
+        self.assertNotIn('move_station', ACTION_MIN_GROUP,
+                          "The now-unused 'move_station' permission entry must be removed "
+                          "alongside the action it gated.")
+
+    def test_deep_cleanup_part2_atomic_claim_lease_unaffected(self):
+        """Non-regression, explicitly required: 'Print Agent atomic
+        claim/lease' is on the DO NOT TOUCH list. Confirms the real,
+        supported dispatch mechanism still works correctly after
+        action_dispatch()'s own removal."""
+        order = self._order_at_kitchen()
+        printer = self.env['kds.printer'].create({
+            'name': 'Deep Cleanup Test Printer', 'station_id': self.station_kitchen.id,
+        })
+        job = self.env['kds.print.job'].create({
+            'order_id': order.id, 'station_id': self.station_kitchen.id,
+            'printer_id': printer.id, 'job_type': 'auto',
+        })
+        claimed = self.env['kds.print.job']._claim_pending_jobs(printer, agent_id='test-agent')
+        self.assertEqual(claimed.ids, [job.id])
+        self.assertEqual(job.status, 'dispatched')
+
+    def test_deep_cleanup_part2_deprecated_expeditor_alias_removed(self):
+        """DEEP CLEANUP ("Dead Code Cleanup Part 2"), item 5 ("Full
+        Python Unused-Code Sweep... duplicated helpers"): found during
+        this round's own systematic scan for functions with zero
+        callers anywhere in the codebase -
+        _reconcile_expeditor_on_production_change() was already
+        self-documented as "DEPRECATED... kept as a thin alias... in
+        case something outside this module still references the old
+        name" - a private (underscore-prefixed) internal method, never
+        part of any public API surface, with zero actual callers.
+        Confirms it's genuinely removed - the real, current method
+        (_system_reopen_if_production_incomplete()) is unaffected."""
+        self.assertFalse(hasattr(self.env['kds.order'], '_reconcile_expeditor_on_production_change'))
+        self.assertTrue(hasattr(self.env['kds.order'], '_system_reopen_if_production_incomplete'),
+                         "The real, current method must be completely unaffected.")

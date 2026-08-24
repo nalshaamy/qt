@@ -86,51 +86,6 @@ def _pos_line_variant_info(line):
     return ' / '.join(p for p in parts if p)
 
 
-def _is_genuine_send_signal(vals):
-    """REAL BUG FIX ("CRITICAL BUG FIX REQUEST - On Send to KDS Boundary
-    Is Being Bypassed"), confirmed live: mere presence of
-    'last_order_preparation_change' in a write()/create() vals dict is
-    NOT a reliable "the cashier genuinely pressed Send/New" signal -
-    every single POS order sync (routine autosave, adding a product,
-    changing a quantity, anything at all) goes through Odoo's own core
-    `sync_from_ui` entry point, and this field is part of the order's
-    own standard payload on effectively every one of those saves, not
-    exclusively on a genuine Send. The earlier fix (v7.7.0/v7.7.1),
-    which only checked field presence, was therefore leaking every
-    ordinary edit straight through to KDS - exactly the confirmed
-    runtime bug this fix addresses.
-
-    Confirmed directly from Odoo 19's own core source
-    (addons/point_of_sale/models/pos_order.py,
-    `_ensure_to_keep_last_preparation_change`): the field's own JSON
-    value carries a `metadata` key specifically to distinguish a
-    genuine preparation-change event from an ordinary save that merely
-    happens to carry the field along - that method's own logic
-    explicitly preserves the record's existing value whenever the
-    incoming vals' own metadata is empty, meaning an empty/missing
-    metadata write is understood, by Odoo's own core, as NOT a genuine
-    preparation-change event. This checks that same distinction: only a
-    non-empty `metadata` key counts as a genuine Send/New signal.
-
-    Deliberately conservative on malformed/unexpected input (missing
-    key, invalid JSON, wrong type) - returns False rather than raising,
-    since failing to detect a genuine Send only delays a sync to the
-    next one (safe), while a false positive would leak an unsent
-    working-state edit straight to the kitchen (unsafe) - the wrong
-    direction to fail in for this specific check.
-    """
-    raw = vals.get('last_order_preparation_change')
-    if not raw:
-        return False
-    try:
-        parsed = json.loads(raw)
-    except (TypeError, ValueError):
-        return False
-    if not isinstance(parsed, dict):
-        return False
-    return bool(parsed.get('metadata'))
-
-
 def _extract_preparation_content_signature(raw):
     """REAL BUG FIX ("LIVE NETWORK TRACE - EXACT ODOO 'ORDER / SEND TO
     PREPARATION' SERVER PATH CONFIRMED"): confirmed directly from Odoo
@@ -141,12 +96,12 @@ def _extract_preparation_content_signature(raw):
     fields.Datetime.now().strftime(...)`, followed by
     `vals['last_order_preparation_change'] = json.dumps(local_change)`.
     This is the confirmed root cause of every earlier attempt at this
-    exact problem: comparing the field's own RAW value (v7.9.2's
-    kds_last_processed_send_signal, and the abandoned
-    _flexsys_kds_should_treat_as_send()) could never reliably detect
-    "is this a genuine new Send" this way, because the value looks
-    different on effectively every write regardless of send intent -
-    the ever-changing timestamp swamps the actual content.
+    exact problem: comparing the field's own RAW value (an earlier,
+    now-removed approach comparing raw last-processed values) could
+    never reliably detect "is this a genuine new Send" this way,
+    because the value looks different on effectively every write
+    regardless of send intent - the ever-changing timestamp swamps the
+    actual content.
 
     Returns a signature (a JSON string) built from ONLY the genuine
     content of the value - every key except 'metadata' entirely (not
@@ -154,9 +109,8 @@ def _extract_preparation_content_signature(raw):
     volatile key Odoo's own core might add to metadata in the future) -
     so two calls carrying the identical underlying change-set compare
     equal regardless of their own, ever-different timestamps. Returns
-    None for missing/malformed/non-dict input (fails closed - same
-    reasoning as _is_genuine_send_signal's own docstring: missing a
-    genuine Send only delays a sync, never leaks an unsent one).
+    None for missing/malformed/non-dict input (fails closed - missing
+    a genuine Send only delays a sync, never leaks an unsent one).
     """
     if not raw:
         return None
@@ -183,8 +137,8 @@ class PosOrder(models.Model):
     # Gate"), confirmed live: adding a product to an order that had
     # ALREADY been sent once - without pressing Send again - still
     # appeared in KDS immediately with an ADDED marker, even though the
-    # initial "before first Send" case (this same file's own
-    # _is_genuine_send_signal()) was already confirmed working
+    # initial "before first Send" case (this same file's own earlier
+    # metadata-based detection) was already confirmed working
     # correctly. Root cause, confirmed directly from Odoo 19's own core
     # frontend source (addons/point_of_sale/static/src/app/services/
     # pos_store.js, sendOrderInPreparation()): order.updateLastOrderChange()
@@ -197,8 +151,8 @@ class PosOrder(models.Model):
     # this SAME, unchanged field value as part of its own routine order
     # payload on essentially every subsequent save of that order
     # (adding a product, changing a quantity, anything at all), not
-    # exclusively on a genuine second Send. _is_genuine_send_signal()'s
-    # own "non-empty metadata" check could therefore no longer
+    # exclusively on a genuine second Send. The earlier "non-empty
+    # metadata" check could therefore no longer
     # distinguish "a fresh, second Send actually happened" from "the
     # stale, already-processed value from the FIRST Send is simply
     # being carried along again" - once an order had been sent even
@@ -391,7 +345,7 @@ class PosOrder(models.Model):
                 # _flexsys_kds_diff_lines() emits, proving this write()
                 # gate, not just a frontend display gap, was still
                 # reaching it): two consecutive rounds
-                # (_is_genuine_send_signal()'s non-empty-metadata check,
+                # (an earlier non-empty-metadata check,
                 # then kds_last_processed_send_signal's own value-changed
                 # check) each assumed last_order_preparation_change's own
                 # content or its own change in value reliably
@@ -465,47 +419,12 @@ class PosOrder(models.Model):
                     order._flexsys_kds_sync(is_send_write=is_send_write)
         return res
 
-    def _flexsys_kds_should_treat_as_send(self, vals):
-        """CURRENTLY UNUSED as of the "RUNTIME FAILURE - 19.0.7.9.3
-        STILL BYPASSES 'ON SEND TO KDS'" fix: create()/write() above no
-        longer call this - see flexsys_kds_register_send()'s own
-        docstring, and write()'s own inline comment, for the full
-        explanation of why interpreting last_order_preparation_change's
-        own content or its own change in value was abandoned entirely,
-        confirmed unsound by the KDS Audit Log itself (a routine
-        product-add write's own value satisfied both of this method's
-        own conditions - non-empty metadata AND differing from the
-        previously-processed value - without any genuine Send having
-        occurred). Left defined, not deleted, since the underlying
-        detection logic itself might still be a useful reference or
-        fallback signal for a future scenario this project hasn't hit
-        yet, but nothing in the active create()/write() path currently
-        calls it.
-
-        Originally: REAL BUG FIX ("On Send to KDS / Subsequent Changes
-        Bypass Send Gate") - see kds_last_processed_send_signal's own
-        field docstring, just above this class's own start, for the
-        complete root-cause explanation this method itself was built to
-        address. Combines the existing _is_genuine_send_signal() content
-        check (non-empty metadata) with a fresh check that the incoming
-        value actually DIFFERS from the last value this module itself
-        already processed as a Send - a write carrying the exact same,
-        already-handled value is a routine re-save carrying stale state
-        along, never a new Send on its own.
-        """
-        self.ensure_one()
-        self = self.sudo()
-        if not _is_genuine_send_signal(vals):
-            return False
-        raw = vals.get('last_order_preparation_change')
-        return raw != self.kds_last_processed_send_signal
-
     def flexsys_kds_register_send(self):
         """REAL BUG FIX ("On Send to KDS / Subsequent Changes Bypass Send
         Gate"), confirmed STILL reproducing live even after two rounds of
         purely backend-side attempts to infer a genuine Send from
         last_order_preparation_change's own content
-        (_is_genuine_send_signal's non-empty-metadata check, then
+        (an earlier non-empty-metadata check, then
         kds_last_processed_send_signal's own value-changed check) - a
         real product was still added and appeared in KDS as ADDED with
         neither Send nor New pressed on an already-committed ticket.
@@ -1491,8 +1410,7 @@ class PosOrder(models.Model):
         # must be the cashier's explicit action: Send or New."
         #
         # 'send' mode now requires is_send_write=True - set by write()/
-        # create() above via _is_genuine_send_signal() (top of this
-        # file). Every OTHER write (add/remove/qty/attribute changes,
+        # create() above via explicit Send-intent detection. Every OTHER write (add/remove/qty/attribute changes,
         # simply viewing or re-saving the order) leaves this False, so
         # it correctly accumulates with zero KDS sync until the next
         # genuine Send.
@@ -1503,7 +1421,7 @@ class PosOrder(models.Model):
         # last_order_preparation_change" - mere presence, which turned
         # out to leak every single POS edit straight through, since
         # that field is part of nearly every save's own payload, not
-        # exclusively a genuine Send. _is_genuine_send_signal() now
+        # exclusively a genuine Send. That detection logic now
         # checks the field's own JSON content for a non-empty
         # `metadata` key specifically - confirmed from Odoo 19's own
         # core source (_ensure_to_keep_last_preparation_change) to be
@@ -1528,7 +1446,32 @@ class PosOrder(models.Model):
         if trigger == 'payment':
             ready = self.state in ('paid', 'done', 'invoiced')
         else:
-            ready = is_send_write and self.state != 'cancel' and bool(self.lines)
+            # REAL BUG FIX ("Test Suite Reconciliation Round 2 +
+            # Production Fix - Last POS Line Removal"), confirmed live:
+            # `bool(self.lines)` alone meant an order whose LAST POS
+            # line was deleted entirely (self.lines becomes empty)
+            # failed this gate outright and never reached
+            # _flexsys_kds_diff_lines() at all - even though that
+            # method's own "line missing from current_ids" sweep
+            # (below in this same file) is already fully equipped to
+            # correctly cancel every remaining kds.order.line and log
+            # a `line_removed` audit event for exactly this case, once
+            # it's actually reached. Fixed by also allowing the gate
+            # through when a kds_order_id already exists - an order
+            # that was genuinely sent before, now with zero POS lines
+            # left, must still reach reconciliation so its own
+            # existing KDS ticket gets correctly cancelled, not
+            # silently frozen showing stale, no-longer-real production.
+            # An order that was NEVER sent before (no kds_order_id yet)
+            # and has zero lines still correctly fails this gate either
+            # way - `bool(self.lines) or bool(self.kds_order_id)` is
+            # False for that case too, so an empty, never-sent order
+            # still never creates a fresh, empty KDS ticket out of
+            # nothing.
+            ready = (
+                is_send_write and self.state != 'cancel'
+                and (bool(self.lines) or bool(self.kds_order_id))
+            )
             # REAL BUG FIX ("Send / Re-Send Synchronization" - a stale-
             # code bug the client's own careful review of this exact
             # method found and fixed directly, confirmed correct here
@@ -1540,7 +1483,7 @@ class PosOrder(models.Model):
             # in v7.9.7's own root-cause analysis to always change on
             # essentially every write). That made sense back when
             # kds_last_processed_send_signal was compared against that
-            # same raw value directly (_flexsys_kds_should_treat_as_send(),
+            # same raw value directly (an earlier, now-removed approach,
             # now unused). Since v7.9.7's redesign, the field instead
             # holds a NORMALIZED, content-only signature (metadata
             # stripped - see _extract_preparation_content_signature()),
@@ -1852,8 +1795,8 @@ class PosOrder(models.Model):
                 # REAL BUG FIX, confirmed at runtime (dev report "BUG-10 -
                 # READY order incorrectly resets to NEW after POS
                 # quantity increase"): a Ready line whose qty/note/
-                # variant changed used to get bumped fully back to 'new'
-                # via _system_reset_for_delta_sync() below - destroying
+                # variant changed used to get bumped fully back to 'new' -
+                # destroying
                 # the fact that the PREVIOUS quantity had already been
                 # prepared. "1 prepared + UPDATED (+1)" incorrectly
                 # became "2 new" - the whole line, previously-prepared
@@ -2270,6 +2213,24 @@ class PosOrder(models.Model):
                         'note': _pos_note(line),
                         'variant_info': _pos_line_variant_info(line),
                         'line_change': 'updated',
+                        # REAL BUG FIX ("Regression detected", 
+                        # test_final_bugfix_client_example_1_to_3_after_
+                        # ready_delta_is_2), confirmed live: qty_delta
+                        # was never set explicitly on this brand-new
+                        # delta line's own create() call - it silently
+                        # kept the field's own default (0.0) instead of
+                        # delta_qty, so the kitchen's own "UPDATED (+N)"
+                        # display for this line would have shown +0
+                        # instead of the actual increase. A pre-existing
+                        # defect, not introduced by any recent change -
+                        # only now surfaced because CI's own 5-failure
+                        # halt was previously masking it behind other,
+                        # unrelated failures. last_kds_sent_qty is
+                        # already correctly set to this same value
+                        # automatically by kds.order.line's own create()
+                        # override (line.last_kds_sent_qty = line.qty) -
+                        # only qty_delta itself was missing here.
+                        'qty_delta': delta_qty,
                     })
                     touched_stations |= kline.station_id | new_delta_line.station_id
                     self.env['kds.event'].log(
@@ -2284,10 +2245,11 @@ class PosOrder(models.Model):
                     # data fields below (qty/note/variant/line_change)
                     # are legitimate direct writes - they're not in
                     # KDS_LINE_PROTECTED_FIELDS and never were the
-                    # problem. Only the STATE reset (a Ready line bumped
-                    # back to New) is workflow-significant - that part
-                    # now goes through _system_reset_for_delta_sync()
-                    # instead of being bundled into this same raw write.
+                    # problem. A Ready line's own STATE is never reset
+                    # here at all - it stays Ready, with a new delta
+                    # line created separately instead (see the
+                    # ready/completed branch above) - the only
+                    # workflow-significant concern this fix addresses.
                     #
                     # REAL BUG FIX ("BUG-11 [third report, reusing the
                     # same client-side label as two earlier, different
@@ -2359,6 +2321,45 @@ class PosOrder(models.Model):
                     # completely untouched here, deferred to the next
                     # genuine Send/Payment exactly as before.
                     if decrease_only and effective_qty >= kline.qty:
+                        continue
+                    # REAL BUG FIX ("Regression detected after latest
+                    # Delta fix", section 1, "Delta Sync Idempotency
+                    # regression"), confirmed live: this branch's own
+                    # entry condition above (`elif changed and
+                    # kline.state != 'cancelled':`) uses the outer
+                    # `changed` flag, computed from `kline.qty !=
+                    # line.qty` - comparing THIS line's own partial
+                    # share (kline.qty) against the FULL POS total
+                    # (line.qty), exactly the same class of mistake
+                    # already fixed for the ready/completed branch
+                    # above (see qty_really_changed's own comment
+                    # there) - but never applied here. Once a delta
+                    # line exists for this pos_order_line_id (created
+                    # by the ready/completed branch above, on an
+                    # earlier sync) and becomes what `existing` here
+                    # matches against, `changed` reads True on every
+                    # subsequent call purely because kline.qty (this
+                    # delta line's own partial share) almost never
+                    # equals the full POS total by construction - even
+                    # once effective_qty (the correct, sibling-
+                    # subtracted comparison, computed just above) has
+                    # already fully settled and genuinely nothing
+                    # changed. With no guard here, that meant every
+                    # repeated call re-executed the write() and logged
+                    # a fresh audit event below, unconditionally -
+                    # confirmed exactly matching the reported
+                    # regression (5 -> 7 events across two additional,
+                    # idempotent calls: one extra write+event each).
+                    # Fixed with the one check actually missing: skip
+                    # entirely, before any write or audit event, when
+                    # effective_qty has already fully settled AND
+                    # neither note nor variant genuinely changed either
+                    # - the same "did anything real actually change"
+                    # question qty_really_changed already answers
+                    # correctly for the other branch, asked here too.
+                    if (effective_qty == kline.last_kds_sent_qty
+                            and kline.note == _pos_note(line)
+                            and kline.variant_info == _pos_line_variant_info(line)):
                         continue
                     # REAL BUG FIX ("BUG-11 [fourth report] - Sequential
                     # qty_delta baseline is still wrong at runtime"),

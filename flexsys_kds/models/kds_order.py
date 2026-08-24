@@ -290,24 +290,9 @@ class KdsOrder(models.Model):
         if touched and not self.env.context.get('kds_workflow_write') and not self.env.su:
             raise AccessError(_(
                 "FlexSys KDS: %s cannot be changed by writing directly - use the "
-                "Accept/Start/Ready/Cancel/Hold/Reopen actions (or, for priority, "
-                "action_change_priority) instead."
+                "Accept/Start/Ready/Cancel/Hold/Reopen actions instead."
             ) % ', '.join(sorted(touched)))
         return super().write(vals)
-
-    def action_change_priority(self, priority, bypass_check=False):
-        self.ensure_one()
-        valid_values = dict(self._fields['priority'].selection)
-        if priority not in valid_values:
-            raise UserError(_("Invalid priority value: %s") % priority)
-        self._kds_check_order_access(bypass=bypass_check)
-        self._kds_check_action('change_priority', bypass=bypass_check)
-        old_priority = self.priority
-        if old_priority == priority:
-            return
-        self.with_context(kds_workflow_write=True).write({'priority': priority})
-        self.env['kds.event'].log(
-            self, event_type='priority_changed', old_value=old_priority, new_value=priority)
 
     @api.depends('line_ids.station_id')
     def _compute_station_ids(self):
@@ -791,17 +776,6 @@ class KdsOrder(models.Model):
         notify_stations(self.env, expeditor_station)
         return task
 
-    def _reconcile_expeditor_on_production_change(self):
-        """DEPRECATED as of the Final Phase 1 Audit fix - kept as a thin
-        alias for _system_reopen_if_production_incomplete() below, which
-        generalizes this to also cover the case that predates Expeditor
-        entirely (an order stuck at Ready/Completed with no Expeditor
-        task at all). Existing call sites throughout this module were
-        updated to call the new method directly; this alias exists only
-        in case something outside this module still references the old
-        name."""
-        return self._system_reopen_if_production_incomplete()
-
     def _system_reopen_if_production_incomplete(self, reason=False):
         """Internal-only workflow method (NOT a raw write): if this order
         is sitting at Ready or Completed but production is no longer
@@ -822,14 +796,12 @@ class KdsOrder(models.Model):
 
         Also cancels any active Expeditor/Packing task - a stale task is
         exactly as invalid as a stale order.state once production work
-        is active again. This single method now covers both the
-        Expeditor-specific case (previously handled by the now-deprecated
-        alias above) and the general case that predates Expeditor
-        entirely, from every call site: POS Delta Sync (both a changed
-        line resetting via
-        kds.order.line._system_reset_for_delta_sync(), and a brand new
-        line via create()), and a manual line reopen via the override
-        path (kds_order_line.py's action_start()).
+        is active again. This single method covers both the Expeditor-
+        specific case and the general case that predates Expeditor
+        entirely, from every call site: POS Delta Sync (a new delta line
+        created via pos_order.py's own _flexsys_kds_diff_lines()), and a
+        manual line reopen via the override path
+        (kds_order_line.py's action_start()).
 
         AUDIT ENHANCEMENT (dev request "Runtime Regression Fix Package",
         BUG-02B: "Record at minimum: previous state, reopening
@@ -853,6 +825,34 @@ class KdsOrder(models.Model):
         """
         for order in self:
             if order.state not in ('ready', 'completed'):
+                continue
+            # REAL BUG FIX ("Test Suite Reconciliation Round 2 +
+            # Production Fix - Last POS Line Removal", item C, "منع
+            # إعادة فتح Order بدون أي Production Remaining"), confirmed
+            # by direct tracing of _compute_is_expeditor_ready() above:
+            # `is_expeditor_ready = bool(required_lines) and all(...)`
+            # evaluates to False - not True - when required_lines
+            # (every non-cancelled line) is EMPTY, since
+            # `bool([]) is False` short-circuits the `and`. That's the
+            # correct answer for is_expeditor_ready's own actual
+            # meaning ("is every required line ready" - vacuously not
+            # satisfied with zero lines to check), but it means the
+            # `if order.is_expeditor_ready: continue` guard below,
+            # which relies on that field to mean "nothing left to do,
+            # skip reopening," does NOT skip when every line has been
+            # cancelled - the exact scenario this fix addresses:
+            # deleting an already-Completed order's own last POS line
+            # (via the Last POS Line Removal fix above) cancels every
+            # remaining kds.order.line, and this method would otherwise
+            # incorrectly reopen the order to 'preparing' even though
+            # zero non-cancelled production lines exist to justify it.
+            # Checked here explicitly, separately from
+            # is_expeditor_ready, since that field's own correct
+            # meaning cannot distinguish "vacuously nothing to check"
+            # from "genuinely still incomplete" - this guard makes that
+            # distinction directly instead.
+            required_lines = order.line_ids.filtered(lambda l: l.state != 'cancelled')
+            if not required_lines:
                 continue
             if order.is_expeditor_ready:
                 continue

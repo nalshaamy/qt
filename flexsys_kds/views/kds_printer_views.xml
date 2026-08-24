@@ -55,15 +55,15 @@
                          "Printer Form Cleanup"): "REMOVE من Production
                          UI: Mark as Online (No Real Connectivity
                          Check)" - the button that called
-                         action_test_connection() (kds_printer.py) is
-                         removed entirely from this form. The method
-                         itself is kept, unused, in the codebase - see
-                         its own updated docstring - for a possible
-                         future testing/demo need, but is no longer
-                         reachable from normal day-to-day use. This
-                         directly resolves item 13's own concern: with
-                         this button gone, `status` is set ONLY by a
-                         real agent's own successful job report
+                         action_test_connection() is removed entirely
+                         from this form. UPDATED ("Deep Dead Code &
+                         Commercial Cleanup Request"): the method itself
+                         is now also fully removed from the codebase -
+                         confirmed zero active callers anywhere - rather
+                         than kept unused for a hypothetical future
+                         need. This directly resolves item 13's own
+                         concern: with this action gone, `status` is set
+                         ONLY by a real agent's own successful job report
                          (controllers/kds.py's own agent_result()),
                          making "Agent Online"/"Agent Offline" (list
                          view, above) an accurate label rather than a

@@ -206,6 +206,15 @@ class TestPrinting(FlexSysKdsTestCommon):
         self.assertTrue(alert_events, "A manager-alert audit event should be logged when there's no backup.")
 
     def test_successful_print_marks_printed(self):
+        """UPDATED for "Dead Code Cleanup Part 2", item 1
+        ("action_dispatch()"): the earlier version of this test used
+        the now-removed action_dispatch() purely as a setup shortcut,
+        not testing its own behavior specifically - updated to use the
+        actual, supported runtime path instead (the atomic claim
+        mechanism every real Print Agent request goes through), per
+        "update tests to use the actual supported runtime setup instead
+        of preserving a dead production method for test convenience."
+        """
         order = self._order()
         job = self.env['kds.print.job'].create({
             'order_id': order.id,
@@ -213,7 +222,9 @@ class TestPrinting(FlexSysKdsTestCommon):
             'printer_id': self.printer_primary.id,
             'job_type': 'auto',
         })
-        job.action_dispatch()
+        claimed = self.env['kds.print.job']._claim_pending_jobs(
+            self.printer_primary, agent_id='test-agent')
+        self.assertEqual(claimed.ids, [job.id])
         self.assertEqual(job.status, 'dispatched')
         self.assertTrue(job.dispatched_at)
         job.action_acknowledge()
@@ -1048,16 +1059,18 @@ class TestPrinting(FlexSysKdsTestCommon):
                           "The button calling action_test_connection() must be fully "
                           "removed from the printer form's own view.")
 
-    def test_item14_test_connection_method_still_exists_unused(self):
-        """Confirms action_test_connection() itself is deliberately kept
-        in the codebase (not deleted outright) - only removed from the
-        production UI, per this fix's own documented reasoning."""
+    def test_deep_cleanup_test_connection_method_fully_removed(self):
+        """UPDATED for "Deep Dead Code & Commercial Cleanup Request",
+        item "Printer action_test_connection()": the earlier version of
+        this test confirmed the method was deliberately kept, unused,
+        in the codebase. This request explicitly overrides that
+        decision - "Do not keep simulation/demo functionality in the
+        production commercial addon" - and confirmed zero active
+        callers existed anywhere. The method is now genuinely deleted,
+        not merely unreachable from the UI."""
         printer = self.printer_primary
-        self.assertTrue(hasattr(printer, 'action_test_connection'))
-        # Calling it directly still works exactly as before - this is a
-        # UI-only removal, not a behavior change to the method itself.
-        printer.action_test_connection()
-        self.assertEqual(printer.status, 'online')
+        self.assertFalse(hasattr(printer, 'action_test_connection'),
+                          "action_test_connection() must be genuinely removed.")
 
     def test_item15_default_backup_fields_readonly_in_form_view(self):
         """Item 15: 'يفضل: Set as Default / Set as Backup كإجراءات.

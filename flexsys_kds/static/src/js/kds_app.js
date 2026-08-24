@@ -6,7 +6,7 @@ import { useService } from "@web/core/utils/hooks";
 import { user } from "@web/core/user";
 import { makeKdsStore } from "./kds_store";
 import { KdsOrderCard } from "./kds_order_card";
-import { KDS_LABELS } from "./kds_i18n";
+import { getKdsLabels } from "./kds_i18n";
 
 // Languages Odoo ships RTL for; kept as a small explicit list (rather than
 // trying to derive it from the locale code alone) since this only needs to
@@ -36,7 +36,6 @@ export class FlexSysKdsScreen extends Component {
         // No other part of this component currently needs the
         // notification service, so the injection itself is removed
         // too, rather than left unused.
-        this.labels = KDS_LABELS;
         // KDS FULLSCREEN MODE (dev request "V1 Finalization", item 1):
         // deliberately a separate local reactive object, not folded into
         // this.store.state - fullscreen is a purely browser/DOM concern
@@ -60,6 +59,14 @@ export class FlexSysKdsScreen extends Component {
             lang = "en_US";
         }
         this.isRtl = RTL_LANGS.includes(lang.split("_")[0]);
+        // LOCALIZATION ("Arabic Localization & RTL Specification"), item
+        // 5, "Language Source - Internal KDS: Use the logged-in Odoo
+        // user's active language." Reuses the exact same `lang` value
+        // just resolved above for RTL detection - one single, safe
+        // language source drives both this screen's own operational
+        // labels and its own text direction, never two independently
+        // computed values that could disagree.
+        this.labels = getKdsLabels(lang);
 
         const params = new URLSearchParams(window.location.search);
         this._requestedStationCode = params.get("station");

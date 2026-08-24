@@ -2,8 +2,6 @@ from . import kds_access
 from . import kds_notify
 from . import kds_order_type_tag
 from . import kds_order_source_tag
-from . import kds_order_status
-from . import kds_order_status_transition
 from . import kds_station
 from . import kds_routing_rule
 from . import kds_printer

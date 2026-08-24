@@ -200,7 +200,7 @@ class KdsPrintJob(models.Model):
         two different agent processes (or the same agent racing a retry
         against itself after a slow/timed-out response) from both seeing
         the same job as available and both successfully calling dispatch
-        on it, since action_dispatch() was an unconditional write with no
+        on it, since the old dispatch path was an unconditional write with no
         "was this actually still pending" check baked into the same
         atomic operation. That's a real double-print risk under exactly
         the conditions the audit calls out: concurrent agents, retries,
@@ -335,14 +335,6 @@ class KdsPrintJob(models.Model):
                 'line_change': line.line_change,
             } for line in lines],
         }
-
-    def action_dispatch(self):
-        """Kept for any caller that still wants to explicitly mark a
-        specific, already-known job as dispatched (e.g. the backend UI
-        manually retrying one job) - the print agent's own polling flow
-        no longer uses this directly, it goes through the atomic
-        _claim_pending_jobs() above instead."""
-        self.write({'status': 'dispatched', 'dispatched_at': fields.Datetime.now()})
 
     def action_acknowledge(self):
         """Called by the print agent once the printer confirms receipt."""

@@ -139,7 +139,7 @@ class KdsOrderLine(models.Model):
     # 'accepted_time' in 'kds.order.line'" during actual POS payment):
     # this field was referenced extensively throughout this file
     # (KDS_LINE_PROTECTED_FIELDS, action_accept()'s extra_vals,
-    # _system_reset_for_delta_sync()'s timestamp reset) but never
+    # a timestamp reset previously performed elsewhere) but never
     # actually declared on the model itself - a real gap that static
     # checks (py_compile, XML well-formedness) can never catch, since
     # nothing about referencing an undeclared field name in a Python
@@ -551,74 +551,6 @@ class KdsOrderLine(models.Model):
                 orders_to_advance |= line.order_id
         orders_to_advance.action_complete(bypass_check=bypass_check)
 
-    def _system_reset_for_delta_sync(self, new_state='new'):
-        """Internal-only workflow method (NOT a raw write) for POS Delta
-        Sync to safely move a line that's already progressed (e.g.
-        Ready) back to an earlier state because the underlying POS line's
-        qty/note/variant changed underneath it.
-
-        AUDIT FIX ("POS Delta Sync Still Bypasses The Central Workflow",
-        HIGH/FINAL BLOCKER): replaces the previous raw
-        `kline.write({..., 'state': new_state})` in
-        pos_order.py's _flexsys_kds_diff_lines(). Deliberately NOT routed
-        through _line_transition()/LINE_TRANSITIONS - "roll back to New"
-        isn't a user-facing action at all (no button anywhere calls this;
-        it's only ever an automatic system reaction to the POS order's
-        own content changing), so it doesn't belong in the same matrix
-        that governs an operator's own accept/start/ready/cancel taps.
-        It still goes through the same event/notification/timestamp
-        discipline every other transition in this module does - exactly
-        what was missing from the raw write.
-
-        Timestamps ahead of `new_state` are cleared (e.g. resetting to
-        'new' clears accepted_time/preparation_start_time/ready_time),
-        satisfying "correct timestamp reset/recalculation" - the line is
-        genuinely restarting its journey from that point, so a stale
-        earlier timestamp would misrepresent when it actually reached
-        each stage this time around.
-
-        Guards already existed at the pos_order.py call site before this
-        fix (never called for a completed/cancelled line) - kept here
-        too as a defense-in-depth no-op, since completed/cancelled work
-        must never be silently reset regardless of caller discipline.
-
-        CURRENTLY UNUSED as of the "BUG-10 - READY order incorrectly
-        resets to NEW after POS quantity increase" fix: its one call
-        site (pos_order.py, resetting a Ready line back to New on a qty/
-        note/variant change) was replaced with the same "create a new
-        delta line, leave the original untouched" pattern already used
-        for a Completed line's own equivalent case - resetting an
-        already-Ready line's own state was exactly the bug being
-        reported ("the whole line looked like a fresh production cycle,
-        even though only the increase genuinely did"). Left defined
-        (not deleted) since the underlying "move a line backward through
-        a proper, audited path, not a raw write" capability could still
-        be useful for a future scenario this project hasn't hit yet -
-        but nothing in this module currently calls it.
-        """
-        for line in self:
-            if line.state in ('completed', 'cancelled') or line.state == new_state:
-                continue
-            old_state = line.state
-            vals = {'state': new_state}
-            if new_state == 'new':
-                vals.update({'accepted_time': False, 'preparation_start_time': False, 'ready_time': False})
-            elif new_state == 'accepted':
-                vals.update({'preparation_start_time': False, 'ready_time': False})
-            elif new_state == 'preparing':
-                vals.update({'ready_time': False})
-            line.with_context(kds_workflow_write=True).write(vals)
-            self.env['kds.event'].log(
-                line.order_id, event_type='status_changed', station=line.station_id,
-                old_value=old_state, new_value=new_state,
-                note=_('POS Delta Sync: line reset - underlying POS order content changed'))
-            notify_station(self.env, line.station_id)
-        # Reconcile the parent order (and any active Expeditor task) now
-        # that a line moved backward - same centralized method used for
-        # a manual line reopen and for new lines arriving via delta sync.
-        self.mapped('order_id')._system_reopen_if_production_incomplete(
-            reason=_('existing item(s) modified via POS Delta Sync: %s') % ', '.join(self.mapped('product_name')))
-
     def action_cancel(self, reason=False, bypass_check=False):
         for line in self:
             if line.state in ('completed', 'cancelled'):
@@ -719,16 +651,3 @@ class KdsOrderLine(models.Model):
                     'reason': reason or _('no reason given'),
                 })
             notify_station(self.env, line.station_id)
-
-    def action_move_station(self, new_station_id, bypass_check=False):
-        new_station = self.env['kds.station'].browse(new_station_id)
-        for line in self:
-            line._kds_check_action('move_station', station=line.station_id, bypass=bypass_check)
-            line._kds_check_action('move_station', station=new_station, bypass=bypass_check)
-            old_station = line.station_id
-            line.with_context(kds_workflow_write=True).write({'station_id': new_station.id})
-            self.env['kds.event'].log(
-                line.order_id, event_type='station_moved',
-                old_value=old_station.name, new_value=new_station.name)
-            notify_station(self.env, old_station)
-            notify_station(self.env, new_station)
