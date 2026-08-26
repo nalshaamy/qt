@@ -196,6 +196,16 @@ class FlexSysKdsKioskController(http.Controller):
             'kiosk_dir': 'rtl' if station.kiosk_language == 'ar' else 'ltr',
             'branch_label': 'الفرع' if station.kiosk_language == 'ar' else 'Branch',
             'time_label': 'الوقت' if station.kiosk_language == 'ar' else 'Time',
+            # MERGED FROM PROVEN POC (flexsys_kds_poc_1d) - bootstrapped
+            # once into the page itself (see FLEXSYS_PRINTING_CONFIG in
+            # the template below), never a separate route/network call.
+            'flexsys_printing_method': station.flexsys_printing_method or '',
+            'flexsys_printer_ip': station.flexsys_printer_ip or '',
+            # 'true'/'false' literals (not Python's own True/False,
+            # which would render as invalid JS) for direct use as a JS
+            # boolean via the %s (not %r) placeholder above.
+            'flexsys_use_local_network_access':
+                'true' if station.flexsys_use_local_network_access else 'false',
         }
         return request.make_response(
             html,
@@ -523,6 +533,14 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>FlexSys KDS - %(station_name)s</title>
+<!-- MERGED FROM PROVEN POC (flexsys_kds_poc_1d) - loaded directly in
+     the page's own <head>, not injected after the fact. Classic
+     scripts (no ES module loader here at all - this is standalone
+     HTML) - the shared renderer must load before the public adapter
+     that calls it, which must load before the inline script below
+     that calls printOrder(). -->
+<script src="/flexsys_kds/static/src/shared/flexsys_ticket_renderer.js"></script>
+<script src="/flexsys_kds/static/src/public/flexsys_epos_direct_public.js"></script>
 <style>
   :root{
     --fs-blue:#1E88E5; --fs-orange:#FF9800; --fs-bg:#12161c; --fs-card:#1b212b;
@@ -847,6 +865,24 @@ const KIOSK_LANG = %(kiosk_lang)r;
 const KIOSK_LABELS = KIOSK_LANG === 'ar' ? KIOSK_LABELS_AR : KIOSK_LABELS_EN;
 const STATION_CODE = %(station_code)r;
 const TOKEN = %(token)r;
+// MERGED FROM PROVEN POC (flexsys_kds_poc_1d): needed by
+// normalizeOrderForTicket() below (station name / branch name for the
+// printed ticket's own header) - reusing the exact same station_name/
+// company_name values already resolved server-side for this page's
+// own visible header, never a second/different lookup.
+const STATION_NAME = %(station_name)r;
+const COMPANY_NAME = %(company_name)r;
+// MERGED FROM PROVEN POC (flexsys_kds_poc_1d) - bootstrapped ONCE
+// directly into this page's own initial render (no separate route,
+// no extra network call, per the explicit "Public Kiosk Printing
+// Config Decision"), never re-sent by the existing orders polling
+// below. Only these three non-sensitive fields - no Agent Key, no
+// printer secrets.
+const FLEXSYS_PRINTING_CONFIG = {
+  printingMethod: %(flexsys_printing_method)r,
+  printerIp: %(flexsys_printer_ip)r,
+  useLocalNetworkAccess: %(flexsys_use_local_network_access)s,
+};
 let ORDERS = [];
 let FILTER = 'all';
 let PRINTING_ENABLED = false;
@@ -1489,6 +1525,74 @@ async function advanceLine(orderId, lineId, action) {
 
 async function printOrder(orderId) {
   if (!PRINTING_ENABLED) return;
+
+  // MERGED FROM PROVEN POC (flexsys_kds_poc_1d) - confirmed PASS on
+  // real hardware. Direct Network stations use the Direct ePOS
+  // Adapter (flexsys_epos_direct_public.js, loaded above in <head> -
+  // this inline script never performs the actual printer connection
+  // itself).
+  //
+  // COMPATIBILITY FIX ("POC -> Core Merge - One Compatibility Fix
+  // Before Regression Test"): explicit Truth Table, matched IDENTICALLY
+  // on the Internal KDS side (see static/src/js/kds_app.js's own
+  // onPrintClick()), so Legacy Printing genuinely keeps working during
+  // this transition period:
+  //   direct_network + Printer IP set   -> Direct ePOS
+  //   direct_network + Printer IP empty -> Legacy Agent fallback
+  //                                         (the existing backend
+  //                                         itself decides whether a
+  //                                         kds.printer exists)
+  //   iot                               -> NOT Legacy Agent, NOT a
+  //                                         print attempt - a clear
+  //                                         "not implemented yet" log
+  //                                         only (IoT itself is not
+  //                                         built yet)
+  //   unset / false / any other legacy
+  //   state                             -> Legacy Agent path, exactly
+  //                                         as before this merge
+  // The direct_network+empty-IP case already fell through correctly
+  // here (the && below is simply false, reaching the unconditional
+  // legacy call at the bottom) - the actual bug fixed in this round is
+  // 'iot' also silently falling through to Legacy Agent, which this
+  // explicit early check now prevents.
+  if (FLEXSYS_PRINTING_CONFIG.printingMethod === 'iot') {
+    console.log(
+      "FlexSys: Printing Method is 'Odoo IoT' for this station - Odoo IoT " +
+      'is not implemented yet. No print attempted (not falling back to ' +
+      'the legacy Agent path, which would be equally incorrect for an ' +
+      'IoT-configured station).'
+    );
+    return;
+  }
+
+  if (FLEXSYS_PRINTING_CONFIG.printingMethod === 'direct_network' && FLEXSYS_PRINTING_CONFIG.printerIp) {
+    let rawOrder = null;
+    for (let i = 0; i < ORDERS.length; i++) {
+      if (ORDERS[i].id === orderId) { rawOrder = ORDERS[i]; break; }
+    }
+    if (!rawOrder) {
+      console.error('FlexSys: order id ' + orderId + ' not found in ORDERS.');
+      return;
+    }
+    const normalizedOrder = window.FlexSysTicketBuilder.normalizeOrderForTicket(
+      rawOrder, STATION_NAME, 'NEW', COMPANY_NAME
+    );
+    const result = await window.FlexSysKDSPrint.printDirectEpos({
+      ip: FLEXSYS_PRINTING_CONFIG.printerIp,
+      useLocalNetworkAccess: FLEXSYS_PRINTING_CONFIG.useLocalNetworkAccess,
+      normalizedOrder: normalizedOrder,
+    });
+    if (!result || !result.successful) {
+      console.error('FlexSys: Direct Network print did not succeed.', result);
+    }
+    return;
+  }
+
+  // Falls through here for: direct_network with no Printer IP set yet,
+  // OR FLEXSYS_PRINTING_CONFIG.printingMethod unset/false/any other
+  // legacy value - the exact same Legacy Agent path this button always
+  // used, completely unchanged.
+  // Legacy Agent path - UNCHANGED.
   // UI/DATA FIX ("Printing Cleanup - Toast + Job Record
   // Simplification"), decision item 6: reverted to the simple
   // fire-and-forget form - the Toast requirement this function's own

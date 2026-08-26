@@ -129,14 +129,23 @@ class TestPrinting(FlexSysKdsTestCommon):
         """Defensive: a printer with no agent_key at all (should not
         normally happen, since create() always sets one - but the
         action itself must not raise if it somehow is empty) shows a
-        clear message instead of a blank/broken notification."""
+        clear message instead of a blank/broken notification.
+
+        TEST-BUG FIX ("CI Recovery Round 4"), Zero Production changes:
+        the test's own old expectation ('No Print Agent Key', title-
+        case) never matched the actual, current message text
+        (models/kds_printer.py: "This printer has no Print Agent Key
+        set.", lowercase 'no' mid-sentence) - a plain case-sensitive
+        `assertIn` mismatch, not a functional difference. Updated to
+        check the exact current message text directly, per the
+        client's own first suggested option."""
         printer_no_key = self.env['kds.printer'].create({
             'name': 'Printer With No Key (edge case)',
             'station_id': self.station_kitchen.id,
         })
         printer_no_key.sudo().agent_key = False
         result = printer_no_key.action_show_agent_key()
-        self.assertIn('No Print Agent Key', result['params']['message'])
+        self.assertEqual(result['params']['message'], 'This printer has no Print Agent Key set.')
 
     def test_retry_before_falling_back(self):
         order = self._order()
@@ -423,33 +432,22 @@ class TestPrinting(FlexSysKdsTestCommon):
         self.assertEqual(job.print_number, 1)
         self.assertEqual(job.display_job_type, 'print')
 
-    def test_reprint_after_first_print_is_number_two(self):
-        """The exact reported scenario: after a genuine first print,
-        create_reprint() must produce print_number=2,
-        display_job_type='reprint' - and the ORIGINAL first job's own
-        print_number/display_job_type must remain correctly 1/'print',
-        never recomputed or disturbed by the later reprint's own
-        creation."""
-        order = self._order()
-        first_job = self.env['kds.print.job'].create({
-            'order_id': order.id,
-            'station_id': self.station_kitchen.id,
-            'printer_id': self.printer_primary.id,
-            'job_type': 'auto',
-        })
-        self.assertEqual(first_job.print_number, 1)
-
-        reprint_job = self.env['kds.print.job'].create_reprint(
-            order, self.station_kitchen, reason='kitchen_request')
-
-        self.assertEqual(reprint_job.print_number, 2)
-        self.assertEqual(reprint_job.display_job_type, 'reprint')
-        first_job.invalidate_recordset()
-        self.assertEqual(
-            first_job.print_number, 1,
-            "The original first job's own print_number must remain 1, completely "
-            "unaffected by the later reprint's own creation.")
-        self.assertEqual(first_job.display_job_type, 'print')
+    # -----------------------------------------------------------------
+    # TEST SUITE RESET ("Test Suite Reset & Cleanup" project, Phase 3 -
+    # test_printing.py Duplicate Density Review): removed
+    # test_reprint_after_first_print_is_number_two (was here, testing
+    # first_job.print_number==1 -> create_reprint() -> reprint
+    # print_number==2, display_job_type=='reprint', original job's own
+    # print_number/display_job_type unaffected). Confirmed a full
+    # subset, by direct side-by-side comparison, of
+    # test_multiple_reprints_number_sequentially below - which starts
+    # with the identical first step (one auto job, then one reprint
+    # producing print_number 2) and additionally proves the sequence
+    # continues correctly to 3 and 4 across multiple reprint reasons,
+    # while confirming the same "original job unaffected" fact. No
+    # coverage lost - the stronger test proves everything the removed
+    # one did, and more.
+    # -----------------------------------------------------------------
 
     def test_multiple_reprints_number_sequentially(self):
         """Test D's own required scenario, multiple times over: three
@@ -626,11 +624,21 @@ class TestPrinting(FlexSysKdsTestCommon):
             'name': 'Bar Station (no printer)',
             'code': 'BAR_NOPRN',
         })
-        bar_line = self.env['pos.order.line'].create({
-            'order_id': order.pos_order_id.id,
-            'product_id': self.product_cappuccino.id,
-            'qty': 1, 'price_unit': 4.0, 'price_subtotal': 4.0, 'price_subtotal_incl': 4.0,
-        })
+        # TEST-SETUP FIX ("CI Recovery Round 3"), confirmed by direct
+        # tracing before touching this test again: `order` here comes
+        # from `_order()` -> `_make_order()`, which deliberately creates
+        # a kds.order with no POS linkage at all (pos_order_id unset,
+        # by design - the same pattern used elsewhere in this suite for
+        # kds.order-level-only tests). The `bar_line` pos.order.line
+        # this test used to create here was never actually referenced
+        # again anywhere below - only `kds_line` (kds.order.line,
+        # created directly, with no pos_order_line_id needed for this
+        # test's own actual concern: per-station printer-skip logic)
+        # is - so `order.pos_order_id.id` being unset (raising a
+        # genuine NOT NULL constraint violation on pos_order_line's own
+        # order_id column) was always going to fail regardless, for a
+        # record this test's own logic never needed in the first place.
+        # Removed entirely.
         kds_line = self.env['kds.order.line'].create({
             'order_id': order.id, 'product_id': self.product_cappuccino.id,
             'product_name': self.product_cappuccino.name, 'qty': 1,
@@ -834,20 +842,17 @@ class TestPrinting(FlexSysKdsTestCommon):
         removed entirely - "No Printer -> No Job is sufficient."
         Confirms the toast container/function/CSS added in v7.17.1 for
         this specific requirement are genuinely gone from the rendered
-        template, not just visually hidden."""
-        import re
-        module_dir = __import__('os').path.dirname(__import__('os').path.dirname(
-            __import__('os').path.abspath(__file__)))
-        kiosk_path = __import__('os').path.join(module_dir, 'controllers', 'kds_kiosk.py')
-        with open(kiosk_path, encoding='utf-8') as f:
-            content = f.read()
-        m = re.search(r'_KIOSK_HTML_TEMPLATE = r"""(.*)"""\s*$', content, re.DOTALL)
-        self.assertIsNotNone(m, "Expected to find _KIOSK_HTML_TEMPLATE in kds_kiosk.py.")
-        template = m.group(1)
-        rendered = template % {
-            'station_name': 'Kitchen', 'branch_name': 'QT01', 'company_name': 'Test Co',
-            'station_code': 'KITCHEN', 'token': 'abc123',
-        }
+        template, not just visually hidden.
+
+        TEST-BUG FIX ("CI Recovery Round 4"), Zero Production changes:
+        this test used to build its own, stale placeholder dict by
+        hand, predating Arabic Localization's own later additions to
+        the template (kiosk_lang/kiosk_dir/branch_label/time_label) -
+        causing a genuine KeyError, not a Production defect. Switched
+        to the new centralized `_render_kiosk_template()` helper
+        (common.py), which stays correct automatically as the template
+        evolves."""
+        rendered = self._render_kiosk_template()
         self.assertNotIn('kdsToastStack', rendered)
         self.assertNotIn('showToast', rendered)
         self.assertNotIn('kds-toast', rendered)
@@ -890,10 +895,25 @@ class TestPrinting(FlexSysKdsTestCommon):
         (order_id, print_number) - so within any given order, jobs read
         1, 2, 3 top to bottom, the exact readability improvement
         requested, without touching the model's own default create_date
-        desc ordering used elsewhere."""
+        desc ordering used elsewhere.
+
+        TEST-BUG FIX ("CI Full Run" report, Printing sorting
+        regression), Zero Production sorting-contract change: the
+        Production fix corrected the value from `order_id desc` to
+        `order_id.id desc` - a genuine Production bug fix, confirmed by
+        direct tracing of kds.order's own `_order = 'create_date
+        desc'` (see the view's own updated comment,
+        views/kds_print_job_views.xml, and TEST_CONTRACTS.md Section 7,
+        for the full explanation: plain `order_id desc` was actually
+        sorting by the related order's own create_date, not its id -
+        confirmed live to diverge). Updated this assertion to match
+        the corrected, current value - the sorting CONTRACT itself
+        (newest order first, print_number ascending within it) is
+        completely unchanged; only the literal ORM syntax achieving it
+        correctly is."""
         list_view = self.env.ref('flexsys_kds.view_kds_print_job_list')
         self.assertEqual(list_view.arch_db.count('default_order='), 1)
-        self.assertIn('default_order="order_id, print_number"', list_view.arch_db)
+        self.assertIn('default_order="order_id.id desc, print_number"', list_view.arch_db)
 
     def test_multiple_jobs_same_order_sort_correctly_by_default_order(self):
         """End-to-end confirmation: querying with the list view's own
@@ -1049,13 +1069,28 @@ class TestPrinting(FlexSysKdsTestCommon):
         """Item 14: 'REMOVE من Production UI: Mark as Online (No Real
         Connectivity Check).' Structural check confirming the button
         itself is genuinely gone from the rendered view - not just
-        relabeled."""
+        relabeled.
+
+        TEST-SETUP FIX ("CI Recovery Round 3"), confirmed by direct
+        inspection of the actual XML content before touching this test
+        again: the raw-content `assertNotIn` check used to search the
+        ENTIRE file text, including comments - but this same view's own
+        explanatory comment (documenting exactly why and when the
+        button was removed) legitimately mentions
+        "action_test_connection()" as historical context, which the old
+        check couldn't distinguish from a genuine, still-present button
+        invocation. Corrected to check for the actual XML invocation
+        pattern specifically (`name="action_test_connection"`, how a
+        real <button> element would reference it) rather than any
+        textual mention anywhere in the file - the button itself is
+        still genuinely absent; only the check's own precision was
+        wrong."""
         import os
         module_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         view_path = os.path.join(module_dir, 'views', 'kds_printer_views.xml')
         with open(view_path, encoding='utf-8') as f:
             content = f.read()
-        self.assertNotIn('action_test_connection', content,
+        self.assertNotIn('name="action_test_connection"', content,
                           "The button calling action_test_connection() must be fully "
                           "removed from the printer form's own view.")
 
@@ -1121,7 +1156,29 @@ class TestPrinting(FlexSysKdsTestCommon):
         """Item 17: 'Default sorting: Newest first' - reconciled with
         the earlier print-sequence fix. Confirms a newer order's own
         jobs appear before an older order's own jobs, while each
-        order's own jobs still read 1, 2, 3 internally."""
+        order's own jobs still read 1, 2, 3 internally.
+
+        REAL BUG FIX ("CI Full Run" report, Printing sorting
+        regression) - an honest correction to this test's own prior
+        round's analysis: the earlier fix here (avoiding `set()`/
+        recordset hashing for the membership comparison) addressed a
+        genuine code-quality concern, but was NOT the actual root
+        cause of the live failure that prompted it. Direct tracing
+        this round confirmed the real root cause: `kds.order._order =
+        'create_date desc'` - Odoo's ORM resolves `order_id desc` (a
+        Many2one) by joining to kds.order and sorting by ITS OWN
+        `_order`, never the raw FK id, unless the explicit `field.id`
+        form is used. Plain `order_id desc` was therefore actually
+        sorting by create_date, not id - usually matching, but not
+        guaranteed, and confirmed live to diverge (an older order
+        appeared first). This is a genuine Production bug, now fixed
+        at its source (`views/kds_print_job_views.xml`'s own
+        `default_order`, and here, matching that exact same corrected
+        ORM syntax) - `order_id.id desc, print_number` (the current,
+        correct "Newest Order First" contract, explicitly sorting by
+        the raw FK id column) replaces the old, silently-unreliable
+        `order_id desc, print_number`. See TEST_CONTRACTS.md Section 7
+        for the complete, current contract."""
         old_order = self._order()
         old_job = self.env['kds.print.job'].create({
             'order_id': old_order.id, 'station_id': self.station_kitchen.id,
@@ -1135,17 +1192,38 @@ class TestPrinting(FlexSysKdsTestCommon):
         new_job_2 = self.env['kds.print.job'].create_reprint(
             new_order, self.station_kitchen, reason='kitchen_request')
 
+        # Sanity check on the fixture itself: `new_order` really is the
+        # newer record (higher id), so "Newest Order First" has a
+        # genuine, unambiguous fact to verify against.
+        self.assertGreater(new_order.id, old_order.id)
+
         all_jobs = self.env['kds.print.job'].search(
             [('id', 'in', [old_job.id, new_job_1.id, new_job_2.id])],
-            order='order_id desc, print_number')
+            order='order_id.id desc, print_number')
+        self.assertEqual(len(all_jobs), 3)
 
+        # Verify the exact required sequence directly by id/print_number
+        # comparison - no set()/recordset-hashing involved anywhere.
         self.assertEqual(
-            list(all_jobs.ids[:2]), [new_job_1.id, new_job_2.id],
-            "The newer order's own jobs must sort before the older order's own jobs.")
-        self.assertEqual(all_jobs.ids[2], old_job.id)
-        # Within the newer order's own two jobs, print_number order (1
-        # then 2) must still hold correctly.
-        self.assertEqual(all_jobs.ids[:2], [new_job_1.id, new_job_2.id])
+            all_jobs[0].order_id.id, new_order.id,
+            "The first job in the sorted result must belong to the newer order.")
+        self.assertEqual(
+            all_jobs[1].order_id.id, new_order.id,
+            "The second job in the sorted result must also belong to the newer order.")
+        self.assertEqual(
+            all_jobs[2].order_id.id, old_order.id,
+            "The third (last) job in the sorted result must belong to the older order.")
+
+        # Within the newer order's own two jobs (now confirmed to be
+        # all_jobs[0] and all_jobs[1]), print_number must read 1 then 2
+        # - the original auto job first, the reprint second.
+        self.assertEqual(all_jobs[0].id, new_job_1.id,
+                          "print_number 1 (the original auto-print job) must sort first "
+                          "within the newer order's own two jobs.")
+        self.assertEqual(all_jobs[0].print_number, 1)
+        self.assertEqual(all_jobs[1].id, new_job_2.id,
+                          "print_number 2 (the reprint job) must sort second.")
+        self.assertEqual(all_jobs[1].print_number, 2)
 
     def test_item17_print_job_form_view_exists_with_agent_lease_fields(self):
         """Item 17: 'تفاصيل Job يمكن أن تعرض: Agent, Lease information,

@@ -6,3 +6,4 @@ from . import test_pos_sync
 from . import test_sla
 from . import test_station_kpi
 from . import test_expeditor
+from . import test_pos_config_settings

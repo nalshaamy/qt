@@ -1611,7 +1611,7 @@ class TestWorkflow(FlexSysKdsTestCommon):
         order.action_start_preparing()
         order.line_ids.action_start()
         order.line_ids.action_ready()
-        order.action_complete(bypass_check=True)
+        order.line_ids.action_complete(bypass_check=True)
         order.invalidate_recordset()
 
         self.assertTrue(order.completion_time)
@@ -1625,14 +1625,26 @@ class TestWorkflow(FlexSysKdsTestCommon):
         """Required regression test, the client's own exact worked
         example: '1095.8 min -> approximately 18h 16m.' Confirms the
         real compute method - not a reimplementation - against that
-        precise value."""
+        precise value.
+
+        TEST-BUG FIX ("CI Full Run" report): setup used to call
+        `order.action_complete(bypass_check=True)` directly, without
+        ever completing the production line(s) first -
+        `kds_order.py::action_complete()` correctly refuses this
+        ("still has active production"), a deliberate multi-station
+        completion guard, unchanged. Fixed by completing through the
+        real, correct path instead - `order.line_ids.action_complete()`
+        - which cascades to the order-level completion once every line
+        is genuinely done (see test_all_lines_ready_marks_order_completed
+        for the established reference pattern). The assertion itself
+        (the display calculation) is unchanged."""
         order = self._order()
         order.action_accept()
         order.line_ids.action_accept()
         order.action_start_preparing()
         order.line_ids.action_start()
         order.line_ids.action_ready()
-        order.action_complete(bypass_check=True)
+        order.line_ids.action_complete(bypass_check=True)
         order.invalidate_recordset()
         order.sudo().total_fulfillment_minutes = 1095.8
 
@@ -1645,14 +1657,19 @@ class TestWorkflow(FlexSysKdsTestCommon):
         values; UI/display only.' Confirms total_fulfillment_minutes
         itself stays the exact, real, unrounded Float value regardless
         of how total_fulfillment_display formats it for the Timing
-        tab."""
+        tab.
+
+        TEST-BUG FIX ("CI Full Run" report): same setup fix as
+        test_fix2_total_fulfillment_display_matches_client_example
+        above - completes through the real line workflow instead of
+        an unearned direct order.action_complete()."""
         order = self._order()
         order.action_accept()
         order.line_ids.action_accept()
         order.action_start_preparing()
         order.line_ids.action_start()
         order.line_ids.action_ready()
-        order.action_complete(bypass_check=True)
+        order.line_ids.action_complete(bypass_check=True)
         order.invalidate_recordset()
         order.sudo().total_fulfillment_minutes = 1095.8
 
@@ -1666,14 +1683,18 @@ class TestWorkflow(FlexSysKdsTestCommon):
         """Confirms the sub-60-minute case correctly omits the hours
         part entirely ('Xm', not '0h Xm'), matching the same
         current_elapsed_display/elapsedLabel/elapsed() convention used
-        everywhere else."""
+        everywhere else.
+
+        TEST-BUG FIX ("CI Full Run" report): same setup fix as the two
+        tests above - real line-level completion instead of an
+        unearned direct order.action_complete()."""
         order = self._order()
         order.action_accept()
         order.line_ids.action_accept()
         order.action_start_preparing()
         order.line_ids.action_start()
         order.line_ids.action_ready()
-        order.action_complete(bypass_check=True)
+        order.line_ids.action_complete(bypass_check=True)
         order.invalidate_recordset()
         order.sudo().total_fulfillment_minutes = 45.0
 
@@ -1705,14 +1726,18 @@ class TestWorkflow(FlexSysKdsTestCommon):
     def test_item24_current_elapsed_display_empty_for_completed_order(self):
         """Confirms it's correctly empty/absent once an order is no
         longer active - 'للطلبات النشطة فقط' means it must NOT show a
-        stale elapsed time on a finished order."""
+        stale elapsed time on a finished order.
+
+        TEST-BUG FIX ("CI Full Run" report): same setup fix as the
+        total_fulfillment tests above - real line-level completion
+        instead of an unearned direct order.action_complete()."""
         order = self._order()
         order.action_accept()
         order.line_ids.action_accept()
         order.action_start_preparing()
         order.line_ids.action_start()
         order.line_ids.action_ready()
-        order.action_complete(bypass_check=True)
+        order.line_ids.action_complete(bypass_check=True)
         order.invalidate_recordset()
 
         self.assertFalse(order.current_elapsed_display)
@@ -2310,16 +2335,18 @@ class TestWorkflow(FlexSysKdsTestCommon):
         """Confirms the kiosk's own HTML root element gets dir='rtl'
         lang='ar' for an Arabic station and dir='ltr' lang='en' for an
         English one - required for functional RTL (item 8), not just
-        translated text."""
-        import re
-        from odoo.addons.flexsys_kds.controllers.kds_kiosk import _KIOSK_HTML_TEMPLATE
-        vals = {
-            'station_name': 'Test', 'branch_name': '', 'company_name': '',
-            'station_code': 'X', 'token': 'y',
-            'branch_label': 'Branch', 'time_label': 'Time',
-        }
-        result_en = _KIOSK_HTML_TEMPLATE % {**vals, 'kiosk_lang': 'en', 'kiosk_dir': 'ltr'}
-        result_ar = _KIOSK_HTML_TEMPLATE % {**vals, 'kiosk_lang': 'ar', 'kiosk_dir': 'rtl'}
+        translated text.
+
+        TEST INFRASTRUCTURE ("CI Recovery Round 4"): switched to the
+        new centralized `_render_kiosk_template()` helper (common.py)
+        - this test's own vals dict was already correct/complete, this
+        is purely consolidation to prevent the exact class of defect
+        found elsewhere in the suite (a stale, hand-built placeholder
+        dict) from recurring here too as the template evolves further."""
+        result_en = self._render_kiosk_template(kiosk_lang='en', kiosk_dir='ltr',
+                                                  branch_label='Branch', time_label='Time')
+        result_ar = self._render_kiosk_template(kiosk_lang='ar', kiosk_dir='rtl',
+                                                  branch_label='Branch', time_label='Time')
         self.assertIn('<html lang="en" dir="ltr">', result_en)
         self.assertIn('<html lang="ar" dir="rtl">', result_ar)
 
@@ -2328,15 +2355,12 @@ class TestWorkflow(FlexSysKdsTestCommon):
         KIOSK_LABELS_AR when kiosk_lang is 'ar', and that a sample of
         the client's own explicitly-named labels (ALL, NEW, PREPARING,
         READY, COMPLETED, CANCELLED, START, COMPLETE, 'No orders for
-        this filter.') are present in Arabic in that dictionary."""
-        import re
-        from odoo.addons.flexsys_kds.controllers.kds_kiosk import _KIOSK_HTML_TEMPLATE
-        vals = {
-            'station_name': 'Test', 'branch_name': '', 'company_name': '',
-            'station_code': 'X', 'token': 'y', 'kiosk_lang': 'ar', 'kiosk_dir': 'rtl',
-            'branch_label': 'الفرع', 'time_label': 'الوقت',
-        }
-        result = _KIOSK_HTML_TEMPLATE % vals
+        this filter.') are present in Arabic in that dictionary.
+
+        TEST INFRASTRUCTURE ("CI Recovery Round 4"): same consolidation
+        as the test just above - switched to the centralized helper."""
+        result = self._render_kiosk_template(
+            kiosk_lang='ar', kiosk_dir='rtl', branch_label='الفرع', time_label='الوقت')
         self.assertIn("KIOSK_LANG === 'ar' ? KIOSK_LABELS_AR", result)
         for arabic_term in ('الكل', 'جديد', 'قيد التحضير', 'جاهز', 'مكتمل', 'ملغى',
                              'بدء', 'إكمال', 'لا توجد طلبات لهذا الفلتر.'):

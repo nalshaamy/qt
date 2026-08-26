@@ -105,6 +105,41 @@ class KdsStation(models.Model):
 
     printer_ids = fields.One2many('kds.printer', 'station_id', string='Printers')
     printer_count = fields.Integer(compute='_compute_counts')
+
+    # ---------------------------------------------------------------
+    # MERGED FROM PROVEN POC (flexsys_kds_poc_1d) - confirmed PASS on
+    # both Internal KDS and Public Kiosk, printing successfully even
+    # with Odoo Preparation Printers disabled. Deliberately separate
+    # from printer_ids/kds.printer above (the legacy Print Agent
+    # architecture) - this is the target Direct Network / future Odoo
+    # IoT architecture per "Printing Architecture Baseline v1". Both
+    # exist side by side for now; kds.printer is not touched or
+    # deprecated by this merge.
+    # ---------------------------------------------------------------
+    flexsys_printing_method = fields.Selection([
+        ('direct_network', 'Direct Network (Epson ePOS)'),
+        ('iot', 'Odoo IoT'),
+    ], string='Printing Method', default='direct_network',
+        help="How this station's own Print button reaches a physical "
+             "printer. 'Direct Network' is the current, proven path - "
+             "'Odoo IoT' is reserved for a future, separate POC and is "
+             "not yet wired to any print logic.")
+
+    flexsys_printer_ip = fields.Char(
+        string='Printer IP',
+        help="This station's own Epson ePOS printer IP address on the "
+             "local network. Used directly with Odoo's own native "
+             "backend ePOS flow - no pos.printer record required. "
+             "Only relevant when Printing Method is 'Direct Network'.")
+
+    flexsys_use_local_network_access = fields.Boolean(
+        string='Use Local Network Access', default=True,
+        help="Whether the browser's own Local Network Access "
+             "permission flow is used when reaching this station's "
+             "printer IP (Chrome's own permission model for a page "
+             "reaching a local network device). Leave enabled unless "
+             "a specific deployment is confirmed not to need it.")
+
     user_ids = fields.Many2many(
         'res.users', 'kds_station_user_rel', 'station_id', 'user_id',
         string='Assigned Users',

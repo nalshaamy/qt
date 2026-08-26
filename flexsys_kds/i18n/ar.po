@@ -1,2539 +1,1871 @@
-# Translation of Odoo Server.
-# This file contains the translation of the following modules:
-#	* flexsys_kds
+# Arabic translation for FlexSys KDS (flexsys_kds)
+# Covers every Python-side _()-wrapped runtime message, plus - as of
+# the "Arabic Backend Finalization" sweep - every backend view field
+# label/help text, selection option label, and view/menu string swept
+# across the module's own standard Odoo backend screens. See
+# i18n/GLOSSARY.md for the authoritative terminology reference and for
+# what remains intentionally outside this file (the Internal KDS
+# Screen and Public Kiosk operational labels, which use their own
+# separate, already-complete bilingual JS/Python dictionaries, not
+# Odoo's .po mechanism).
 #
+# REGENERATED ("Arabic Localization & RTL Specification", item 2,
+# "Regenerate Translation Inventory"): rebuilt against the current,
+# cleaned codebase - every msgid below is confirmed, via AST-accurate
+# parsing (not a text guess), to have an actual _() call site in the
+# current production Python. Stale entries from removed functionality
+# (e.g. the removed printer connection-test simulation message, from
+# the now-deleted action_test_connection()) have been removed.
+# Existing valid Arabic translations were preserved wherever their own
+# msgid still exists.
 msgid ""
 msgstr ""
-"Project-Id-Version: Odoo Server 19.0\n"
-"Report-Msgid-Bugs-To: \n"
+"Project-Id-Version: flexsys_kds\n"
 "POT-Creation-Date: 2026-08-24 00:00+0000\n"
 "PO-Revision-Date: 2026-08-24 00:00+0000\n"
-"Last-Translator: FlexSys\n"
-"Language-Team: Arabic\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=6; plural=n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 ? 4 : 5;\n"
+"Plural-Forms: nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5);\n"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
-#, python-format
-msgid "%(product)s (qty %(old_qty)s) fully cancelled - POS quantity decrease exceeded this line's own full share, cascading into earlier production history"
-msgstr "تم إلغاء %(product)s بالكامل (الكمية %(old_qty)s) - تجاوز تخفيض الكمية في نقطة البيع كامل حصة هذا السطر، وامتد إلى سجل الإنتاج السابق"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "%(product)s (qty %(old_qty)s, previously %(state)s) fully cancelled - POS quantity decrease absorbed this entire portion"
 msgstr "تم إلغاء %(product)s بالكامل (الكمية %(old_qty)s، كانت %(state)s) - امتص تخفيض الكمية في نقطة البيع هذا الجزء بالكامل"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
-#, python-format
-msgid "%(product)s (qty %(old_qty)s, previously %(state)s) fully cancelled - POS quantity decrease cascaded into and absorbed this entire portion"
-msgstr "تم إلغاء %(product)s بالكامل (الكمية %(old_qty)s، كانت %(state)s) - امتد تخفيض الكمية في نقطة البيع وامتص هذا الجزء بالكامل"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "%(product)s fully refunded after original line was already completed - informational only, no production change"
 msgstr "تم استرداد %(product)s بالكامل بعد أن كان السطر الأصلي مكتملًا بالفعل - للعلم فقط، لا تغيير على الإنتاج"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "%(product)s fully removed from POS order (quantity: %(qty)s -> 0, cancelled_qty: %(qty)s)"
 msgstr "تمت إزالة %(product)s بالكامل من طلب نقطة البيع (الكمية: %(qty)s -> 0، الكمية الملغاة: %(qty)s)"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "%(product)s modified after original line was already %(state)s (qty %(old_qty)s -> %(new_qty)s) - added as a new delta line instead of rewriting existing production history"
 msgstr "تم تعديل %(product)s بعد أن كان السطر الأصلي %(state)s بالفعل (الكمية %(old_qty)s -> %(new_qty)s) - أُضيف كسطر فرق جديد بدلاً من إعادة كتابة سجل الإنتاج الحالي"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "%(product)s partially refunded after original line was already completed (qty %(old_qty)s -> %(new_qty)s) - informational only, no production change"
 msgstr "تم استرداد %(product)s جزئيًا بعد أن كان السطر الأصلي مكتملًا بالفعل (الكمية %(old_qty)s -> %(new_qty)s) - للعلم فقط، لا تغيير على الإنتاج"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
-#, python-format
-msgid "%(product)s reduced after original line was already %(state)s (qty %(old_qty)s -> %(new_qty)s) - decrease cascaded into this portion, no production reopened"
-msgstr "تم تخفيض %(product)s بعد أن كان السطر الأصلي بالفعل %(state)s (الكمية %(old_qty)s -> %(new_qty)s) - امتد التخفيض إلى هذا الجزء، دون إعادة فتح الإنتاج"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "%(product)s reduced after original line was already %(state)s (qty %(old_qty)s -> %(new_qty)s) - quantity reduced in place, no production reopened"
 msgstr "تم تخفيض %(product)s بعد أن كان السطر الأصلي %(state)s بالفعل (الكمية %(old_qty)s -> %(new_qty)s) - تم تخفيض الكمية في مكانها، دون إعادة فتح الإنتاج"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "%(product)s reduced after original line was already completed and the POS order closed (qty %(old_qty)s -> %(new_qty)s) - no new preparation delta created, completed history preserved"
 msgstr "تم تخفيض %(product)s بعد أن كان السطر الأصلي مكتملًا وأُغلق طلب نقطة البيع (الكمية %(old_qty)s -> %(new_qty)s) - لم يُنشأ فرق تحضير جديد، وسجل الإكمال محفوظ"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "%(product)s reduced by refund (qty %(old_qty)s -> %(new_qty)s, refund order %(ref)s)"
 msgstr "تم تخفيض %(product)s بسبب استرداد (الكمية %(old_qty)s -> %(new_qty)s، طلب الاسترداد %(ref)s)"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
-#, python-format
-msgid "%(product)s reduced to zero in POS (quantity: %(qty)s -> 0, cancelled_qty: %(qty)s)"
-msgstr "تم تخفيض %(product)s إلى صفر في نقطة البيع (الكمية: %(qty)s -> 0، الكمية الملغاة: %(qty)s)"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order_line.py:0
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
 #, python-format
 msgid "%(qty)s x %(product)s -> %(station)s"
 msgstr "%(qty)s x %(product)s <- %(station)s"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "%s added after order was sent"
 msgstr "تمت إضافة %s بعد إرسال الطلب"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "%s updated (qty/notes changed after send)"
 msgstr "تم تعديل %s (تغيّرت الكمية أو الملاحظات بعد الإرسال)"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_printer.py:0
+#: code:addons/flexsys_kds/dels/kds_printer.py:0
 #, python-format
 msgid "(%(length)d characters - select and copy the line above only)"
 msgstr "(%(length)d حرفًا - حدد وانسخ السطر أعلاه فقط)"
 
 #. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-msgid ". The replacement job was created as its own, separate record on the station's backup printer - group this screen by Order to see it listed right next to this one."
-msgstr ". تم إنشاء المهمة البديلة كسجل مستقل على الطابعة الاحتياطية للمحطة - جمّع هذه الشاشة حسب الطلب لرؤيتها بجوار هذه المهمة مباشرة."
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_print_job.py:0
+#: code:addons/flexsys_kds/dels/kds_print_job.py:0
+#, python-format
 msgid "A reason is required to reprint a FlexSys KDS ticket."
 msgstr "يجب تحديد سبب لإعادة طباعة تذكرة FlexSys KDS."
 
 #. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Accept"
-msgstr "قبول"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__state__accepted
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order_line__state__accepted
-msgid "Accepted"
-msgstr "مقبول"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__accepted_time
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__accepted_time
-msgid "Accepted Time"
-msgstr "وقت القبول"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__acknowledged_at
-msgid "Acknowledged At"
-msgstr "تاريخ التأكيد"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_expeditor_task__active
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__active
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_source_tag__active
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_printer__active
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_routing_rule__active
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__active
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_analytics_search
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_search
-msgid "Active"
-msgstr "نشط"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__active_order_count
-msgid "Active Order Count"
-msgstr "عدد الطلبات النشطة"
-
-#. module: flexsys_kds
-#: model:ir.actions.act_window,name:flexsys_kds.action_kds_order_active
-#: model:ir.ui.menu,name:flexsys_kds.menu_kds_order_active
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_list
-msgid "Active Orders"
-msgstr "الطلبات النشطة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_expeditor_task__packing_duration
-msgid "ACTIVE PACKING WORK ONLY: start_time -> ready_time. This is NOT the same measurement as Packing SLA (sla_status below), which also includes the wait between the order becoming Available and someone actually starting to pack it. Formula: Packing Wait Time + Packing Duration = Packing SLA elapsed time. Kept deliberately separate from kds.order.line's own prep_duration (Production Time) too, so Analytics can distinguish all three rather than one blended fulfillment number: Production Time, Packing Wait Time, and Packing Duration (active work)."
-msgstr "وقت التعبئة الفعلي فقط: من وقت البدء إلى وقت الجاهزية. هذا يختلف عن SLA التعبئة (أدناه)، الذي يشمل أيضًا وقت الانتظار بين توفّر الطلب وبدء أحدهم فعليًا بتعبئته. المعادلة: وقت انتظار التعبئة + مدة التعبئة = الوقت المنقضي لـSLA التعبئة. يُحفظ منفصلًا عمدًا عن مدة التحضير الخاصة بصنف الطلب، ليتمكن التحليل من تمييز الأوقات الثلاثة بدلًا من رقم إنجاز واحد مدمج: وقت الإنتاج، وقت انتظار التعبئة، ومدة التعبئة (العمل الفعلي)."
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order_line__line_change__added
-msgid "Added"
-msgstr "مضاف"
-
-#. module: flexsys_kds
-#: model:res.groups,name:flexsys_kds.group_kds_administrator
-msgid "Administrator"
-msgstr "المسؤول"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__pos_config__kds_send_trigger__payment
-msgid "After Payment"
-msgstr "بعد الدفع"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-msgid "after repeated failures on"
-msgstr "بعد تكرار حالات الفشل على"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-msgid "Agent / Lease"
-msgstr "الوكيل / الحيازة"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_list
-msgid "Agent Last Seen"
-msgstr "آخر ظهور للوكيل"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_list
-msgid "Agent Status"
-msgstr "حالة الوكيل"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/controllers/kds.py:0
-msgid "agent_id is required to claim jobs"
-msgstr "مطلوب agent_id للمطالبة بالمهام"
-
-#. module: flexsys_kds
-#: model:ir.actions.act_window,name:flexsys_kds.action_kds_order_analytics
-#: model:ir.ui.menu,name:flexsys_kds.menu_kds_analytics
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Analytics"
-msgstr "التحليلات"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order.py:0
-msgid "another station"
-msgstr "محطة أخرى"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "Anyone with this URL can view and operate this station's\n                                screen with no Odoo login at all. Treat it like a password:\n                                don't share it outside the physical device it's set up on.\n                                Regenerating instantly invalidates the old URL."
-msgstr "أي شخص يملك هذا الرابط يمكنه عرض وتشغيل شاشة هذه المحطة دون أي تسجيل دخول إلى Odoo. تعامل معه كأنه كلمة مرور: لا تشاركه خارج الجهاز الفعلي المُعدّ عليه. إعادة الإنشاء تُبطل الرابط القديم فورًا."
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "Anyone with this URL can view and operate this station's screen with no Odoo login at all. Treat it like a password: don't share it outside the physical device it's set up on. Regenerating instantly invalidates the old URL."
-msgstr "يمكن لأي شخص يملك هذا الرابط عرض شاشة هذه المحطة وتشغيلها دون تسجيل دخول إلى Odoo. تعامل معه ككلمة مرور: لا تشاركه خارج الجهاز الفعلي المخصص له. إعادة إنشاء الرابط تُبطل الرابط القديم فورًا."
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__source__api
-msgid "API"
-msgstr "API"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "Archived"
-msgstr "مؤرشف"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__user_ids
-msgid "Assigned Users"
-msgstr "المستخدمون المعيّنون"
-
-#. module: flexsys_kds
-#: model:ir.actions.act_window,name:flexsys_kds.action_kds_event
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__event_ids
-#: model:ir.ui.menu,name:flexsys_kds.menu_kds_audit_log
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_event_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Audit Log"
-msgstr "سجل التدقيق"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__auto_accept_orders
-msgid "Auto Accept Orders"
-msgstr "القبول التلقائي للطلبات"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__auto_print
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_print_job__job_type__auto
-msgid "Auto Print"
-msgstr "الطباعة التلقائية"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_expeditor_task__available_time
-msgid "Available Since"
-msgstr "متاح منذ"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__avg_prep_time
-msgid "Avg. Prep Time (min)"
-msgstr "متوسط وقت التحضير (دقيقة)"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_printer__is_backup
-msgid "Backup / Fallback Printer"
-msgstr "طابعة احتياطية / بديلة"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_list
-msgid "Backup Printer"
-msgstr "الطابعة الاحتياطية"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__company_id
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_list
-msgid "Branch"
-msgstr "الفرع"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__company_id
-msgid "Branch / Company"
-msgstr "الفرع / الشركة"
-
-#. module: flexsys_kds
-#: model:res.groups,name:flexsys_kds.group_kds_branch_manager
-msgid "Branch Manager"
-msgstr "مدير الفرع"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__source__call_center
-msgid "Call Center"
-msgstr "مركز الاتصال"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Cancel"
-msgstr "إلغاء"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__cancel_reason
-msgid "Cancel Reason"
-msgstr "سبب الإلغاء"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_expeditor_task__state__cancelled
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__state__cancelled
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order_line__state__cancelled
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_print_job__status__cancelled
-msgid "Cancelled"
-msgstr "ملغى"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__cancelled_at
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__cancelled_at
-msgid "Cancelled At"
-msgstr "وقت الإلغاء"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__cancelled_by
-msgid "Cancelled By"
-msgstr "أُلغي بواسطة"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order_line.py:0
-#, python-format
-msgid "Cancelled: %(qty)s x %(product)s - %(reason)s"
-msgstr "ملغى: %(qty)s x %(product)s - %(reason)s"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order_line.py:0
-#, python-format
-msgid "Cancelled: %(qty)s x %(product)s - %(reason)s (removed from POS after the original line was already completed - order remains Completed, no production reopened)"
-msgstr "ملغى: %(qty)s x %(product)s - %(reason)s (أُزيل من نقطة البيع بعد أن كان السطر الأصلي مكتملًا - الطلب يبقى مكتملًا، دون إعادة فتح الإنتاج)"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__claimed_at
-msgid "Claimed At"
-msgstr "وقت الاستلام"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-msgid "Claimed By (Agent)"
-msgstr "استلمها الوكيل"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__claimed_by_agent
-msgid "Claimed By (Agent/Device ID)"
-msgstr "استلمها (معرّف الوكيل/الجهاز)"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_source_tag__code
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_type_tag__code
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__code
-msgid "Code"
-msgstr "الرمز"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_routing_rule__company_id
-msgid "Company"
-msgstr "الشركة"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Complete"
-msgstr "إكمال"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_expeditor_task__state__completed
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__state__completed
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order_line__state__completed
-msgid "Completed"
-msgstr "مكتمل"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__completed_at
-msgid "Completed At"
-msgstr "وقت الإكمال"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_expeditor_task__completion_time
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__completion_time
-msgid "Completion Time"
-msgstr "وقت الإكمال"
-
-#. module: flexsys_kds
-#: model:ir.ui.menu,name:flexsys_kds.menu_kds_configuration
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-msgid "Configuration"
-msgstr "الإعدادات"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "CONFIGURATION ERROR: Auto Print is enabled for station '%s' but it has no printer configured - no print job was created. Add a printer to this station or disable Auto Print."
 msgstr "خطأ في الإعداد: الطباعة التلقائية مفعّلة للمحطة '%s' لكن لا توجد طابعة مُعدَّة لها - لم تُنشأ مهمة طباعة. أضف طابعة لهذه المحطة أو عطّل الطباعة التلقائية."
 
 #. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__copies
-msgid "Copies"
-msgstr "عدد النسخ"
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
+#, python-format
+msgid "Cancelled: %(qty)s x %(product)s - %(reason)s"
+msgstr "ملغى: %(qty)s x %(product)s - %(reason)s"
 
 #. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_list
-msgid "Created On"
-msgstr "تاريخ الإنشاء"
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
+#, python-format
+msgid "Cancelled: %(qty)s x %(product)s - %(reason)s (removed from POS after the original line was already completed - order remains Completed, no production reopened)"
+msgstr "ملغى: %(qty)s x %(product)s - %(reason)s (أُزيل من نقطة البيع بعد أن كان السطر الأصلي مكتملًا - الطلب يبقى مكتملًا، دون إعادة فتح الإنتاج)"
 
 #. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__created_time
-msgid "Created Time"
-msgstr "وقت الإنشاء"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__current_elapsed_display
-msgid "Current Elapsed Display"
-msgstr "عرض الوقت المنقضي الحالي"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Current Elapsed Time"
-msgstr "الوقت المنقضي الحالي"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_print_job__reason__customer_change
-msgid "Customer Change"
-msgstr "تغيير من العميل"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__customer_name
-msgid "Customer Name"
-msgstr "اسم العميل"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_pos_category__kds_station_id
-#: model:ir.model.fields,field_description:flexsys_kds.field_product_category__kds_station_id
-#: model:ir.model.fields,field_description:flexsys_kds.field_product_template__kds_station_id
-msgid "Default KDS Station"
-msgstr "محطة KDS الافتراضية"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_printer__is_default
-msgid "Default Printer"
-msgstr "طابعة افتراضية"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_product_template__kds_station_id
-msgid "Default production station for this product. Overridden by matching FlexSys KDS routing rules if any."
-msgstr "محطة الإنتاج الافتراضية لهذا المنتج. تُستبدَل بقواعد توجيه FlexSys KDS المطابقة إن وُجدت."
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__order_type__delivery
-msgid "Delivery"
-msgstr "توصيل"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__source__delivery_app
-msgid "Delivery Application"
-msgstr "تطبيق توصيل"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__description
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "Description"
-msgstr "الوصف"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_routing_rule_form
-msgid "Destination"
-msgstr "الوجهة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_routing_rule__station_id
-msgid "Destination Station"
-msgstr "محطة الوجهة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__order_type__dine_in
-msgid "Dine In"
-msgstr "تناول في المطعم"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__kiosk_disabled
-msgid "Disable Public Kiosk Access"
-msgstr "تعطيل الوصول إلى الكشك العام"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_print_job__status__dispatched
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_search
-msgid "Dispatched"
-msgstr "تم الإرسال"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__dispatched_at
-msgid "Dispatched At"
-msgstr "وقت الإرسال"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__display_job_type
-msgid "Display Job Type"
-msgstr "نوع المهمة المعروض"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-msgid "docs/PRINT_AGENT.md"
-msgstr "docs/PRINT_AGENT.md"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__order_type__drive_thru
-msgid "Drive Thru"
-msgstr "استلام من السيارة"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_routing_rule_form
-msgid "Empty criterion = Any •\n                        Multiple values in the same criterion = OR •\n                        Different criteria = AND"
-msgstr "المعيار الفارغ = أي قيمة • تعدد القيم داخل نفس المعيار = أو • المعايير المختلفة = و"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_routing_rule_form
-msgid "Empty criterion = Any • Multiple values in the same criterion = OR • Different criteria = AND"
-msgstr "المعيار الفارغ = أي قيمة • تعدد القيم داخل نفس المعيار = أو • المعايير المختلفة = و"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_station__kiosk_language__en
-msgid "English"
-msgstr "الإنجليزية"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__error
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_printer__status__error
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-msgid "Error"
-msgstr "خطأ"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__escalated
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_search
-msgid "Escalated"
-msgstr "تم التصعيد"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-msgid "Escalated to a backup printer"
-msgstr "تم التصعيد إلى طابعة احتياطية"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_event__event_type
-msgid "Event Type"
-msgstr "نوع الحدث"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Expeditor / Packing"
-msgstr "التجميع / التعبئة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__expeditor_task_ids
-msgid "Expeditor / Packing Tasks"
-msgstr "مهام التجميع / التعبئة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__expeditor_enabled
-msgid "Expeditor Enabled"
-msgstr "التجميع مفعّل"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_expeditor_task__station_id
-msgid "Expeditor Station"
-msgstr "محطة التجميع"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_expeditor_task.py:0
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
+#: code:addons/flexsys_kds/dels/kds_expeditor_task.py:0
+#, python-format
 msgid "Expeditor/Packing"
 msgstr "التجهيز النهائي/التعبئة"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_expeditor_task.py:0
+#: code:addons/flexsys_kds/dels/kds_expeditor_task.py:0
+#, python-format
 msgid "Expeditor/Packing override"
 msgstr "تجاوز التجهيز النهائي/التعبئة"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
+#, python-format
 msgid "Expeditor/Packing task created - all production lines Ready"
 msgstr "أُنشئت مهمة التجهيز النهائي/التعبئة - جميع سطور الإنتاج جاهزة"
 
 #. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_print_job__status__failed
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_search
-msgid "Failed"
-msgstr "فشل"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-msgid "Failure / Retry"
-msgstr "الفشل / إعادة المحاولة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_product_category__kds_station_id
-msgid "Fallback production station for products in this category."
-msgstr "محطة الإنتاج الاحتياطية لمنتجات هذه الفئة."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_pos_category__kds_station_id
-msgid "Fallback production station for products in this POS category, used when no FlexSys KDS routing rule matches. This is the category cashiers/staff actually organize products under in the POS - usually the right place to set a default, rather than the internal inventory category."
-msgstr "محطة الإنتاج الاحتياطية لمنتجات هذه الفئة في نقطة البيع، تُستخدم عند عدم مطابقة أي قاعدة توجيه FlexSys KDS. هذه هي الفئة التي ينظّم الكاشير/الموظفون المنتجات ضمنها فعليًا في نقطة البيع - وعادةً هي المكان الصحيح لتعيين افتراضي، بدلًا من فئة المخزون الداخلية."
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_print_job.py:0
+#: code:addons/flexsys_kds/dels/kds_print_job.py:0
 #, python-format
 msgid "Fallback to backup printer '%s' after repeated failures"
 msgstr "التحويل إلى الطابعة البديلة '%s' بعد تكرار الفشل"
 
 #. module: flexsys_kds
-#: model:ir.ui.menu,name:flexsys_kds.menu_kds_root
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "FlexSys KDS"
-msgstr "FlexSys KDS"
-
-#. module: flexsys_kds
-#: model:ir.model,name:flexsys_kds.model_kds_access_mixin
-msgid "FlexSys KDS Access Checks"
-msgstr "فحوصات الوصول في FlexSys KDS"
-
-#. module: flexsys_kds
-#: model:ir.model,name:flexsys_kds.model_kds_event
-msgid "FlexSys KDS Audit Log"
-msgstr "سجل تدقيق FlexSys KDS"
-
-#. module: flexsys_kds
-#: model:ir.model,name:flexsys_kds.model_kds_expeditor_task
-msgid "FlexSys KDS Expeditor / Packing Task"
-msgstr "مهمة التجميع / التعبئة في FlexSys KDS"
-
-#. module: flexsys_kds
-#: model:ir.model,name:flexsys_kds.model_kds_order
-#: model:ir.model.fields,field_description:flexsys_kds.field_pos_order__kds_order_id
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "FlexSys KDS Order"
-msgstr "طلب FlexSys KDS"
-
-#. module: flexsys_kds
-#: model:ir.model,name:flexsys_kds.model_kds_order_line
-msgid "FlexSys KDS Order Line"
-msgstr "سطر طلب FlexSys KDS"
-
-#. module: flexsys_kds
-#: model:ir.model,name:flexsys_kds.model_kds_order_source_tag
-msgid "FlexSys KDS Order Source (routing tag)"
-msgstr "مصدر طلب FlexSys KDS (وسم توجيه)"
-
-#. module: flexsys_kds
-#: model:ir.model,name:flexsys_kds.model_kds_order_type_tag
-msgid "FlexSys KDS Order Type (routing tag)"
-msgstr "نوع طلب FlexSys KDS (وسم توجيه)"
-
-#. module: flexsys_kds
-#: model:ir.model,name:flexsys_kds.model_kds_print_job
-msgid "FlexSys KDS Print Job"
-msgstr "مهمة طباعة FlexSys KDS"
-
-#. module: flexsys_kds
-#: model:ir.model,name:flexsys_kds.model_kds_printer
-msgid "FlexSys KDS Printer"
-msgstr "طابعة FlexSys KDS"
-
-#. module: flexsys_kds
-#: model:ir.model,name:flexsys_kds.model_kds_printer_hub
-msgid "FlexSys KDS Printers Hub"
-msgstr "مركز طابعات FlexSys KDS"
-
-#. module: flexsys_kds
-#: model:ir.model,name:flexsys_kds.model_kds_routing_rule
-msgid "FlexSys KDS Routing Rule"
-msgstr "قاعدة توجيه FlexSys KDS"
-
-#. module: flexsys_kds
-#: model:ir.model,name:flexsys_kds.model_kds_station
-msgid "FlexSys KDS Station"
-msgstr "محطة FlexSys KDS"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_pos_config__kds_station_ids
-#: model:ir.model.fields,field_description:flexsys_kds.field_res_users__kds_station_ids
-msgid "FlexSys KDS Stations"
-msgstr "محطات FlexSys KDS"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_station__company_id
-msgid "FlexSys KDS uses res.company as the Branch entity for MVP scope."
-msgstr "يستخدم FlexSys KDS شركة Odoo (res.company) ككيان الفرع في هذا النطاق."
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order_line.py:0
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
 #, python-format
 msgid "FlexSys KDS: %s cannot be changed by writing directly - use the Accept/Start/Ready/Cancel/Hold actions instead."
 msgstr "FlexSys KDS: لا يمكن تغيير %s بالكتابة المباشرة - استخدم إجراءات قبول/بدء/جاهز/إلغاء/تعليق بدلاً من ذلك."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
 #, python-format
 msgid "FlexSys KDS: %s cannot be changed by writing directly - use the Accept/Start/Ready/Cancel/Hold/Reopen actions instead."
 msgstr "FlexSys KDS: لا يمكن تغيير %s بالكتابة المباشرة - استخدم إجراءات قبول/بدء/جاهز/إلغاء/تعليق/إعادة فتح بدلاً من ذلك."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order_line.py:0
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
 #, python-format
 msgid "FlexSys KDS: cannot cancel line '%(product)s' (already %(state)s)."
 msgstr "FlexSys KDS: لا يمكن إلغاء الصنف '%(product)s' (حالته الحالية %(state)s)."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
 #, python-format
 msgid "FlexSys KDS: cannot complete order %(name)s yet - %(stations)s still has active production. Each station must reach Ready and Complete independently; the overall order only completes once every station has."
 msgstr "FlexSys KDS: لا يمكن إكمال الطلب %(name)s بعد - لا تزال %(stations)s قيد الإنتاج. يجب أن تصل كل محطة إلى جاهز وتُكمل بشكل مستقل؛ يكتمل الطلب الكلي فقط بعد أن تُكمل كل المحطات."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_expeditor_task.py:0
+#: code:addons/flexsys_kds/dels/kds_expeditor_task.py:0
 #, python-format
 msgid "FlexSys KDS: cannot complete the Expeditor/Packing task for order %s - a required production line is no longer Ready. Refresh and try again once production is complete."
 msgstr "FlexSys KDS: لا يمكن إكمال مهمة التجهيز النهائي/التعبئة للطلب %s - أحد سطور الإنتاج المطلوبة لم يعد جاهزًا. أعد التحميل وحاول مجددًا بعد اكتمال الإنتاج."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
 #, python-format
 msgid "FlexSys KDS: cannot finalize order %s via Expeditor - a required production line is not yet Ready."
 msgstr "FlexSys KDS: لا يمكن إنهاء الطلب %s عبر التجهيز النهائي - أحد سطور الإنتاج المطلوبة ليس جاهزًا بعد."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order_line.py:0
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
 #, python-format
 msgid "FlexSys KDS: cannot move line '%(product)s' from '%(old)s' to '%(new)s'."
 msgstr "FlexSys KDS: لا يمكن نقل الصنف '%(product)s' من '%(old)s' إلى '%(new)s'."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
 #, python-format
 msgid "FlexSys KDS: cannot move order %(name)s from '%(old)s' to '%(new)s'."
 msgstr "FlexSys KDS: لا يمكن نقل الطلب %(name)s من '%(old)s' إلى '%(new)s'."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_expeditor_task.py:0
+#: code:addons/flexsys_kds/dels/kds_expeditor_task.py:0
 #, python-format
 msgid "FlexSys KDS: cannot move the Expeditor/Packing task for order %(order)s from '%(old)s' to '%(new)s'."
 msgstr "FlexSys KDS: لا يمكن نقل مهمة التجهيز النهائي/التعبئة للطلب %(order)s من '%(old)s' إلى '%(new)s'."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
 #, python-format
 msgid "FlexSys KDS: order %s has no active Expeditor/Packing station - use the normal per-station Complete action instead."
 msgstr "FlexSys KDS: الطلب %s ليس له محطة تجهيز نهائي/تعبئة نشطة - استخدم إجراء الإكمال العادي لكل محطة بدلاً من ذلك."
 
 #. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__source__flexsys
-msgid "FlexSys Orders"
-msgstr "طلبات FlexSys"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-msgid "for the full protocol."
-msgstr "للاطلاع على البروتوكول الكامل."
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_print_job__scope__full_order
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Full Order"
-msgstr "الطلب كاملًا"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "Fully refunded in POS (refund order %s)"
 msgstr "مُسترَد بالكامل في نقطة البيع (طلب الاسترداد %s)"
 
 #. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Hold"
-msgstr "تعليق"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_routing_rule_form
-msgid "How matching works:"
-msgstr "طريقة المطابقة:"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_print_job__claimed_by_agent
-msgid "Identifier the print agent process itself supplies when claiming this job - not the printer's own identity (a printer could in principle be served by more than one agent process/device over its lifetime)."
-msgstr "المعرّف الذي توفره عملية وكيل الطباعة نفسها عند استلام هذه المهمة - وليس هوية الطابعة نفسها (يمكن من حيث المبدأ أن تخدم الطابعة أكثر من عملية وكيل/جهاز على مدار عمرها)."
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Internal Notes"
-msgstr "ملاحظات داخلية"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Internal operational notes for this order."
-msgstr "ملاحظات تشغيلية داخلية لهذا الطلب."
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/controllers/kds.py:0
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
+#, python-format
 msgid "Invalid printer or agent key"
 msgstr "طابعة أو مفتاح وكيل (agent key) غير صالح"
 
 #. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_routing_rule__product_categ_ids
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_routing_rule_list
-msgid "Inventory Categories"
-msgstr "فئات المخزون"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_printer__ip_address
-msgid "IP / Network Address"
-msgstr "عنوان IP / الشبكة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__is_expeditor
-msgid "Is Expeditor / Packing Station"
-msgstr "محطة تجميع / تعبئة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__is_expeditor_ready
-msgid "Is Expeditor Ready"
-msgstr "جاهز للتجميع"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__is_fully_completed
-msgid "Is Fully Completed"
-msgstr "مكتمل بالكامل"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_search
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_hub_form
-msgid "Job"
-msgstr "المهمة"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/controllers/kds.py:0
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
+#, python-format
 msgid "Job not found for this printer"
 msgstr "مهمة الطباعة غير موجودة لهذه الطابعة"
 
 #. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__job_type
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_search
-msgid "Job Type"
-msgstr "نوع المهمة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_station__operating_mode__kds_printer
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "KDS + Printer"
-msgstr "KDS + طابعة"
-
-#. module: flexsys_kds
-#: model:ir.rule,name:flexsys_kds.rule_kds_expeditor_task_administrator
-msgid "KDS Expeditor Task: administrator unrestricted"
-msgstr "مهمة تجميع KDS: المسؤول دون قيود"
-
-#. module: flexsys_kds
-#: model:ir.rule,name:flexsys_kds.rule_kds_expeditor_task_branch_manager
-msgid "KDS Expeditor Task: branch manager sees own company"
-msgstr "مهمة تجميع KDS: مدير الفرع يرى شركته فقط"
-
-#. module: flexsys_kds
-#: model:ir.rule,name:flexsys_kds.rule_kds_expeditor_task_operator
-msgid "KDS Expeditor Task: operator/supervisor restricted to assigned stations"
-msgstr "مهمة تجميع KDS: المشغّل/المشرف مقيّد بالمحطات المعيّنة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_pos_order__kds_last_processed_send_generation
-msgid "Kds Last Processed Send Generation"
-msgstr "آخر جيل إرسال KDS تمت معالجته"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_pos_order__kds_last_processed_send_signal
-msgid "Kds Last Processed Send Signal"
-msgstr "آخر إشارة إرسال KDS تمت معالجتها"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_station__operating_mode__kds_only
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "KDS Only"
-msgstr "KDS فقط"
-
-#. module: flexsys_kds
-#: model:res.groups,name:flexsys_kds.group_kds_operator
-msgid "KDS Operator"
-msgstr "مشغّل KDS"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_list
-msgid "KDS Order"
-msgstr "طلب KDS"
-
-#. module: flexsys_kds
-#: model:ir.rule,name:flexsys_kds.rule_kds_order_line_administrator
-msgid "KDS Order Line: administrator unrestricted"
-msgstr "صنف طلب KDS: المسؤول دون قيود"
-
-#. module: flexsys_kds
-#: model:ir.rule,name:flexsys_kds.rule_kds_order_line_branch_manager
-msgid "KDS Order Line: branch manager sees own company"
-msgstr "صنف طلب KDS: مدير الفرع يرى شركته فقط"
-
-#. module: flexsys_kds
-#: model:ir.rule,name:flexsys_kds.rule_kds_order_line_station_operator
-msgid "KDS Order Line: operator/supervisor restricted to assigned stations"
-msgstr "صنف طلب KDS: المشغّل/المشرف مقيّد بالمحطات المعيّنة"
-
-#. module: flexsys_kds
-#: model:ir.rule,name:flexsys_kds.rule_kds_order_station_administrator
-msgid "KDS Order: administrator unrestricted (station-scope tier)"
-msgstr "طلب KDS: المسؤول دون قيود (مستوى نطاق المحطة)"
-
-#. module: flexsys_kds
-#: model:ir.rule,name:flexsys_kds.rule_kds_order_station_branch_manager
-msgid "KDS Order: branch manager sees own company (station-scope tier)"
-msgstr "طلب KDS: مدير الفرع يرى شركته فقط (مستوى نطاق المحطة)"
-
-#. module: flexsys_kds
-#: model:ir.rule,name:flexsys_kds.rule_kds_order_company
-msgid "KDS Order: multi-company"
-msgstr "طلب KDS: متعدد الشركات"
-
-#. module: flexsys_kds
-#: model:ir.rule,name:flexsys_kds.rule_kds_order_station_operator
-msgid "KDS Order: operator/supervisor restricted to orders touching an assigned station"
-msgstr "طلب KDS: المشغّل/المشرف مقيّد بالطلبات المرتبطة بمحطة معيّنة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_pos_order__kds_preparation_change_requested
-msgid "Kds Preparation Change Requested"
-msgstr "تم طلب تغيير التحضير في KDS"
-
-#. module: flexsys_kds
-#: model:ir.actions.client,name:flexsys_kds.action_kds_screen
-#: model:ir.ui.menu,name:flexsys_kds.menu_kds_screen
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "KDS Screen"
-msgstr "شاشة KDS"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_pos_order__kds_send_generation
-msgid "Kds Send Generation"
-msgstr "جيل إرسال KDS"
-
-#. module: flexsys_kds
-#: model:ir.rule,name:flexsys_kds.rule_kds_station_company
-msgid "KDS Station: multi-company"
-msgstr "محطة KDS: متعدد الشركات"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_list
-msgid "KDS Status"
-msgstr "حالة KDS"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__kiosk_language
-msgid "Kiosk Language"
-msgstr "لغة شاشة KDS العامة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_print_job__reason__kitchen_request
-msgid "Kitchen Request"
-msgstr "طلب من المطبخ"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_station__kiosk_language
-msgid "Language for this station's own Public Kiosk screen. Independent of the Internal KDS Screen, which always uses the logged-in Odoo user's own language instead - the public kiosk has no logged-in user to read a language from."
-msgstr "لغة شاشة الكشك العام الخاصة بهذه المحطة. مستقلة عن شاشة KDS الداخلية، التي تستخدم دائمًا لغة مستخدم Odoo المسجّل دخوله بدلًا من ذلك - فالكشك العام لا يملك مستخدمًا مسجّلًا دخوله لقراءة لغة منه."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__last_kds_sent_qty
-msgid "Last Kds Sent Qty"
-msgstr "آخر كمية مُرسلة إلى KDS"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_printer__last_seen
-msgid "Last Seen"
-msgstr "آخر اتصال"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_expeditor_task__sla_status__late
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__sla_status__late
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order_line__sla_status__late
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_analytics_search
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_search
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "Late"
-msgstr "متأخر"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__late_threshold_minutes
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "Late At (min)"
-msgstr "التأخير عند (دقيقة)"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__late_order_count
-msgid "Late Order Count"
-msgstr "عدد الطلبات المتأخرة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__late_threshold_pct
-msgid "Late Threshold (%)"
-msgstr "حد التأخير (%)"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__lease_expires_at
-msgid "Lease Expires At"
-msgstr "انتهاء مهلة الحجز"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_routing_rule__company_id
-msgid "Leave empty for a rule that applies to every company - set it to scope this rule to one branch only. Never used to route an order for a *different* company than this rule's own (security fix, audit finding 1/CRITICAL: multi-company isolation)."
-msgstr "اتركه فارغًا لقاعدة تنطبق على كل الشركات - أو حدّده لحصر هذه القاعدة بفرع واحد فقط. لا تُستخدم أبدًا لتوجيه طلب لشركة *مختلفة* عن شركة هذه القاعدة نفسها (عزل متعدد الشركات)."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_routing_rule__pos_config_ids
-msgid "Leave empty to apply this rule to all POS configurations."
-msgstr "اتركه فارغًا لتطبيق هذه القاعدة على جميع إعدادات نقطة البيع."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_routing_rule__order_type_ids
-msgid "Leave empty to match every order type."
-msgstr "اتركه فارغًا لمطابقة كل أنواع الطلبات."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_routing_rule__source_ids
-msgid "Leave empty to match every source."
-msgstr "اتركه فارغًا لمطابقة كل المصادر."
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order_line.py:0
-#, python-format
-msgid "line \"%s\" manually reopened back to Preparing"
-msgstr "أُعيد فتح السطر \"%s\" يدويًا إلى قيد التحضير"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_event__event_type__line_added
-msgid "Line Added"
-msgstr "تمت إضافة صنف"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_event__event_type__line_ready
-msgid "Line Ready"
-msgstr "الصنف جاهز"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_event__event_type__line_removed
-msgid "Line Removed / Cancelled"
-msgstr "تمت إزالة/إلغاء صنف"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Lines"
-msgstr "الأصناف"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_print_job__reason__lost_ticket
-msgid "Lost Ticket"
-msgstr "فقدان التذكرة"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_routing_rule_form
-msgid "Lower number = higher priority. Rules are checked in this order, and the FIRST rule that matches wins - later rules are never checked once one has already matched."
-msgstr "الرقم الأقل = أولوية أعلى. تُفحص القواعد بهذا الترتيب، والقاعدة الأولى المطابقة هي الفائزة - لا تُفحص القواعد اللاحقة بمجرد مطابقة إحداها."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_routing_rule__sequence
-msgid "Lower runs first. First match wins."
-msgstr "الرقم الأقل يُنفَّذ أولًا. أول مطابقة تفوز."
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_print_job.py:0
+#: code:addons/flexsys_kds/dels/kds_print_job.py:0
 #, python-format
 msgid "MANAGER ALERT: print job failed with no backup printer available (%s)"
 msgstr "تنبيه للمدير: فشلت مهمة الطباعة ولا توجد طابعة بديلة متاحة (%s)"
 
 #. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_print_job__reason__manager_request
-msgid "Manager Request"
-msgstr "طلب من المدير"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order_line.py:0
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
+#, python-format
 msgid "Manual override (line)"
 msgstr "تجاوز يدوي (صنف)"
 
 #. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_print_job__job_type__manual
-msgid "Manual Print"
-msgstr "الطباعة اليدوية"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
 #, python-format
 msgid "Manual print of full order requested for station '%s'."
 msgstr "طُلبت طباعة يدوية للطلب الكامل للمحطة '%s'."
 
 #. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Mark Ready"
-msgstr "تحديد كجاهز"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_station__is_expeditor
-msgid "Marks this station as the final assembly/packing stage. An order is only Ready for pickup once all required stations are done."
-msgstr "تُحدّد هذه المحطة كمرحلة التجميع/التعبئة النهائية. لا يصبح الطلب جاهزًا للاستلام إلا بعد اكتمال جميع المحطات المطلوبة."
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_routing_rule_form
-msgid "Match Conditions"
-msgstr "شروط المطابقة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_printer__model
-msgid "Model"
-msgstr "الطراز"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__note
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Modifiers / Notes"
-msgstr "التعديلات / الملاحظات"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_event__event_type__station_moved
-msgid "Moved Between Stations"
-msgstr "نُقل بين المحطات"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_order_type_tag__code
-msgid "Must match a kds.order.order_type selection value."
-msgstr "يجب أن يطابق إحدى قيم نوع الطلب في kds.order."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_order_source_tag__code
-msgid "Must match a kds.order.source selection value."
-msgstr "يجب أن يطابق إحدى قيم المصدر في kds.order."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__name
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_source_tag__name
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_type_tag__name
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__name
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_printer__name
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_printer_hub__name
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_routing_rule__name
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__name
-msgid "Name"
-msgstr "الاسم"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_printer__printer_type__network
-msgid "Network Printer"
-msgstr "طابعة شبكة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__state__new
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order_line__state__new
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_event_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_hub_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_list
-msgid "New"
-msgstr "جديد"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order_line.py:0
-#, python-format
-msgid "new item \"%s\" added after order was already Ready/Completed"
-msgstr "أُضيف صنف جديد \"%s\" بعد أن كان الطلب جاهزًا/مكتملًا بالفعل"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "New preparation revision for %(product)s after %(state)s original (delta qty %(qty)s)"
 msgstr "مراجعة تحضير جديدة لـ %(product)s بعد أن كان الأصل %(state)s (فرق الكمية %(qty)s)"
 
 #. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_event__new_value
-msgid "New Value"
-msgstr "القيمة الجديدة"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_print_job.py:0
+#: code:addons/flexsys_kds/dels/kds_print_job.py:0
+#, python-format
 msgid "No printer is configured for this station."
 msgstr "لا توجد طابعة مُعدَّة لهذه المحطة."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order_line.py:0
-msgid "no reason given"
-msgstr "لم يُذكر سبب"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order_line__line_change__none
-msgid "None"
-msgstr "لا يوجد"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_expeditor_task__sla_status__normal
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__priority__normal
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__sla_status__normal
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order_line__sla_status__normal
-msgid "Normal"
-msgstr "طبيعي"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_event__note
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__note
-msgid "Note"
-msgstr "ملاحظة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_print_job__copies
-msgid "Number of physical copies the print agent should produce for this job (e.g. two copies of a delivery ticket)."
-msgstr "عدد النسخ المادية التي يجب على وكيل الطباعة إنتاجها لهذه المهمة (مثال: نسختان لتذكرة توصيل)."
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__source__pos
-msgid "Odoo POS"
-msgstr "نقطة بيع Odoo"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_routing_rule__product_categ_ids
-msgid "Odoo's internal accounting/inventory categories. Usually POS Categories is what you want instead - this is here as a fallback for setups that don't maintain POS categories."
-msgstr "فئات المحاسبة/المخزون الداخلية في Odoo. عادةً ما تكون فئات نقطة البيع هي المطلوبة بدلًا من ذلك - وهذا الخيار احتياطي للإعدادات التي لا تحتفظ بفئات نقطة بيع."
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_printer__status__offline
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_station__status__offline
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_list
-msgid "Offline"
-msgstr "غير متصل"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_event__old_value
-msgid "Old Value"
-msgstr "القيمة السابقة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__state__on_hold
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order_line__state__on_hold
-msgid "On Hold"
-msgstr "معلّق"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_print_job__lease_expires_at
-msgid "Once past this time, an unresolved 'dispatched' job is treated as abandoned and becomes claimable again by any agent - handles a crashed agent or a lost network connection without needing a human to intervene."
-msgstr "بعد تجاوز هذا الوقت، تُعتبر المهمة \"المُرسَلة\" غير المحسومة متروكة، وتصبح قابلة للاستلام مجددًا من أي وكيل - يعالج تعطّل الوكيل أو انقطاع الشبكة دون تدخّل بشري."
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_printer__status__online
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_station__status__online
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_list
-msgid "Online"
-msgstr "متصل"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_printer.py:0
-msgid "Only a KDS Administrator can view the Print Agent Key."
-msgstr "يمكن فقط لمسؤول KDS عرض مفتاح وكيل الطباعة."
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
+#, python-format
 msgid "Only Ready or Completed orders can be reopened."
 msgstr "يمكن إعادة فتح الطلبات الجاهزة أو المكتملة فقط."
 
 #. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_hub_form
-msgid "Open Print Jobs"
-msgstr "فتح مهام الطباعة"
+#: code:addons/flexsys_kds/dels/kds_printer.py:0
+#, python-format
+msgid "Only a KDS Administrator can view the Print Agent Key."
+msgstr "يمكن فقط لمسؤول KDS عرض مفتاح وكيل الطباعة."
 
 #. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_hub_form
-msgid "Open Printers"
-msgstr "فتح الطابعات"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__operating_mode
-msgid "Operating Mode"
-msgstr "وضع التشغيل"
-
-#. module: flexsys_kds
-#: model:ir.ui.menu,name:flexsys_kds.menu_kds_operations
-msgid "Operations"
-msgstr "العمليات"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_event__order_id
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_expeditor_task__order_id
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__order_id
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__order_id
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_analytics_search
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_search
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_search
-msgid "Order"
-msgstr "الطلب"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
+#, python-format
 msgid "Order cancelled"
 msgstr "أُلغي الطلب"
 
 #. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_event__event_type__order_completed
-msgid "Order Completed"
-msgstr "اكتمل الطلب"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_event__event_type__order_created
-msgid "Order Created"
-msgstr "تم إنشاء الطلب"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
 #, python-format
 msgid "Order created from %s"
 msgstr "تم إنشاء الطلب من %s"
 
 #. module: flexsys_kds
-#: model:ir.actions.act_window,name:flexsys_kds.action_kds_order_history
-#: model:ir.ui.menu,name:flexsys_kds.menu_kds_order_history
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_list
-msgid "Order History"
-msgstr "سجل الطلبات"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/controllers/kds.py:0
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
+#, python-format
 msgid "Order line not found."
 msgstr "سطر الطلب غير موجود."
 
 #. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__line_ids
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__order_line_ids
-msgid "Order Lines"
-msgstr "أصناف الطلب"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/controllers/kds.py:0
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
+#, python-format
 msgid "Order not found."
 msgstr "الطلب غير موجود."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/controllers/kds.py:0
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
+#, python-format
 msgid "Order or station not found."
 msgstr "الطلب أو المحطة غير موجودة."
 
 #. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_event__event_type__order_reopened
-msgid "Order Reopened"
-msgstr "أُعيد فتح الطلب"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
 #, python-format
 msgid "Order reopened - production work is active again (%s). Previously completed lines retain their own history unchanged."
 msgstr "أُعيد فتح الطلب - عمل الإنتاج نشط مجددًا (%s). السطور المكتملة سابقًا تحتفظ بسجلها الخاص دون تغيير."
 
 #. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_event__event_type__order_routed
-msgid "Order Routed"
-msgstr "تم توجيه الطلب"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__order_type
-msgid "Order Type"
-msgstr "نوع الطلب"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_routing_rule__order_type_ids
-msgid "Order Types"
-msgstr "أنواع الطلب"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_event__event_type__order_updated
-msgid "Order Updated"
-msgstr "تم تحديث الطلب"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_list
-msgid "Orders"
-msgstr "الطلبات"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_print_job__reason__other
-msgid "Other"
-msgstr "سبب آخر"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_event__event_type__override
-msgid "Override"
-msgstr "تجاوز"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_expeditor_task__state__packing
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Packing"
-msgstr "التعبئة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_expeditor_task__packing_duration
-msgid "Packing Duration (min)"
-msgstr "مدة التعبئة (دقيقة)"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_expeditor_task__ready_time
-msgid "Packing Ready Time"
-msgstr "وقت جاهزية التعبئة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_expeditor_task__sla_status
-msgid "Packing SLA"
-msgstr "SLA التعبئة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_expeditor_task__start_time
-msgid "Packing Start Time"
-msgstr "وقت بدء التعبئة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__packing_time
-msgid "Packing Time"
-msgstr "وقت التعبئة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__pos_payment_methods
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__pos_payment_methods
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_list
-msgid "Payment Method"
-msgstr "طريقة الدفع"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_print_job__status__pending
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_search
-msgid "Pending"
-msgstr "قيد الانتظار"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__pending_removal
-msgid "Pending Removal"
-msgstr "بانتظار الإزالة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__order_type__pickup
-msgid "Pickup"
-msgstr "استلام"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_routing_rule__pos_categ_ids
-msgid "Point of Sale categories (Burgers, Drinks, Desserts...) as configured in the POS itself - this is what cashiers/staff actually use day to day, and is checked first."
-msgstr "فئات نقطة البيع (برغر، مشروبات، حلويات...) كما هي معدّة في نقطة البيع نفسها - وهي ما يستخدمه الكاشير/الموظفون فعليًا يوميًا، وتُفحص أولًا."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_printer__port
-msgid "Port"
-msgstr "المنفذ"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__pos_config_id
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_routing_rule__pos_config_ids
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_analytics_search
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_search
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_pos_config_send_trigger_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_routing_rule_form
-msgid "POS"
-msgstr "نقطة البيع"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_routing_rule__pos_categ_ids
-msgid "POS Categories"
-msgstr "فئات نقطة البيع"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__pos_closed_at
-msgid "Pos Closed At"
-msgstr "وقت إغلاق نقطة البيع"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__pos_config_ids
-msgid "POS Configs"
-msgstr "نقاط البيع"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
+#, python-format
 msgid "POS Delta Sync or a production line was reopened"
 msgstr "مزامنة فرق نقطة البيع أو إعادة فتح سطر إنتاج"
 
 #. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__pos_order_id
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_analytics_search
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_search
-msgid "POS Order"
-msgstr "طلب نقطة البيع"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "POS order %s modified after send"
 msgstr "تم تعديل طلب نقطة البيع %s بعد الإرسال"
 
 #. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__pos_order_line_id
-msgid "Pos Order Line"
-msgstr "سطر طلب نقطة البيع"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_station__pos_config_ids
-msgid "POS points of sale this station receives orders from. Empty = all."
-msgstr "نقاط البيع التي تستقبل هذه المحطة طلبات منها. فارغ = الجميع."
-
-#. module: flexsys_kds
-#: model:ir.actions.act_window,name:flexsys_kds.action_kds_pos_config_send_trigger
-#: model:ir.ui.menu,name:flexsys_kds.menu_kds_pos_config_send_trigger
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_pos_config_send_trigger_list
-msgid "POS Send-to-KDS Settings"
-msgstr "إعدادات إرسال نقطة البيع إلى KDS"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__pos_order_state
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__pos_order_state
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_list
-msgid "POS Status"
-msgstr "حالة نقطة البيع"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__line_change
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Post-send Change"
-msgstr "تغيير بعد الإرسال"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__prep_duration
-msgid "Prep Duration (min)"
-msgstr "مدة التحضير (دقيقة)"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__preparation_start_time
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__preparation_start_time
-msgid "Preparation Start Time"
-msgstr "وقت بدء التحضير"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_event__event_type__preparation_started
-msgid "Preparation Started"
-msgstr "بدأ التحضير"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__state__preparing
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order_line__state__preparing
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Preparing"
-msgstr "قيد التحضير"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_print_job__display_job_type__print
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_search
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_hub_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "Print"
-msgstr "طباعة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__print_number
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_search
-msgid "Print #"
-msgstr "رقم الطباعة"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_search
-msgid "Print (first)"
-msgstr "طباعة (الأولى)"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_hub_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_list
-msgid "Print Agent"
-msgstr "وكيل الطباعة"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_printer.py:0
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_printer__agent_key
+#: code:addons/flexsys_kds/dels/kds_printer.py:0
+#, python-format
 msgid "Print Agent Key"
 msgstr "مفتاح وكيل الطباعة"
 
 #. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_hub_form
-msgid "Print and reprint job history, including status and any escalation."
-msgstr "سجل مهام الطباعة وإعادة الطباعة، بما في ذلك الحالة وأي تصعيد."
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Print Full Order"
-msgstr "طباعة الطلب كاملًا"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_search
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_hub_form
-msgid "Print Job"
-msgstr "مهمة طباعة"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_print_job.py:0
+#: code:addons/flexsys_kds/dels/kds_print_job.py:0
 #, python-format
 msgid "Print job retry %(n)d/%(max)d after failure: %(error)s"
 msgstr "إعادة محاولة الطباعة %(n)d/%(max)d بعد الفشل: %(error)s"
 
 #. module: flexsys_kds
-#: model:ir.actions.act_window,name:flexsys_kds.action_kds_print_job
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__print_job_ids
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_search
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_hub_form
-msgid "Print Jobs"
-msgstr "مهام الطباعة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_event__event_type__print_retry
-msgid "Print Retry"
-msgstr "إعادة محاولة الطباعة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_print_job__status__printed
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_search
-msgid "Printed"
-msgstr "تمت الطباعة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__printed_at
-msgid "Printed At"
-msgstr "وقت الطباعة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__printer_id
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_hub_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "Printer"
-msgstr "طابعة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__printer_count
-msgid "Printer Count"
-msgstr "عدد الطابعات"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_print_job__reason__printer_error
-msgid "Printer Error"
-msgstr "خطأ في الطابعة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_event__event_type__printer_fallback
-msgid "Printer Fallback"
-msgstr "التحويل إلى الطابعة الاحتياطية"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_station__operating_mode__printer_only
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "Printer Only"
-msgstr "طابعة فقط"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_hub_form
-msgid "Printer setup per station - default/backup roles, agent status."
-msgstr "إعداد الطابعات لكل محطة - أدوار الافتراضي/الاحتياطي، حالة الوكيل."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_printer__printer_type
-msgid "Printer Type"
-msgstr "نوع الطابعة"
-
-#. module: flexsys_kds
-#: model:ir.actions.act_window,name:flexsys_kds.action_kds_printer
-#: model:ir.actions.act_window,name:flexsys_kds.action_kds_printer_hub
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__printer_ids
-#: model:ir.ui.menu,name:flexsys_kds.menu_kds_printer_hub
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_hub_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "Printers"
-msgstr "الطابعات"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_hub_form
-msgid "Printers and print job history."
-msgstr "الطابعات وسجل مهام الطباعة."
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_search
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_hub_form
-msgid "Printing"
-msgstr "الطباعة"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/controllers/kds.py:0
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
+#, python-format
 msgid "Printing is not enabled for this station."
 msgstr "الطباعة غير مفعّلة لهذه المحطة."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
 #, python-format
 msgid "Printing unavailable: no printer is configured for station '%s' - no print job was created."
 msgstr "الطباعة غير متاحة: لا توجد طابعة مُعدَّة للمحطة '%s' - لم تُنشأ مهمة طباعة."
 
 #. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__priority
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__priority__priority
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_routing_rule_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_routing_rule_list
-msgid "Priority"
-msgstr "الأولوية"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_event__event_type__priority_changed
-msgid "Priority Changed"
-msgstr "تغيير الأولوية"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__product_id
-msgid "Product"
-msgstr "المنتج"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "Product changed after original line was already completed (%(old)s -> %(new)s) - added as a new line instead of rewriting history"
 msgstr "تغيّر المنتج بعد أن كان السطر الأصلي مكتملًا (%(old)s -> %(new)s) - أُضيف كسطر جديد بدلاً من إعادة كتابة السجل"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
+msgid "Product changed on POS line (re-routing)"
+msgstr "تغيّر المنتج على سطر نقطة البيع (إعادة توجيه)"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "Product changed on line: now routed %(product)s -> %(station)s"
 msgstr "تغيّر المنتج على السطر: تم توجيه %(product)s -> %(station)s"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
-msgid "Product changed on POS line (re-routing)"
-msgstr "تغيّر المنتج على سطر نقطة البيع (إعادة توجيه)"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__product_name
-msgid "Product Name"
-msgstr "اسم المنتج"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_routing_rule__product_ids
-msgid "Products"
-msgstr "المنتجات"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "Public Kiosk"
-msgstr "الكشك العام"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__kiosk_token
-msgid "Public Kiosk Token"
-msgstr "رمز الكشك العام"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__kiosk_url
-msgid "Public Kiosk URL"
-msgstr "رابط الكشك العام"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__source__qr
-msgid "QR Order"
-msgstr "طلب عبر QR"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__qty
-msgid "Qty"
-msgstr "الكمية"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__qty_delta
-msgid "Qty Delta"
-msgstr "فرق الكمية"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
 #, python-format
 msgid "Quantity reduced in POS after this portion was already %s"
 msgstr "تم تخفيض الكمية في نقطة البيع بعد أن كان هذا الجزء بالفعل %s"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
-msgid "Quantity reduced in POS below this line's own share"
-msgstr "تم تخفيض الكمية في نقطة البيع دون حصة هذا السطر"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
-msgid "Quantity reduced in POS, cascading into this historical portion after the more recent line was fully absorbed"
-msgstr "تم تخفيض الكمية في نقطة البيع، وامتد إلى هذا الجزء التاريخي بعد أن تم امتصاص السطر الأحدث بالكامل"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
 msgid "Quantity reduced to zero in POS"
 msgstr "تم تخفيض الكمية إلى صفر في نقطة البيع"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
 msgid "Quantity reduced to zero in POS while order still active"
 msgstr "تم تخفيض الكمية إلى صفر في نقطة البيع بينما الطلب لا يزال نشطًا"
 
 #. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_expeditor_task__state__ready
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__state__ready
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order_line__state__ready
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Ready"
-msgstr "جاهز"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__ready_time
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__ready_time
-msgid "Ready Time"
-msgstr "وقت الجاهزية"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__reason_note
-msgid "Reason Note"
-msgstr "ملاحظة السبب"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-msgid "Regenerate Agent Key"
-msgstr "إعادة إنشاء مفتاح وكيل الطباعة"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "Regenerate Kiosk Token"
-msgstr "إعادة إنشاء رمز الكشك"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order_line__line_change__removed
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_search
-msgid "Removed"
-msgstr "أُزيل"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
 msgid "Removed from POS order (was already completed)"
 msgstr "أُزيل من طلب نقطة البيع (كان مكتملًا بالفعل)"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
 msgid "Removed from POS order after send"
 msgstr "أُزيل من طلب نقطة البيع بعد الإرسال"
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/pos_order.py:0
+#, python-format
 msgid "Removed from POS order after the order was already completed"
 msgstr "أُزيل من طلب نقطة البيع بعد أن كان الطلب مكتملًا بالفعل"
 
 #. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Reopen"
-msgstr "إعادة فتح"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
 #, python-format
 msgid "Reopened from %s"
 msgstr "أُعيد فتحه من %s"
 
 #. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_event__event_type__reprint
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_print_job__display_job_type__reprint
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_print_job__job_type__reprint
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_search
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_hub_form
-msgid "Reprint"
-msgstr "إعادة الطباعة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__reason
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_list
-msgid "Reprint Reason"
-msgstr "سبب إعادة الطباعة"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_print_job.py:0
+#: code:addons/flexsys_kds/dels/kds_print_job.py:0
 #, python-format
 msgid "Reprint requested (%(reason)s)%(note)s"
 msgstr "تم طلب إعادة الطباعة (%(reason)s)%(note)s"
 
 #. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_expeditor_task__user_id
-msgid "Responsible User"
-msgstr "المستخدم المسؤول"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__retry_count
-msgid "Retry Count"
-msgstr "عدد المحاولات"
-
-#. module: flexsys_kds
-#: model:ir.ui.menu,name:flexsys_kds.menu_kds_routing
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_routing_rule_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_routing_rule_list
-msgid "Routing"
-msgstr "التوجيه"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_routing_rule_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_routing_rule_list
-msgid "Routing Rule"
-msgstr "قاعدة توجيه"
-
-#. module: flexsys_kds
-#: model:ir.actions.act_window,name:flexsys_kds.action_kds_routing_rule
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_routing_rule_list
-msgid "Routing Rules"
-msgstr "قواعد التوجيه"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__scope
-msgid "Scope"
-msgstr "النطاق"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_station__kiosk_token
-msgid "Secret embedded in this station's public kiosk URL. Anyone with the full URL can view and operate this station's screen without logging into Odoo. Regenerate immediately invalidates the old URL if you suspect it leaked."
-msgstr "سر مضمّن في رابط الكشك العام لهذه المحطة. أي شخص يملك الرابط الكامل يمكنه عرض وتشغيل شاشة هذه المحطة دون تسجيل الدخول إلى Odoo. إعادة الإنشاء تُبطل الرابط القديم فورًا إذا شككت بتسربه."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_order_line__variant_info
-msgid "Selected variant/attribute description for this line (size, flavor, etc.), captured from the POS line separately from the free-text customer note."
-msgstr "وصف المتغيّر/الخاصية المختارة لهذا الصنف (الحجم، النكهة، إلخ)، مأخوذ من صنف نقطة البيع بشكل منفصل عن ملاحظة العميل الحرة."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_pos_config__kds_send_trigger
-msgid "Send Order to KDS"
-msgstr "إرسال الطلب إلى KDS"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__sequence
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_source_tag__sequence
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_type_tag__sequence
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_routing_rule__sequence
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__sequence
-msgid "Sequence"
-msgstr "التسلسل"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_printer__serial_number
-msgid "Serial Number"
-msgstr "الرقم التسلسلي"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-msgid "Set as Backup"
-msgstr "تعيين كبديلة"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-msgid "Set as Default"
-msgstr "تعيين كافتراضي"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_expeditor_task__user_id
-msgid "Set when someone actually starts packing (action_start), not at task creation - a task can sit in 'Waiting' with no one assigned yet."
-msgstr "يُسجَّل عند بدء أحدهم التعبئة فعليًا، وليس عند إنشاء المهمة - يمكن أن تبقى المهمة في حالة \"الانتظار\" دون تعيين أحد بعد."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_print_job__acknowledged_at
-msgid "Set when the print agent confirms it received the job (before actual printing completes)."
-msgstr "يُسجَّل عند تأكيد وكيل الطباعة استلامه للمهمة (قبل اكتمال الطباعة الفعلية)."
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-msgid "Shared secret for the local print agent/bridge process polling\n                            /flexsys_kds/print/agent/* on behalf of this printer. Do not share it\n                            outside the agent process configuration."
-msgstr "سر مشترك لعملية وكيل الطباعة المحلي التي تستطلع المسار /flexsys_kds/print/agent/* نيابة عن هذه الطابعة. لا تشاركه خارج إعداد عملية الوكيل."
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-msgid "Shared secret for the local print agent/bridge process polling /flexsys_kds/print/agent/* on behalf of this printer. Do not share it outside the agent process configuration."
-msgstr "مفتاح سري مشترك لوكيل الطباعة المحلي/عملية الربط التي تستعلم من ‎/flexsys_kds/print/agent/*‎ نيابةً عن هذه الطابعة. لا تشاركه خارج إعدادات عملية وكيل الطباعة."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_printer__agent_key
-msgid "Shared secret used by the local print agent/bridge process to poll and report on this printer's jobs via the /flexsys_kds/print/agent/* routes, instead of a full Odoo user session. Rotate it if you suspect it has leaked."
-msgstr "سر مشترك تستخدمه عملية وكيل الطباعة المحلي لاستطلاع والإبلاغ عن مهام هذه الطابعة عبر مسارات /flexsys_kds/print/agent/*، بدلًا من جلسة مستخدم Odoo كاملة. غيّره إذا شككت بتسربه."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_station__code
-msgid "Short technical code, e.g. KITCHEN"
-msgstr "رمز تقني مختصر، مثال: KITCHEN"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-msgid "Show Agent Key"
-msgstr "عرض مفتاح الوكيل"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "SLA"
-msgstr "SLA"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__sla_status
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__sla_status
-msgid "Sla Status"
-msgstr "حالة SLA"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__source
-msgid "Source"
-msgstr "المصدر"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_routing_rule__source_ids
-msgid "Sources"
-msgstr "المصادر"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Start Preparing"
-msgstr "بدء التحضير"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_event__station_id
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__station_id
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__station_id
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_printer__station_id
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_search
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_list
-msgid "Station"
-msgstr "محطة"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_station.py:0
+#: code:addons/flexsys_kds/dels/kds_station.py:0
 #, python-format
 msgid "Station '%(station)s': Late Threshold (%(late)s%%) must be greater than the Warning Threshold (%(warning)s%%)."
 msgstr "المحطة '%(station)s': يجب أن تكون نسبة التأخر (%(late)s%%) أكبر من نسبة التحذير (%(warning)s%%)."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_station.py:0
+#: code:addons/flexsys_kds/dels/kds_station.py:0
 #, python-format
 msgid "Station '%s': Target Preparation Time must be greater than 0 minutes."
 msgstr "المحطة '%s': يجب أن يكون زمن التحضير المستهدف أكبر من 0 دقيقة."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_station.py:0
+#: code:addons/flexsys_kds/dels/kds_station.py:0
 #, python-format
 msgid "Station '%s': Warning Threshold must be greater than 0%%."
 msgstr "المحطة '%s': يجب أن تكون نسبة التحذير أكبر من 0%%."
 
 #. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_print_job__scope__station_items
-msgid "Station Items Only"
-msgstr "أصناف المحطة فقط"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/controllers/kds.py:0
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
+#, python-format
 msgid "Station not available."
 msgstr "المحطة غير متاحة."
 
 #. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_event__event_type__station_received
-msgid "Station Received"
-msgstr "استلمت المحطة الطلب"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__station_received_time
-msgid "Station Received Time"
-msgstr "وقت استلام المحطة"
-
-#. module: flexsys_kds
-#: model:res.groups,name:flexsys_kds.group_kds_supervisor
-msgid "Station Supervisor"
-msgstr "مشرف المحطة"
-
-#. module: flexsys_kds
-#: model:ir.actions.act_window,name:flexsys_kds.action_kds_station
-#: model:ir.ui.menu,name:flexsys_kds.menu_kds_station
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_list
-msgid "Stations"
-msgstr "المحطات"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__station_ids
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Stations Involved"
-msgstr "المحطات المعنية"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_expeditor_task__state
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__state
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__state
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__status
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_printer__status
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__status
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_analytics_search
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_search
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_search
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_list
-msgid "Status"
-msgstr "الحالة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_event__event_type__status_changed
-msgid "Status Changed"
-msgstr "تغيّرت الحالة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__table_number
-msgid "Table Number"
-msgstr "رقم الطاولة"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__order_type__take_away
-msgid "Take Away"
-msgstr "سفري"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "Target"
-msgstr "الهدف"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__target_prep_time
-msgid "Target Preparation Time (min)"
-msgstr "وقت التحضير المستهدف (دقيقة)"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_station__late_threshold_minutes
-msgid "The actual time this Late Threshold percentage represents, given this station's own Target Preparation Time."
-msgstr "الوقت الفعلي الذي تمثله نسبة حد التأخير هذه، بالنظر إلى وقت التحضير المستهدف لهذه المحطة."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_station__warning_threshold_minutes
-msgid "The actual time this Warning Threshold percentage represents, given this station's own Target Preparation Time."
-msgstr "الوقت الفعلي الذي تمثله نسبة حد التحذير هذه، بالنظر إلى وقت التحضير المستهدف لهذه المحطة."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_pos_config__kds_station_ids
-msgid "The FlexSys KDS stations this POS is configured to send orders to. Empty means this POS is not currently in scope for FlexSys KDS at all."
-msgstr "محطات FlexSys KDS التي تُعدّ نقطة البيع هذه لإرسال الطلبات إليها. فارغ يعني أن نقطة البيع هذه ليست ضمن نطاق FlexSys KDS حاليًا."
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_printer__printer_type__thermal
-msgid "Thermal Printer"
-msgstr "طابعة حرارية"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-msgid "This invalidates the current key - the print agent bridge for this printer will need the new key. Continue?"
-msgstr "سيؤدي هذا إلى إبطال المفتاح الحالي - سيحتاج وكيل الطباعة لهذه الطابعة إلى المفتاح الجديد. متابعة؟"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "This invalidates the current public kiosk URL for this station - any device already using it will stop working until you update it with the new URL. Continue?"
-msgstr "سيؤدي هذا إلى إبطال رابط الكشك العام الحالي لهذه المحطة - أي جهاز يستخدمه حاليًا سيتوقف عن العمل حتى تُحدّثه بالرابط الجديد. متابعة؟"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_printer_form
-msgid "This module manages the print queue - it does not talk to a physical printer directly. A separate Print Agent process handles that; see"
-msgstr "يدير هذا الموديول طابور الطباعة ولا يتصل بالطابعة الفعلية مباشرة. تتولى عملية Print Agent منفصلة ذلك؛ راجع"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_printer.py:0
+#: code:addons/flexsys_kds/dels/kds_printer.py:0
+#, python-format
 msgid "This printer has no Print Agent Key set."
 msgstr "لا يوجد مفتاح وكيل طباعة مُعيَّن لهذه الطابعة."
 
 #. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-msgid "Timing"
-msgstr "التوقيت"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__kiosk_token_regenerated_at
-msgid "Token Created / Last Regenerated"
-msgstr "تاريخ إنشاء الرمز / آخر إعادة إنشاء"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_list
-msgid "Total"
-msgstr "الإجمالي"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__total_fulfillment_display
-msgid "Total Fulfillment Display"
-msgstr "عرض إجمالي زمن التنفيذ"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order__total_fulfillment_minutes
-msgid "Total Fulfillment Minutes"
-msgstr "إجمالي زمن التنفيذ (دقيقة)"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_form
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_list
-msgid "Total Fulfillment Time"
-msgstr "إجمالي وقت الإنجاز"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_print_job_list
-msgid "True on the original job when it was escalated to a backup printer after repeated failures - see the backup printer's own separate job row, right next to this one once grouped by Order."
-msgstr "صحيح على المهمة الأصلية عند تصعيدها إلى الطابعة الاحتياطية بعد فشل متكرر - راجع صف المهمة المنفصل الخاص بالطابعة الاحتياطية، بجانب هذا الصف مباشرة عند التجميع حسب الطلب."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_print_job__escalated
-msgid "True once retries and fallback printer have both been exhausted and a manager alert event has been logged."
-msgstr "صحيح بمجرد استنفاد إعادة المحاولة والطابعة الاحتياطية معًا وتسجيل حدث تنبيه للمدير."
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/controllers/kds.py:0
-msgid "Unknown action"
-msgstr "إجراء غير معروف"
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order_line.py:0
-#: code:addons/flexsys_kds/models/pos_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
+#, python-format
 msgid "UNROUTED"
 msgstr "غير موجّه"
 
 #. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order_line__line_change__updated
-msgid "Updated"
-msgstr "محدّث"
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
+#, python-format
+msgid "Unknown action"
+msgstr "إجراء غير معروف"
 
 #. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__priority__urgent
-msgid "Urgent"
-msgstr "عاجل"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_printer__usb_identifier
-msgid "USB / Device ID"
-msgstr "معرّف USB / الجهاز"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_printer__printer_type__usb
-msgid "USB Printer"
-msgstr "طابعة USB"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_station__target_prep_time
-msgid "Used by the SLA engine to compute Normal / Warning / Late."
-msgstr "يُستخدم بواسطة محرك SLA لحساب طبيعي / تحذير / متأخر."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_event__user_id
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_print_job__user_id
-msgid "User"
-msgstr "المستخدم"
-
-#. module: flexsys_kds
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_order_list
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "Users"
-msgstr "المستخدمون"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_station__user_ids
-msgid "Users linked to this station only see orders/lines routed to it."
-msgstr "المستخدمون المرتبطون بهذه المحطة يرون فقط الطلبات/الأصناف الموجّهة إليها."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_order_line__variant_info
-msgid "Variant / Attributes"
-msgstr "المتغيّر / الخصائص"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__priority__vip
-msgid "VIP"
-msgstr "VIP"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_expeditor_task__sla_status
-msgid "WAIT + WORK TIME COMBINED: measured from available_time (the order became Available for packing) through to ready_time (or now, if still open) - this INCLUDES any time the order sat waiting before someone started packing it, unlike packing_duration above (active work only, starting from start_time). Formula: Packing Wait Time + Packing Duration = Packing SLA elapsed time. Treating this and packing_duration as interchangeable in a report would understate how long an order actually sat waiting for packing to begin."
-msgstr "الانتظار + وقت العمل مجتمعَين: يُقاس من وقت توفّر الطلب للتعبئة وحتى وقت الجاهزية (أو الآن إن كان ما يزال مفتوحًا) - ويشمل هذا أي وقت انتظار قبل أن يبدأ أحدهم التعبئة فعليًا، بخلاف مدة التعبئة أعلاه (العمل الفعلي فقط). المعادلة: وقت انتظار التعبئة + مدة التعبئة = الوقت المنقضي لـSLA التعبئة."
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_expeditor_task__state__waiting
-msgid "Waiting"
-msgstr "في الانتظار"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_expeditor_task__sla_status__warning
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__sla_status__warning
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order_line__sla_status__warning
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "Warning"
-msgstr "تحذير"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__warning_threshold_minutes
-#: model_terms:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
-msgid "Warning At (min)"
-msgstr "التحذير عند (دقيقة)"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,field_description:flexsys_kds.field_kds_station__warning_threshold_pct
-msgid "Warning Threshold (%)"
-msgstr "حد التحذير (%)"
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_order__source__web
-msgid "Web Order"
-msgstr "طلب إلكتروني"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_pos_config__kds_send_trigger
-msgid "When an order placed through this POS should reach the kitchen.\n\n'After Payment' (default): the original, safest behavior (unchanged) - the order reaches the kitchen once payment/order completion goes through.\n\n'When Sent from POS': uses Odoo's own native POS workflow, not a new custom button. With Preparation Display enabled, this is the native 'Send' action (Build/Edit Order -> Send -> FlexSys KDS). Without Preparation Display, this is the native 'New' action (Build/Edit Order -> New -> FlexSys KDS) - starting a new order finalizes/sends the current one. Either way, simply adding/removing products, changing quantities, or editing the order does NOT synchronize anything by itself - changes accumulate until the next Send/New, then sync as ADDED/UPDATED/CANCELLED all at once."
-msgstr "متى يجب أن يصل الطلب المُنشأ عبر نقطة البيع هذه إلى المطبخ.\n\n\"بعد الدفع\" (الافتراضي): السلوك الأصلي الأكثر أمانًا (دون تغيير) - يصل الطلب إلى المطبخ فور إتمام الدفع/الطلب.\n\n\"عند الإرسال من نقطة البيع\": يستخدم سير عمل نقطة البيع الأصلي في Odoo، وليس زرًا مخصصًا جديدًا. مع تفعيل شاشة التحضير، هذا هو إجراء \"الإرسال\" الأصلي. بدون شاشة التحضير، هذا هو إجراء \"جديد\" الأصلي - بدء طلب جديد يُنهي/يُرسل الطلب الحالي. في كلتا الحالتين، مجرد إضافة/إزالة منتجات أو تغيير الكميات أو تعديل الطلب لا يُزامن شيئًا بحد ذاته - تتراكم التغييرات حتى الإرسال/الجديد التالي، ثم تُزامن كلها دفعة واحدة كـمضاف/محدّث/ملغى."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_station__kiosk_disabled
-msgid "When enabled, every public kiosk request for this station is rejected, even with a correct token - without regenerating/invalidating the token itself. Turn back off to restore access immediately with the same URL every device already has."
-msgstr "عند التفعيل، يُرفض كل طلب وصول للكشك العام لهذه المحطة، حتى برمز صحيح - دون إعادة إنشاء الرمز أو إبطاله. أعد التعطيل لاستعادة الوصول فورًا بنفس الرابط الذي تملكه الأجهزة بالفعل."
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_expeditor_task__available_time
-msgid "When every production line became Ready - i.e. when this task was created. This is the START of the Packing SLA clock (see sla_status below), which is DIFFERENT from Packing Duration (which starts later, at start_time - see below). Production Time (kds.order's own created_time -> this field) is measured independently of both."
-msgstr "الوقت الذي أصبحت فيه كل أصناف الإنتاج جاهزة - أي وقت إنشاء هذه المهمة. هذه بداية عدّاد SLA للتعبئة، وهو مختلف عن مدة التعبئة (التي تبدأ لاحقًا عند وقت البدء). يُقاس وقت الإنتاج بشكل مستقل عن كليهما."
-
-#. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__pos_config__kds_send_trigger__send
-msgid "When Sent from POS"
-msgstr "عند الإرسال من نقطة البيع"
-
-#. module: flexsys_kds
-#: model:ir.model.fields,help:flexsys_kds.field_kds_expeditor_task__start_time
-msgid "When someone actually began packing - this is where Packing DURATION starts counting (see packing_duration below), which is *after* available_time, not the same instant - there's normally a wait between an order becoming Available and someone actually picking it up."
-msgstr "الوقت الذي بدأ فيه أحدهم التعبئة فعليًا - من هنا تبدأ مدة التعبئة بالعدّ، وهي *بعد* وقت التوفّر، وليست نفس اللحظة - عادةً ما يوجد انتظار بين توفّر الطلب واستلام أحدهم له فعليًا."
-
-#. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
 #, python-format
 msgid "You are not assigned to any station involved in order %s."
 msgstr "أنت غير مرتبط بأي محطة من محطات الطلب %s."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_access.py:0
+#: code:addons/flexsys_kds/dels/kds_access.py:0
 #, python-format
 msgid "You are not assigned to station '%s'."
 msgstr "أنت غير مرتبط بالمحطة '%s'."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/controllers/kds.py:0
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
+#, python-format
 msgid "You do not have a FlexSys KDS role."
 msgstr "ليس لديك دور في FlexSys KDS."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_access.py:0
+#: code:addons/flexsys_kds/dels/kds_access.py:0
 #, python-format
 msgid "You do not have permission to perform '%s' in FlexSys KDS."
 msgstr "ليست لديك صلاحية تنفيذ '%s' في FlexSys KDS."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_access.py:0
+#: code:addons/flexsys_kds/dels/kds_access.py:0
 #, python-format
 msgid "Your user is not assigned to any FlexSys KDS station. Ask an administrator to assign you to '%s' or another station."
 msgstr "مستخدمك غير مرتبط بأي محطة في FlexSys KDS. اطلب من مسؤول النظام ربطك بمحطة '%s' أو محطة أخرى."
 
 #. module: flexsys_kds
-#. odoo-python
-#: code:addons/flexsys_kds/models/kds_order.py:0
+#: code:addons/flexsys_kds/dels/kds_order.py:0
 #, python-format
 msgid "Your user is not assigned to any FlexSys KDS station. Ask an administrator to assign you to a station before you can act on order %s."
 msgstr "مستخدمك غير مُعيَّن لأي محطة FlexSys KDS. اطلب من المسؤول تعيينك لمحطة قبل أن تتمكن من التصرف بالطلب %s."
 
 #. module: flexsys_kds
-#: model:ir.model.fields.selection,name:flexsys_kds.selection__kds_station__kiosk_language__ar
-msgid "العربية (Arabic)"
-msgstr "العربية"
+#: code:addons/flexsys_kds/ntrollers/kds.py:0
+#, python-format
+msgid "agent_id is required to claim jobs"
+msgstr "مطلوب agent_id للمطالبة بالمهام"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order.py:0
+#, python-format
+msgid "another station"
+msgstr "محطة أخرى"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
+#, python-format
+msgid "line \"%s\" manually reopened back to Preparing"
+msgstr "أُعيد فتح السطر \"%s\" يدويًا إلى قيد التحضير"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
+#, python-format
+msgid "new item \"%s\" added after order was already Ready/Completed"
+msgstr "أُضيف صنف جديد \"%s\" بعد أن كان الطلب جاهزًا/مكتملًا بالفعل"
+
+#. module: flexsys_kds
+#: code:addons/flexsys_kds/dels/kds_order_line.py:0
+#, python-format
+msgid "no reason given"
+msgstr "لم يُذكر سبب"
+
+# ---------------------------------------------------------------
+# BACKEND FINALIZATION SWEEP ("Arabic Backend Finalization"):
+# added below - view field labels/help text (form/list/search),
+# selection option labels, and the remaining Python audit-note
+# messages not previously covered. Prior to this sweep, this file
+# covered Python-side _()-wrapped runtime messages only (see this
+# file's own header) - selection/view labels were documented in
+# i18n/GLOSSARY.md instead, pending an Odoo-generated export this
+# sweep now supersedes with real msgid entries below. Every msgid
+# here is copied character-for-character from its own source (an
+# actual string=/help=/selection literal or _() call site) - never
+# paraphrased - so gettext's own exact-match lookup resolves it
+# correctly regardless of the informational #: source comment.
+#
+# Deliberately NOT translated here, and not a gap: 'Priority' /
+# 'Urgent' / 'VIP' as kds.order.priority selection values - that
+# field is a dormant legacy/compatibility column, confirmed hidden
+# from every current view across this module (list, form, search,
+# card) - see TEST_CONTRACTS.md Section 9/10 in the development
+# archive. Translating values no user can ever see is not real
+# localization coverage. 'العربية (Arabic)' (kiosk_language) is
+# already the correct, deliberately self-referential bilingual
+# label - not an untranslated English string.
+# ---------------------------------------------------------------
+
+#. module: flexsys_kds
+#: models/pos_order.py
+#, python-format
+msgid "%(product)s (qty %(old_qty)s) fully cancelled - POS quantity decrease exceeded this line's own full share, cascading into earlier production history"
+msgstr "تم إلغاء %(product)s بالكامل (الكمية %(old_qty)s) - تجاوز تخفيض الكمية في نقطة البيع كامل حصة هذا السطر، وامتد إلى سجل الإنتاج السابق"
+
+#. module: flexsys_kds
+#: models/pos_order.py
+#, python-format
+msgid "%(product)s (qty %(old_qty)s, previously %(state)s) fully cancelled - POS quantity decrease cascaded into and absorbed this entire portion"
+msgstr "تم إلغاء %(product)s بالكامل (الكمية %(old_qty)s، كانت %(state)s) - امتد تخفيض الكمية في نقطة البيع وامتص هذا الجزء بالكامل"
+
+#. module: flexsys_kds
+#: models/pos_order.py
+#, python-format
+msgid "%(product)s reduced after original line was already %(state)s (qty %(old_qty)s -> %(new_qty)s) - decrease cascaded into this portion, no production reopened"
+msgstr "تم تخفيض %(product)s بعد أن كان السطر الأصلي بالفعل %(state)s (الكمية %(old_qty)s -> %(new_qty)s) - امتد التخفيض إلى هذا الجزء، دون إعادة فتح الإنتاج"
+
+#. module: flexsys_kds
+#: models/pos_order.py
+#, python-format
+msgid "%(product)s reduced to zero in POS (quantity: %(qty)s -> 0, cancelled_qty: %(qty)s)"
+msgstr "تم تخفيض %(product)s إلى صفر في نقطة البيع (الكمية: %(qty)s -> 0، الكمية الملغاة: %(qty)s)"
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "ACTIVE PACKING WORK ONLY: start_time -> ready_time. This is NOT the same measurement as Packing SLA (sla_status below), which also includes the wait between the order becoming Available and someone actually starting to pack it. Formula: Packing Wait Time + Packing Duration = Packing SLA elapsed time. Kept deliberately separate from kds.order.line's own prep_duration (Production Time) too, so Analytics can distinguish all three rather than one blended fulfillment number: Production Time, Packing Wait Time, and Packing Duration (active work)."
+msgstr "وقت التعبئة الفعلي فقط: من وقت البدء إلى وقت الجاهزية. هذا يختلف عن SLA التعبئة (أدناه)، الذي يشمل أيضًا وقت الانتظار بين توفّر الطلب وبدء أحدهم فعليًا بتعبئته. المعادلة: وقت انتظار التعبئة + مدة التعبئة = الوقت المنقضي لـSLA التعبئة. يُحفظ منفصلًا عمدًا عن مدة التحضير الخاصة بصنف الطلب، ليتمكن التحليل من تمييز الأوقات الثلاثة بدلًا من رقم إنجاز واحد مدمج: وقت الإنتاج، وقت انتظار التعبئة، ومدة التعبئة (العمل الفعلي)."
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "API"
+msgstr "API"
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "Accept"
+msgstr "قبول"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "Accepted"
+msgstr "مقبول"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Acknowledged At"
+msgstr "تاريخ التأكيد"
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "Active"
+msgstr "نشط"
+
+#. module: flexsys_kds
+#: models/kds_order_line.py
+msgid "Added"
+msgstr "مضاف"
+
+#. module: flexsys_kds
+#: models/pos_config.py
+msgid "After Payment"
+msgstr "بعد الدفع"
+
+#. module: flexsys_kds
+#: views/kds_print_job_views.xml
+msgid "Agent / Lease"
+msgstr "الوكيل / الحيازة"
+
+#. module: flexsys_kds
+#: views/kds_printer_views.xml
+msgid "Agent Last Seen"
+msgstr "آخر ظهور للوكيل"
+
+#. module: flexsys_kds
+#: views/kds_printer_views.xml
+msgid "Agent Status"
+msgstr "حالة الوكيل"
+
+#. module: flexsys_kds
+#: views/kds_station_views.xml
+msgid "Anyone with this URL can view and operate this station's\n                                screen with no Odoo login at all. Treat it like a password:\n                                don't share it outside the physical device it's set up on.\n                                Regenerating instantly invalidates the old URL."
+msgstr "أي شخص يملك هذا الرابط يمكنه عرض وتشغيل شاشة هذه المحطة دون أي تسجيل دخول إلى Odoo. تعامل معه كأنه كلمة مرور: لا تشاركه خارج الجهاز الفعلي المُعدّ عليه. إعادة الإنشاء تُبطل الرابط القديم فورًا."
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Assigned Users"
+msgstr "المستخدمون المعيّنون"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "Audit Log"
+msgstr "سجل التدقيق"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Auto Print"
+msgstr "الطباعة التلقائية"
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "Available Since"
+msgstr "متاح منذ"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Avg. Prep Time (min)"
+msgstr "متوسط وقت التحضير (دقيقة)"
+
+#. module: flexsys_kds
+#: models/kds_printer.py
+msgid "Backup / Fallback Printer"
+msgstr "طابعة احتياطية / بديلة"
+
+#. module: flexsys_kds
+#: views/kds_printer_views.xml
+msgid "Backup Printer"
+msgstr "الطابعة الاحتياطية"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "Branch"
+msgstr "الفرع"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Branch / Company"
+msgstr "الفرع / الشركة"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "Call Center"
+msgstr "مركز الاتصال"
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "Cancel"
+msgstr "إلغاء"
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "Cancelled"
+msgstr "ملغى"
+
+#. module: flexsys_kds
+#: views/kds_print_job_views.xml
+msgid "Claimed By (Agent)"
+msgstr "استلمها الوكيل"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Claimed By (Agent/Device ID)"
+msgstr "استلمها (معرّف الوكيل/الجهاز)"
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "Complete"
+msgstr "إكمال"
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "Completed"
+msgstr "مكتمل"
+
+#. module: flexsys_kds
+#: views/kds_print_job_views.xml
+msgid "Created On"
+msgstr "تاريخ الإنشاء"
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "Current Elapsed Time"
+msgstr "الوقت المنقضي الحالي"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Customer Change"
+msgstr "تغيير من العميل"
+
+#. module: flexsys_kds
+#: models/pos_category.py
+msgid "Default KDS Station"
+msgstr "محطة KDS الافتراضية"
+
+#. module: flexsys_kds
+#: models/kds_printer.py
+msgid "Default Printer"
+msgstr "طابعة افتراضية"
+
+#. module: flexsys_kds
+#: models/product_template.py
+msgid "Default production station for this product. Overridden by matching FlexSys KDS routing rules if any."
+msgstr "محطة الإنتاج الافتراضية لهذا المنتج. تُستبدَل بقواعد توجيه FlexSys KDS المطابقة إن وُجدت."
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "Delivery"
+msgstr "توصيل"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "Delivery Application"
+msgstr "تطبيق توصيل"
+
+#. module: flexsys_kds
+#: views/kds_station_views.xml
+msgid "Description"
+msgstr "الوصف"
+
+#. module: flexsys_kds
+#: views/kds_routing_rule_views.xml
+msgid "Destination"
+msgstr "الوجهة"
+
+#. module: flexsys_kds
+#: models/kds_routing_rule.py
+msgid "Destination Station"
+msgstr "محطة الوجهة"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "Dine In"
+msgstr "تناول في المطعم"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Disable Public Kiosk Access"
+msgstr "تعطيل الوصول إلى الكشك العام"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Dispatched"
+msgstr "تم الإرسال"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "Drive Thru"
+msgstr "استلام من السيارة"
+
+#. module: flexsys_kds
+#: views/kds_routing_rule_views.xml
+msgid "Empty criterion = Any •\n                        Multiple values in the same criterion = OR •\n                        Different criteria = AND"
+msgstr "المعيار الفارغ = أي قيمة • تعدد القيم داخل نفس المعيار = أو • المعايير المختلفة = و"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "English"
+msgstr "الإنجليزية"
+
+#. module: flexsys_kds
+#: models/kds_printer.py
+msgid "Error"
+msgstr "خطأ"
+
+#. module: flexsys_kds
+#: views/kds_print_job_views.xml
+msgid "Escalated"
+msgstr "تم التصعيد"
+
+#. module: flexsys_kds
+#: views/kds_print_job_views.xml
+msgid "Escalated to a backup printer"
+msgstr "تم التصعيد إلى طابعة احتياطية"
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "Expeditor / Packing"
+msgstr "التجميع / التعبئة"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "Expeditor / Packing Tasks"
+msgstr "مهام التجميع / التعبئة"
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "Expeditor Station"
+msgstr "محطة التجميع"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Failed"
+msgstr "فشل"
+
+#. module: flexsys_kds
+#: views/kds_print_job_views.xml
+msgid "Failure / Retry"
+msgstr "الفشل / إعادة المحاولة"
+
+#. module: flexsys_kds
+#: models/pos_category.py
+msgid "Fallback production station for products in this POS category, used when no FlexSys KDS routing rule matches. This is the category cashiers/staff actually organize products under in the POS - usually the right place to set a default, rather than the internal inventory category."
+msgstr "محطة الإنتاج الاحتياطية لمنتجات هذه الفئة في نقطة البيع، تُستخدم عند عدم مطابقة أي قاعدة توجيه FlexSys KDS. هذه هي الفئة التي ينظّم الكاشير/الموظفون المنتجات ضمنها فعليًا في نقطة البيع - وعادةً هي المكان الصحيح لتعيين افتراضي، بدلًا من فئة المخزون الداخلية."
+
+#. module: flexsys_kds
+#: models/product_category.py
+msgid "Fallback production station for products in this category."
+msgstr "محطة الإنتاج الاحتياطية لمنتجات هذه الفئة."
+
+#. module: flexsys_kds
+#: models/pos_order.py
+msgid "FlexSys KDS Order"
+msgstr "طلب FlexSys KDS"
+
+#. module: flexsys_kds
+#: models/pos_config.py
+msgid "FlexSys KDS Stations"
+msgstr "محطات FlexSys KDS"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "FlexSys KDS uses res.company as the Branch entity for MVP scope."
+msgstr "يستخدم FlexSys KDS شركة Odoo (res.company) ككيان الفرع في هذا النطاق."
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "FlexSys Orders"
+msgstr "طلبات FlexSys"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Full Order"
+msgstr "الطلب كاملًا"
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "Hold"
+msgstr "تعليق"
+
+#. module: flexsys_kds
+#: views/kds_routing_rule_views.xml
+msgid "How matching works:"
+msgstr "طريقة المطابقة:"
+
+#. module: flexsys_kds
+#: models/kds_printer.py
+msgid "IP / Network Address"
+msgstr "عنوان IP / الشبكة"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Identifier the print agent process itself supplies when claiming this job - not the printer's own identity (a printer could in principle be served by more than one agent process/device over its lifetime)."
+msgstr "المعرّف الذي توفره عملية وكيل الطباعة نفسها عند استلام هذه المهمة - وليس هوية الطابعة نفسها (يمكن من حيث المبدأ أن تخدم الطابعة أكثر من عملية وكيل/جهاز على مدار عمرها)."
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "Internal Notes"
+msgstr "ملاحظات داخلية"
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "Internal operational notes for this order."
+msgstr "ملاحظات تشغيلية داخلية لهذا الطلب."
+
+#. module: flexsys_kds
+#: models/kds_routing_rule.py
+msgid "Inventory Categories"
+msgstr "فئات المخزون"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Is Expeditor / Packing Station"
+msgstr "محطة تجميع / تعبئة"
+
+#. module: flexsys_kds
+#: views/kds_print_job_views.xml
+msgid "Job"
+msgstr "المهمة"
+
+#. module: flexsys_kds
+#: views/kds_print_job_views.xml
+msgid "Job Type"
+msgstr "نوع المهمة"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "KDS + Printer"
+msgstr "KDS + طابعة"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "KDS Only"
+msgstr "KDS فقط"
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "KDS Order"
+msgstr "طلب KDS"
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "KDS Status"
+msgstr "حالة KDS"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Kitchen Request"
+msgstr "طلب من المطبخ"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Language for this station's own Public Kiosk screen. Independent of the Internal KDS Screen, which always uses the logged-in Odoo user's own language instead - the public kiosk has no logged-in user to read a language from."
+msgstr "لغة شاشة الكشك العام الخاصة بهذه المحطة. مستقلة عن شاشة KDS الداخلية، التي تستخدم دائمًا لغة مستخدم Odoo المسجّل دخوله بدلًا من ذلك - فالكشك العام لا يملك مستخدمًا مسجّلًا دخوله لقراءة لغة منه."
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "Late"
+msgstr "متأخر"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Late At (min)"
+msgstr "التأخير عند (دقيقة)"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Late Threshold (%)"
+msgstr "حد التأخير (%)"
+
+#. module: flexsys_kds
+#: models/kds_routing_rule.py
+msgid "Leave empty for a rule that applies to every company - set it to scope this rule to one branch only. Never used to route an order for a *different* company than this rule's own (security fix, audit finding 1/CRITICAL: multi-company isolation)."
+msgstr "اتركه فارغًا لقاعدة تنطبق على كل الشركات - أو حدّده لحصر هذه القاعدة بفرع واحد فقط. لا تُستخدم أبدًا لتوجيه طلب لشركة *مختلفة* عن شركة هذه القاعدة نفسها (عزل متعدد الشركات)."
+
+#. module: flexsys_kds
+#: models/kds_routing_rule.py
+msgid "Leave empty to apply this rule to all POS configurations."
+msgstr "اتركه فارغًا لتطبيق هذه القاعدة على جميع إعدادات نقطة البيع."
+
+#. module: flexsys_kds
+#: models/kds_routing_rule.py
+msgid "Leave empty to match every order type."
+msgstr "اتركه فارغًا لمطابقة كل أنواع الطلبات."
+
+#. module: flexsys_kds
+#: models/kds_routing_rule.py
+msgid "Leave empty to match every source."
+msgstr "اتركه فارغًا لمطابقة كل المصادر."
+
+#. module: flexsys_kds
+#: models/kds_event.py
+msgid "Line Added"
+msgstr "تمت إضافة صنف"
+
+#. module: flexsys_kds
+#: models/kds_event.py
+msgid "Line Ready"
+msgstr "الصنف جاهز"
+
+#. module: flexsys_kds
+#: models/kds_event.py
+msgid "Line Removed / Cancelled"
+msgstr "تمت إزالة/إلغاء صنف"
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "Lines"
+msgstr "الأصناف"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Lost Ticket"
+msgstr "فقدان التذكرة"
+
+#. module: flexsys_kds
+#: views/kds_routing_rule_views.xml
+msgid "Lower number = higher priority. Rules are checked in this order, and the FIRST rule that matches wins - later rules are never checked once one has already matched."
+msgstr "الرقم الأقل = أولوية أعلى. تُفحص القواعد بهذا الترتيب، والقاعدة الأولى المطابقة هي الفائزة - لا تُفحص القواعد اللاحقة بمجرد مطابقة إحداها."
+
+#. module: flexsys_kds
+#: models/kds_routing_rule.py
+msgid "Lower runs first. First match wins."
+msgstr "الرقم الأقل يُنفَّذ أولًا. أول مطابقة تفوز."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Manager Request"
+msgstr "طلب من المدير"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Manual Print"
+msgstr "الطباعة اليدوية"
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "Mark Ready"
+msgstr "تحديد كجاهز"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Marks this station as the final assembly/packing stage. An order is only Ready for pickup once all required stations are done."
+msgstr "تُحدّد هذه المحطة كمرحلة التجميع/التعبئة النهائية. لا يصبح الطلب جاهزًا للاستلام إلا بعد اكتمال جميع المحطات المطلوبة."
+
+#. module: flexsys_kds
+#: views/kds_routing_rule_views.xml
+msgid "Match Conditions"
+msgstr "شروط المطابقة"
+
+#. module: flexsys_kds
+#: models/kds_order_line.py
+msgid "Modifiers / Notes"
+msgstr "التعديلات / الملاحظات"
+
+#. module: flexsys_kds
+#: models/kds_event.py
+msgid "Moved Between Stations"
+msgstr "نُقل بين المحطات"
+
+#. module: flexsys_kds
+#: models/kds_order_type_tag.py
+msgid "Must match a kds.order.order_type selection value."
+msgstr "يجب أن يطابق إحدى قيم نوع الطلب في kds.order."
+
+#. module: flexsys_kds
+#: models/kds_order_source_tag.py
+msgid "Must match a kds.order.source selection value."
+msgstr "يجب أن يطابق إحدى قيم المصدر في kds.order."
+
+#. module: flexsys_kds
+#: models/kds_printer.py
+msgid "Network Printer"
+msgstr "طابعة شبكة"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "New"
+msgstr "جديد"
+
+#. module: flexsys_kds
+#: models/kds_order_line.py
+msgid "None"
+msgstr "لا يوجد"
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "Normal"
+msgstr "طبيعي"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Number of physical copies the print agent should produce for this job (e.g. two copies of a delivery ticket)."
+msgstr "عدد النسخ المادية التي يجب على وكيل الطباعة إنتاجها لهذه المهمة (مثال: نسختان لتذكرة توصيل)."
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "Odoo POS"
+msgstr "نقطة بيع Odoo"
+
+#. module: flexsys_kds
+#: models/kds_routing_rule.py
+msgid "Odoo's internal accounting/inventory categories. Usually POS Categories is what you want instead - this is here as a fallback for setups that don't maintain POS categories."
+msgstr "فئات المحاسبة/المخزون الداخلية في Odoo. عادةً ما تكون فئات نقطة البيع هي المطلوبة بدلًا من ذلك - وهذا الخيار احتياطي للإعدادات التي لا تحتفظ بفئات نقطة بيع."
+
+#. module: flexsys_kds
+#: models/kds_printer.py
+msgid "Offline"
+msgstr "غير متصل"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "On Hold"
+msgstr "معلّق"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Once past this time, an unresolved 'dispatched' job is treated as abandoned and becomes claimable again by any agent - handles a crashed agent or a lost network connection without needing a human to intervene."
+msgstr "بعد تجاوز هذا الوقت، تُعتبر المهمة \"المُرسَلة\" غير المحسومة متروكة، وتصبح قابلة للاستلام مجددًا من أي وكيل - يعالج تعطّل الوكيل أو انقطاع الشبكة دون تدخّل بشري."
+
+#. module: flexsys_kds
+#: models/kds_printer.py
+msgid "Online"
+msgstr "متصل"
+
+#. module: flexsys_kds
+#: views/kds_printer_hub_views.xml
+msgid "Open Print Jobs"
+msgstr "فتح مهام الطباعة"
+
+#. module: flexsys_kds
+#: views/kds_printer_hub_views.xml
+msgid "Open Printers"
+msgstr "فتح الطابعات"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Order"
+msgstr "الطلب"
+
+#. module: flexsys_kds
+#: models/kds_event.py
+msgid "Order Completed"
+msgstr "اكتمل الطلب"
+
+#. module: flexsys_kds
+#: models/kds_event.py
+msgid "Order Created"
+msgstr "تم إنشاء الطلب"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "Order Lines"
+msgstr "أصناف الطلب"
+
+#. module: flexsys_kds
+#: models/kds_event.py
+msgid "Order Reopened"
+msgstr "أُعيد فتح الطلب"
+
+#. module: flexsys_kds
+#: models/kds_event.py
+msgid "Order Routed"
+msgstr "تم توجيه الطلب"
+
+#. module: flexsys_kds
+#: models/kds_routing_rule.py
+msgid "Order Types"
+msgstr "أنواع الطلب"
+
+#. module: flexsys_kds
+#: models/kds_event.py
+msgid "Order Updated"
+msgstr "تم تحديث الطلب"
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "Orders"
+msgstr "الطلبات"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Other"
+msgstr "سبب آخر"
+
+#. module: flexsys_kds
+#: models/kds_event.py
+msgid "Override"
+msgstr "تجاوز"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "POS"
+msgstr "نقطة البيع"
+
+#. module: flexsys_kds
+#: models/kds_routing_rule.py
+msgid "POS Categories"
+msgstr "فئات نقطة البيع"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "POS Configs"
+msgstr "نقاط البيع"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "POS Order"
+msgstr "طلب نقطة البيع"
+
+#. module: flexsys_kds
+#: views/kds_pos_config_views.xml
+msgid "POS Send-to-KDS Settings"
+msgstr "إعدادات إرسال نقطة البيع إلى KDS"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "POS Status"
+msgstr "حالة نقطة البيع"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "POS points of sale this station receives orders from. Empty = all."
+msgstr "نقاط البيع التي تستقبل هذه المحطة طلبات منها. فارغ = الجميع."
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "Packing"
+msgstr "التعبئة"
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "Packing Duration (min)"
+msgstr "مدة التعبئة (دقيقة)"
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "Packing Ready Time"
+msgstr "وقت جاهزية التعبئة"
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "Packing SLA"
+msgstr "SLA التعبئة"
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "Packing Start Time"
+msgstr "وقت بدء التعبئة"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "Payment Method"
+msgstr "طريقة الدفع"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Pending"
+msgstr "قيد الانتظار"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "Pickup"
+msgstr "استلام"
+
+#. module: flexsys_kds
+#: models/kds_routing_rule.py
+msgid "Point of Sale categories (Burgers, Drinks, Desserts...) as configured in the POS itself - this is what cashiers/staff actually use day to day, and is checked first."
+msgstr "فئات نقطة البيع (برغر، مشروبات، حلويات...) كما هي معدّة في نقطة البيع نفسها - وهي ما يستخدمه الكاشير/الموظفون فعليًا يوميًا، وتُفحص أولًا."
+
+#. module: flexsys_kds
+#: models/kds_order_line.py
+msgid "Post-send Change"
+msgstr "تغيير بعد الإرسال"
+
+#. module: flexsys_kds
+#: models/kds_order_line.py
+msgid "Prep Duration (min)"
+msgstr "مدة التحضير (دقيقة)"
+
+#. module: flexsys_kds
+#: models/kds_event.py
+msgid "Preparation Started"
+msgstr "بدأ التحضير"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "Preparing"
+msgstr "قيد التحضير"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Print"
+msgstr "طباعة"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Print #"
+msgstr "رقم الطباعة"
+
+#. module: flexsys_kds
+#: views/kds_print_job_views.xml
+msgid "Print (first)"
+msgstr "طباعة (الأولى)"
+
+#. module: flexsys_kds
+#: views/kds_printer_views.xml
+msgid "Print Agent"
+msgstr "وكيل الطباعة"
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "Print Full Order"
+msgstr "طباعة الطلب كاملًا"
+
+#. module: flexsys_kds
+#: views/kds_print_job_views.xml
+msgid "Print Job"
+msgstr "مهمة طباعة"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "Print Jobs"
+msgstr "مهام الطباعة"
+
+#. module: flexsys_kds
+#: models/kds_event.py
+msgid "Print Retry"
+msgstr "إعادة محاولة الطباعة"
+
+#. module: flexsys_kds
+#: views/kds_printer_hub_views.xml
+msgid "Print and reprint job history, including status and any escalation."
+msgstr "سجل مهام الطباعة وإعادة الطباعة، بما في ذلك الحالة وأي تصعيد."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Printed"
+msgstr "تمت الطباعة"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Printer"
+msgstr "طابعة"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Printer Error"
+msgstr "خطأ في الطابعة"
+
+#. module: flexsys_kds
+#: models/kds_event.py
+msgid "Printer Fallback"
+msgstr "التحويل إلى الطابعة الاحتياطية"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Printer Only"
+msgstr "طابعة فقط"
+
+#. module: flexsys_kds
+#: views/kds_printer_hub_views.xml
+msgid "Printer setup per station - default/backup roles, agent status."
+msgstr "إعداد الطابعات لكل محطة - أدوار الافتراضي/الاحتياطي، حالة الوكيل."
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Printers"
+msgstr "الطابعات"
+
+#. module: flexsys_kds
+#: views/kds_printer_hub_views.xml
+msgid "Printers and print job history."
+msgstr "الطابعات وسجل مهام الطباعة."
+
+#. module: flexsys_kds
+#: views/kds_printer_hub_views.xml
+msgid "Printing"
+msgstr "الطباعة"
+
+#. module: flexsys_kds
+#: models/kds_event.py
+msgid "Priority Changed"
+msgstr "تغيير الأولوية"
+
+#. module: flexsys_kds
+#: models/kds_order_line.py
+msgid "Product Name"
+msgstr "اسم المنتج"
+
+#. module: flexsys_kds
+#: models/kds_routing_rule.py
+msgid "Products"
+msgstr "المنتجات"
+
+#. module: flexsys_kds
+#: views/kds_station_views.xml
+msgid "Public Kiosk"
+msgstr "الكشك العام"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Public Kiosk Token"
+msgstr "رمز الكشك العام"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Public Kiosk URL"
+msgstr "رابط الكشك العام"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "QR Order"
+msgstr "طلب عبر QR"
+
+#. module: flexsys_kds
+#: models/pos_order.py
+msgid "Quantity reduced in POS below this line's own share"
+msgstr "تم تخفيض الكمية في نقطة البيع دون حصة هذا السطر"
+
+#. module: flexsys_kds
+#: models/pos_order.py
+msgid "Quantity reduced in POS, cascading into this historical portion after the more recent line was fully absorbed"
+msgstr "تم تخفيض الكمية في نقطة البيع، وامتد إلى هذا الجزء التاريخي بعد أن تم امتصاص السطر الأحدث بالكامل"
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "Ready"
+msgstr "جاهز"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Reason Note"
+msgstr "ملاحظة السبب"
+
+#. module: flexsys_kds
+#: views/kds_printer_views.xml
+msgid "Regenerate Agent Key"
+msgstr "إعادة إنشاء مفتاح وكيل الطباعة"
+
+#. module: flexsys_kds
+#: views/kds_station_views.xml
+msgid "Regenerate Kiosk Token"
+msgstr "إعادة إنشاء رمز الكشك"
+
+#. module: flexsys_kds
+#: models/kds_order_line.py
+msgid "Removed"
+msgstr "أُزيل"
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "Reopen"
+msgstr "إعادة فتح"
+
+#. module: flexsys_kds
+#: models/kds_event.py
+msgid "Reprint"
+msgstr "إعادة الطباعة"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Reprint Reason"
+msgstr "سبب إعادة الطباعة"
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "Responsible User"
+msgstr "المستخدم المسؤول"
+
+#. module: flexsys_kds
+#: views/kds_routing_rule_views.xml
+msgid "Routing Rule"
+msgstr "قاعدة توجيه"
+
+#. module: flexsys_kds
+#: views/kds_routing_rule_views.xml
+msgid "Routing Rules"
+msgstr "قواعد التوجيه"
+
+#. module: flexsys_kds
+#: views/kds_station_views.xml
+msgid "SLA"
+msgstr "SLA"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Secret embedded in this station's public kiosk URL. Anyone with the full URL can view and operate this station's screen without logging into Odoo. Regenerate immediately invalidates the old URL if you suspect it leaked."
+msgstr "سر مضمّن في رابط الكشك العام لهذه المحطة. أي شخص يملك الرابط الكامل يمكنه عرض وتشغيل شاشة هذه المحطة دون تسجيل الدخول إلى Odoo. إعادة الإنشاء تُبطل الرابط القديم فورًا إذا شككت بتسربه."
+
+#. module: flexsys_kds
+#: models/kds_order_line.py
+msgid "Selected variant/attribute description for this line (size, flavor, etc.), captured from the POS line separately from the free-text customer note."
+msgstr "وصف المتغيّر/الخاصية المختارة لهذا الصنف (الحجم، النكهة، إلخ)، مأخوذ من صنف نقطة البيع بشكل منفصل عن ملاحظة العميل الحرة."
+
+#. module: flexsys_kds
+#: models/pos_config.py
+msgid "Send Order to KDS"
+msgstr "إرسال الطلب إلى KDS"
+
+#. module: flexsys_kds
+#: views/kds_printer_views.xml
+msgid "Set as Backup"
+msgstr "تعيين كبديلة"
+
+#. module: flexsys_kds
+#: views/kds_printer_views.xml
+msgid "Set as Default"
+msgstr "تعيين كافتراضي"
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "Set when someone actually starts packing (action_start), not at task creation - a task can sit in 'Waiting' with no one assigned yet."
+msgstr "يُسجَّل عند بدء أحدهم التعبئة فعليًا، وليس عند إنشاء المهمة - يمكن أن تبقى المهمة في حالة \"الانتظار\" دون تعيين أحد بعد."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Set when the print agent confirms it received the job (before actual printing completes)."
+msgstr "يُسجَّل عند تأكيد وكيل الطباعة استلامه للمهمة (قبل اكتمال الطباعة الفعلية)."
+
+#. module: flexsys_kds
+#: views/kds_printer_views.xml
+msgid "Shared secret for the local print agent/bridge process polling\n                            /flexsys_kds/print/agent/* on behalf of this printer. Do not share it\n                            outside the agent process configuration."
+msgstr "سر مشترك لعملية وكيل الطباعة المحلي التي تستطلع المسار /flexsys_kds/print/agent/* نيابة عن هذه الطابعة. لا تشاركه خارج إعداد عملية الوكيل."
+
+#. module: flexsys_kds
+#: models/kds_printer.py
+msgid "Shared secret used by the local print agent/bridge process to poll and report on this printer's jobs via the /flexsys_kds/print/agent/* routes, instead of a full Odoo user session. Rotate it if you suspect it has leaked."
+msgstr "سر مشترك تستخدمه عملية وكيل الطباعة المحلي لاستطلاع والإبلاغ عن مهام هذه الطابعة عبر مسارات /flexsys_kds/print/agent/*، بدلًا من جلسة مستخدم Odoo كاملة. غيّره إذا شككت بتسربه."
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Short technical code, e.g. KITCHEN"
+msgstr "رمز تقني مختصر، مثال: KITCHEN"
+
+#. module: flexsys_kds
+#: views/kds_printer_views.xml
+msgid "Show Agent Key"
+msgstr "عرض مفتاح الوكيل"
+
+#. module: flexsys_kds
+#: models/kds_routing_rule.py
+msgid "Sources"
+msgstr "المصادر"
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "Start Preparing"
+msgstr "بدء التحضير"
+
+#. module: flexsys_kds
+#: models/kds_order_line.py
+msgid "Station"
+msgstr "محطة"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Station Items Only"
+msgstr "أصناف المحطة فقط"
+
+#. module: flexsys_kds
+#: models/kds_event.py
+msgid "Station Received"
+msgstr "استلمت المحطة الطلب"
+
+#. module: flexsys_kds
+#: views/kds_station_views.xml
+msgid "Stations"
+msgstr "المحطات"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "Stations Involved"
+msgstr "المحطات المعنية"
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "Status"
+msgstr "الحالة"
+
+#. module: flexsys_kds
+#: models/kds_event.py
+msgid "Status Changed"
+msgstr "تغيّرت الحالة"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "Take Away"
+msgstr "سفري"
+
+#. module: flexsys_kds
+#: views/kds_station_views.xml
+msgid "Target"
+msgstr "الهدف"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Target Preparation Time (min)"
+msgstr "وقت التحضير المستهدف (دقيقة)"
+
+#. module: flexsys_kds
+#: models/pos_config.py
+msgid "The FlexSys KDS stations this POS is configured to send orders to. Empty means this POS is not currently in scope for FlexSys KDS at all."
+msgstr "محطات FlexSys KDS التي تُعدّ نقطة البيع هذه لإرسال الطلبات إليها. فارغ يعني أن نقطة البيع هذه ليست ضمن نطاق FlexSys KDS حاليًا."
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "The actual time this Late Threshold percentage represents, given this station's own Target Preparation Time."
+msgstr "الوقت الفعلي الذي تمثله نسبة حد التأخير هذه، بالنظر إلى وقت التحضير المستهدف لهذه المحطة."
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "The actual time this Warning Threshold percentage represents, given this station's own Target Preparation Time."
+msgstr "الوقت الفعلي الذي تمثله نسبة حد التحذير هذه، بالنظر إلى وقت التحضير المستهدف لهذه المحطة."
+
+#. module: flexsys_kds
+#: models/kds_printer.py
+msgid "Thermal Printer"
+msgstr "طابعة حرارية"
+
+#. module: flexsys_kds
+#: views/kds_printer_views.xml
+msgid "This invalidates the current key - the print agent bridge for this printer will need the new key. Continue?"
+msgstr "سيؤدي هذا إلى إبطال المفتاح الحالي - سيحتاج وكيل الطباعة لهذه الطابعة إلى المفتاح الجديد. متابعة؟"
+
+#. module: flexsys_kds
+#: views/kds_station_views.xml
+msgid "This invalidates the current public kiosk URL for this station - any device already using it will stop working until you update it with the new URL. Continue?"
+msgstr "سيؤدي هذا إلى إبطال رابط الكشك العام الحالي لهذه المحطة - أي جهاز يستخدمه حاليًا سيتوقف عن العمل حتى تُحدّثه بالرابط الجديد. متابعة؟"
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "Timing"
+msgstr "التوقيت"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Token Created / Last Regenerated"
+msgstr "تاريخ إنشاء الرمز / آخر إعادة إنشاء"
+
+#. module: flexsys_kds
+#: views/kds_order_views.xml
+msgid "Total Fulfillment Time"
+msgstr "إجمالي وقت الإنجاز"
+
+#. module: flexsys_kds
+#: views/kds_print_job_views.xml
+msgid "True on the original job when it was escalated to a backup printer after repeated failures - see the backup printer's own separate job row, right next to this one once grouped by Order."
+msgstr "صحيح على المهمة الأصلية عند تصعيدها إلى الطابعة الاحتياطية بعد فشل متكرر - راجع صف المهمة المنفصل الخاص بالطابعة الاحتياطية، بجانب هذا الصف مباشرة عند التجميع حسب الطلب."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "True once retries and fallback printer have both been exhausted and a manager alert event has been logged."
+msgstr "صحيح بمجرد استنفاد إعادة المحاولة والطابعة الاحتياطية معًا وتسجيل حدث تنبيه للمدير."
+
+#. module: flexsys_kds
+#: models/kds_printer.py
+msgid "USB / Device ID"
+msgstr "معرّف USB / الجهاز"
+
+#. module: flexsys_kds
+#: models/kds_printer.py
+msgid "USB Printer"
+msgstr "طابعة USB"
+
+#. module: flexsys_kds
+#: models/kds_order_line.py
+msgid "Updated"
+msgstr "محدّث"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Used by the SLA engine to compute Normal / Warning / Late."
+msgstr "يُستخدم بواسطة محرك SLA لحساب طبيعي / تحذير / متأخر."
+
+#. module: flexsys_kds
+#: views/kds_station_views.xml
+msgid "Users"
+msgstr "المستخدمون"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Users linked to this station only see orders/lines routed to it."
+msgstr "المستخدمون المرتبطون بهذه المحطة يرون فقط الطلبات/الأصناف الموجّهة إليها."
+
+#. module: flexsys_kds
+#: models/kds_order_line.py
+msgid "Variant / Attributes"
+msgstr "المتغيّر / الخصائص"
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "WAIT + WORK TIME COMBINED: measured from available_time (the order became Available for packing) through to ready_time (or now, if still open) - this INCLUDES any time the order sat waiting before someone started packing it, unlike packing_duration above (active work only, starting from start_time). Formula: Packing Wait Time + Packing Duration = Packing SLA elapsed time. Treating this and packing_duration as interchangeable in a report would understate how long an order actually sat waiting for packing to begin."
+msgstr "الانتظار + وقت العمل مجتمعَين: يُقاس من وقت توفّر الطلب للتعبئة وحتى وقت الجاهزية (أو الآن إن كان ما يزال مفتوحًا) - ويشمل هذا أي وقت انتظار قبل أن يبدأ أحدهم التعبئة فعليًا، بخلاف مدة التعبئة أعلاه (العمل الفعلي فقط). المعادلة: وقت انتظار التعبئة + مدة التعبئة = الوقت المنقضي لـSLA التعبئة."
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "Waiting"
+msgstr "في الانتظار"
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "Warning"
+msgstr "تحذير"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Warning At (min)"
+msgstr "التحذير عند (دقيقة)"
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "Warning Threshold (%)"
+msgstr "حد التحذير (%)"
+
+#. module: flexsys_kds
+#: models/kds_order.py
+msgid "Web Order"
+msgstr "طلب إلكتروني"
+
+#. module: flexsys_kds
+#: models/pos_config.py
+msgid "When Sent from POS"
+msgstr "عند الإرسال من نقطة البيع"
+
+#. module: flexsys_kds
+#: models/pos_config.py
+msgid "When an order placed through this POS should reach the kitchen.\n\n'After Payment' (default): the original, safest behavior (unchanged) - the order reaches the kitchen once payment/order completion goes through.\n\n'When Sent from POS': uses Odoo's own native POS workflow, not a new custom button. With Preparation Display enabled, this is the native 'Send' action (Build/Edit Order -> Send -> FlexSys KDS). Without Preparation Display, this is the native 'New' action (Build/Edit Order -> New -> FlexSys KDS) - starting a new order finalizes/sends the current one. Either way, simply adding/removing products, changing quantities, or editing the order does NOT synchronize anything by itself - changes accumulate until the next Send/New, then sync as ADDED/UPDATED/CANCELLED all at once."
+msgstr "متى يجب أن يصل الطلب المُنشأ عبر نقطة البيع هذه إلى المطبخ.\n\n\"بعد الدفع\" (الافتراضي): السلوك الأصلي الأكثر أمانًا (دون تغيير) - يصل الطلب إلى المطبخ فور إتمام الدفع/الطلب.\n\n\"عند الإرسال من نقطة البيع\": يستخدم سير عمل نقطة البيع الأصلي في Odoo، وليس زرًا مخصصًا جديدًا. مع تفعيل شاشة التحضير، هذا هو إجراء \"الإرسال\" الأصلي. بدون شاشة التحضير، هذا هو إجراء \"جديد\" الأصلي - بدء طلب جديد يُنهي/يُرسل الطلب الحالي. في كلتا الحالتين، مجرد إضافة/إزالة منتجات أو تغيير الكميات أو تعديل الطلب لا يُزامن شيئًا بحد ذاته - تتراكم التغييرات حتى الإرسال/الجديد التالي، ثم تُزامن كلها دفعة واحدة كـمضاف/محدّث/ملغى."
+
+#. module: flexsys_kds
+#: models/kds_station.py
+msgid "When enabled, every public kiosk request for this station is rejected, even with a correct token - without regenerating/invalidating the token itself. Turn back off to restore access immediately with the same URL every device already has."
+msgstr "عند التفعيل، يُرفض كل طلب وصول للكشك العام لهذه المحطة، حتى برمز صحيح - دون إعادة إنشاء الرمز أو إبطاله. أعد التعطيل لاستعادة الوصول فورًا بنفس الرابط الذي تملكه الأجهزة بالفعل."
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "When every production line became Ready - i.e. when this task was created. This is the START of the Packing SLA clock (see sla_status below), which is DIFFERENT from Packing Duration (which starts later, at start_time - see below). Production Time (kds.order's own created_time -> this field) is measured independently of both."
+msgstr "الوقت الذي أصبحت فيه كل أصناف الإنتاج جاهزة - أي وقت إنشاء هذه المهمة. هذه بداية عدّاد SLA للتعبئة، وهو مختلف عن مدة التعبئة (التي تبدأ لاحقًا عند وقت البدء). يُقاس وقت الإنتاج بشكل مستقل عن كليهما."
+
+#. module: flexsys_kds
+#: models/kds_expeditor_task.py
+msgid "When someone actually began packing - this is where Packing DURATION starts counting (see packing_duration below), which is *after* available_time, not the same instant - there's normally a wait between an order becoming Available and someone actually picking it up."
+msgstr "الوقت الذي بدأ فيه أحدهم التعبئة فعليًا - من هنا تبدأ مدة التعبئة بالعدّ، وهي *بعد* وقت التوفّر، وليست نفس اللحظة - عادةً ما يوجد انتظار بين توفّر الطلب واستلام أحدهم له فعليًا."
+
+# ---------------------------------------------------------------
+# ACTION / MENU NAMES (found via a second, targeted sweep for
+# <field name="name">Text</field> inside ir.actions.*/ir.ui.menu
+# records - a pattern the first sweep's own string=/help=
+# attribute-only regex did not match, since these use a plain
+# field element, not an attribute).
+# ---------------------------------------------------------------
+
+#. module: flexsys_kds
+#: view:action/menu name
+msgid "Active Orders"
+msgstr "الطلبات النشطة"
+
+#. module: flexsys_kds
+#: view:action/menu name
+msgid "Analytics"
+msgstr "التحليلات"
+
+#. module: flexsys_kds
+#: view:action/menu name
+msgid "Configuration"
+msgstr "الإعدادات"
+
+#. module: flexsys_kds
+#: view:action/menu name
+msgid "FlexSys KDS"
+msgstr "FlexSys KDS"
+
+#. module: flexsys_kds
+#: view:action/menu name
+msgid "KDS Screen"
+msgstr "شاشة KDS"
+
+#. module: flexsys_kds
+#: view:action/menu name
+msgid "Operations"
+msgstr "العمليات"
+
+#. module: flexsys_kds
+#: view:action/menu name
+msgid "Order History"
+msgstr "سجل الطلبات"
+
+#. module: flexsys_kds
+#: view:action/menu name
+msgid "Routing"
+msgstr "التوجيه"
+
+# ---------------------------------------------------------------
+# SECURITY GROUP NAMES (res.groups.name IS translate=True in Odoo
+# core - genuinely user-facing, shown in Settings > Users >
+# Groups and on every user's own permissions form).
+# ---------------------------------------------------------------
+
+#. module: flexsys_kds
+#: security/kds_security.xml (res.groups)
+msgid "KDS Operator"
+msgstr "مشغّل KDS"
+
+#. module: flexsys_kds
+#: security/kds_security.xml (res.groups)
+msgid "Station Supervisor"
+msgstr "مشرف المحطة"
+
+#. module: flexsys_kds
+#: security/kds_security.xml (res.groups)
+msgid "Branch Manager"
+msgstr "مدير الفرع"
+
+#. module: flexsys_kds
+#: security/kds_security.xml (res.groups)
+msgid "Administrator"
+msgstr "المسؤول"
+
+# ---------------------------------------------------------------
+# RECORD RULE NAMES (ir.rule.name - developer-facing only, seen
+# in Settings > Technical > Record Rules under Developer Mode,
+# not by ordinary end users - included for full sweep coverage
+# per the comprehensive-sweep requirement.)
+# ---------------------------------------------------------------
+
+#. module: flexsys_kds
+#: security/kds_security.xml (ir.rule)
+msgid "KDS Order Line: operator/supervisor restricted to assigned stations"
+msgstr "صنف طلب KDS: المشغّل/المشرف مقيّد بالمحطات المعيّنة"
+
+#. module: flexsys_kds
+#: security/kds_security.xml (ir.rule)
+msgid "KDS Order Line: branch manager sees own company"
+msgstr "صنف طلب KDS: مدير الفرع يرى شركته فقط"
+
+#. module: flexsys_kds
+#: security/kds_security.xml (ir.rule)
+msgid "KDS Order Line: administrator unrestricted"
+msgstr "صنف طلب KDS: المسؤول دون قيود"
+
+#. module: flexsys_kds
+#: security/kds_security.xml (ir.rule)
+msgid "KDS Order: multi-company"
+msgstr "طلب KDS: متعدد الشركات"
+
+#. module: flexsys_kds
+#: security/kds_security.xml (ir.rule)
+msgid "KDS Order: operator/supervisor restricted to orders touching an assigned station"
+msgstr "طلب KDS: المشغّل/المشرف مقيّد بالطلبات المرتبطة بمحطة معيّنة"
+
+#. module: flexsys_kds
+#: security/kds_security.xml (ir.rule)
+msgid "KDS Order: branch manager sees own company (station-scope tier)"
+msgstr "طلب KDS: مدير الفرع يرى شركته فقط (مستوى نطاق المحطة)"
+
+#. module: flexsys_kds
+#: security/kds_security.xml (ir.rule)
+msgid "KDS Order: administrator unrestricted (station-scope tier)"
+msgstr "طلب KDS: المسؤول دون قيود (مستوى نطاق المحطة)"
+
+#. module: flexsys_kds
+#: security/kds_security.xml (ir.rule)
+msgid "KDS Station: multi-company"
+msgstr "محطة KDS: متعدد الشركات"
+
+#. module: flexsys_kds
+#: security/kds_security.xml (ir.rule)
+msgid "KDS Expeditor Task: operator/supervisor restricted to assigned stations"
+msgstr "مهمة تجميع KDS: المشغّل/المشرف مقيّد بالمحطات المعيّنة"
+
+#. module: flexsys_kds
+#: security/kds_security.xml (ir.rule)
+msgid "KDS Expeditor Task: branch manager sees own company"
+msgstr "مهمة تجميع KDS: مدير الفرع يرى شركته فقط"
+
+#. module: flexsys_kds
+#: security/kds_security.xml (ir.rule)
+msgid "KDS Expeditor Task: administrator unrestricted"
+msgstr "مهمة تجميع KDS: المسؤول دون قيود"

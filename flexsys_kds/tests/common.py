@@ -139,3 +139,33 @@ class FlexSysKdsTestCommon(TransactionCase):
         single fixed per-product default.)
         """
         line.with_context(kds_workflow_write=True).write({'station_id': station.id})
+
+    # -----------------------------------------------------------------
+    # TEST INFRASTRUCTURE ("CI Recovery Round 4"), added per the
+    # client's own explicit request: a centralized helper for rendering
+    # the kiosk's own _KIOSK_HTML_TEMPLATE in tests, so a future
+    # placeholder added to that template only needs updating here once,
+    # not in every test file that happens to render it directly.
+    # Confirmed against the template's own actual current requirements
+    # by extracting every %(...)s/%(...)r placeholder it contains
+    # directly (controllers/kds_kiosk.py) - the exact defect this round
+    # fixed (a stale test manually rebuilding this dict, missing
+    # placeholders the template grew after Arabic Localization) is
+    # exactly what this helper exists to prevent recurring.
+    # -----------------------------------------------------------------
+    def _render_kiosk_template(self, **overrides):
+        """Renders controllers/kds_kiosk.py's own _KIOSK_HTML_TEMPLATE
+        with every placeholder it currently requires, using reasonable
+        defaults - pass keyword overrides for any value a specific test
+        needs to control (e.g. kiosk_lang='ar', kiosk_dir='rtl').
+        Returns the rendered HTML string."""
+        from odoo.addons.flexsys_kds.controllers.kds_kiosk import _KIOSK_HTML_TEMPLATE
+        vals = {
+            'station_name': 'Test Station', 'branch_name': 'QT01', 'company_name': 'Test Co',
+            'station_code': 'TESTSTN', 'token': 'test-token-abc',
+            'kiosk_lang': 'en', 'kiosk_dir': 'ltr',
+            'branch_label': 'Branch', 'time_label': 'Time',
+        }
+        vals.update(overrides)
+        return _KIOSK_HTML_TEMPLATE % vals
+

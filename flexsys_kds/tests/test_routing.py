@@ -458,13 +458,28 @@ class TestRouting(FlexSysKdsTestCommon):
     def test_patch5_item2_empty_pos_still_matches_everything(self):
         """Non-regression: confirms empty pos_config_ids still matches
         any POS - the underlying behavior this label describes is
-        completely unchanged."""
+        completely unchanged.
+
+        TEST-FIXTURE FIX ("CI Full Run" report), confirmed by direct
+        tracing before touching this test: `self.pos_config` was never
+        defined anywhere - not in this file's own class (no local
+        setUpClass), not in common.py's own shared fixtures - a
+        genuine AttributeError, not evidence of a _matches() defect.
+        Fixed with a real, local `pos.config` record, matching the
+        exact minimal-fields pattern already used elsewhere in this
+        same file (e.g. test_global_rule_still_enforces_pos_config_eligibility
+        above) - the test still exercises the identical original
+        contract: `_matches()` called with a genuine, non-empty
+        pos_config argument, confirming an unrestricted rule
+        (pos_config_ids empty) matches regardless of which real POS is
+        asking."""
+        pos_config = self.env['pos.config'].create({'name': 'Item2 Empty POS Test'})
         rule = self.env['kds.routing.rule'].create({
             'name': 'Empty POS still matches all',
             'product_ids': [(6, 0, [self.product_burger.id])],
             'station_id': self.station_kitchen.id,
         })
-        self.assertTrue(rule._matches(self.product_burger, 'dine_in', 'pos', self.pos_config))
+        self.assertTrue(rule._matches(self.product_burger, 'dine_in', 'pos', pos_config))
 
     def test_patch5_item3_match_section_title_simplified(self):
         """Item 3: 'MATCH ON (EMPTY = MATCHES EVERYTHING FOR THAT
@@ -489,7 +504,14 @@ class TestRouting(FlexSysKdsTestCommon):
         engine (route_product(), _matches()) is completely untouched
         by these purely-cosmetic label/help/title changes - AND
         semantics across different criteria, OR semantics within the
-        same criterion, still hold exactly as before."""
+        same criterion, still hold exactly as before.
+
+        TEST-FIXTURE FIX ("CI Full Run" report): same root cause and
+        same fix as test_patch5_item2_empty_pos_still_matches_everything
+        above - `self.pos_config` was never defined anywhere. Fixed
+        with a real, local `pos.config` record; the original OR-within-
+        product_ids contract is otherwise completely unchanged."""
+        pos_config = self.env['pos.config'].create({'name': 'Items2to4 AND OR Test'})
         rule = self.env['kds.routing.rule'].create({
             'name': 'AND/OR semantics unaffected',
             'product_ids': [(6, 0, [self.product_burger.id, self.product_cappuccino.id])],
@@ -497,5 +519,5 @@ class TestRouting(FlexSysKdsTestCommon):
             'station_id': self.station_kitchen.id,
         })
         # OR within product_ids: either product matches.
-        self.assertTrue(rule._matches(self.product_burger, 'dine_in', 'pos', self.pos_config))
-        self.assertTrue(rule._matches(self.product_cappuccino, 'dine_in', 'pos', self.pos_config))
+        self.assertTrue(rule._matches(self.product_burger, 'dine_in', 'pos', pos_config))
+        self.assertTrue(rule._matches(self.product_cappuccino, 'dine_in', 'pos', pos_config))

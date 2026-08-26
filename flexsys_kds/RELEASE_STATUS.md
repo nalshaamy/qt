@@ -13,7 +13,7 @@ models that no longer exist).
 
 ## Current Version
 
-`19.0.7.29.5` (development baseline). Final renumbering to the first
+`19.0.7.29.12` (development baseline). Final renumbering to the first
 commercial baseline, `19.0.1.0.0`, happens after all release gates
 below pass and the client gives explicit approval - not automatic.
 
@@ -228,7 +228,7 @@ below for the schema-removal decision this is pending.
 
 ## Automated Test Count
 
-**558 tests** as of this document, covering `py_compile`, XML
+**563 tests** as of this document, covering `py_compile`, XML
 well-formedness, and JS syntax on every file on every change, plus
 functional/behavioral coverage for every area above. Internally
 consistent and known to pass these static checks; **actually running
@@ -273,7 +273,7 @@ it against (see "Commercial Readiness Status" below).
 | Manifest parses, no orphaned data-file references | ✅ Pass |
 | ACL entries all reference an existing model | ✅ Pass (verified programmatically) |
 | Menu items all reference an existing action | ✅ Pass (verified programmatically) |
-| Automated test suite (558 tests) internally consistent | ✅ Pass |
+| Automated test suite (563 tests) internally consistent | ✅ Pass |
 | Automated test suite actually run against live Odoo 19 | ⚠️ **Not verified in this environment - no live instance available** |
 | Live two-screen realtime check (backend + kiosk simultaneously) | ⚠️ **Requires a live instance** |
 | Module upgrade test on an existing development database | ⚠️ **Requires a live instance** |

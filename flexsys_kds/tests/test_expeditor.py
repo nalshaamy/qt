@@ -542,40 +542,24 @@ class TestExpeditor(FlexSysKdsTestCommon):
                 "to 'completed' - completion here is the Expeditor task's own "
                 "responsibility, never each production station's.")
 
-    def test_bug07_expeditor_disabled_each_station_completes_independently(self):
-        """Expeditor Disabled scenario, explicit: each production
-        station completes independently; after the final required
-        station completes, the overall order becomes COMPLETED - the
-        exact same guarantee test_workflow.py's own
-        test_bug07_three_station_order_completes_independently_per_station
-        already covers, confirmed here too since this class's own
-        company has Expeditor active by default (setUpClass) and this
-        needs it explicitly deactivated to test the non-Expeditor path."""
-        self.station_expeditor.active = False
-        order = self._order_two_stations()
-        self.assertFalse(order.expeditor_enabled)
-        order.action_accept()
-        order.line_ids.action_start()
-        order.line_ids.action_ready()
-        kitchen_line = order.line_ids.filtered(lambda l: l.station_id == self.station_kitchen)
-        coffee_line = order.line_ids.filtered(lambda l: l.station_id == self.station_coffee)
-
-        kitchen_line.action_complete()
-
-        order.invalidate_recordset()
-        coffee_line.invalidate_recordset()
-        self.assertEqual(kitchen_line.state, 'completed')
-        self.assertEqual(coffee_line.state, 'ready', "Coffee must remain unchanged.")
-        self.assertNotEqual(order.state, 'completed', "Still waiting on Coffee.")
-
-        coffee_line.action_complete()
-
-        order.invalidate_recordset()
-        self.assertEqual(coffee_line.state, 'completed')
-        self.assertEqual(
-            order.state, 'completed',
-            "Once the final required station completes, the overall order must "
-            "reach Completed.")
+    # -----------------------------------------------------------------
+    # TEST SUITE RESET ("Test Suite Reset & Cleanup" project, Phase 7 -
+    # test_expeditor.py Duplicate Density Review): removed
+    # test_bug07_expeditor_disabled_each_station_completes_independently
+    # (was here - Expeditor explicitly deactivated, two production
+    # stations each completing independently, order reaching Completed
+    # only after the final one). Confirmed, by a direct side-by-side
+    # comparison of both test bodies (not merely trusting this test's
+    # own comment claiming duplication), that this scenario, this
+    # sequence of actions, and this exact expected result are already
+    # fully proven by
+    # test_workflow.py::test_bug07_three_station_order_completes_independently_per_station
+    # - with no Expeditor-specific layer exercised here at all (the
+    # station is explicitly deactivated precisely to fall back to the
+    # same plain per-station completion path that other test already
+    # covers, now with three stations instead of two, superset
+    # coverage). No coverage lost.
+    # -----------------------------------------------------------------
 
     def test_activate_expeditor_task_fail_safe_completes_via_real_line_workflow(self):
         """REAL BUG FIX, found via a proactive sweep for hidden

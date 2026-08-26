@@ -7,6 +7,7 @@ import { user } from "@web/core/user";
 import { makeKdsStore } from "./kds_store";
 import { KdsOrderCard } from "./kds_order_card";
 import { getKdsLabels } from "./kds_i18n";
+import { flexsysPrintViaDirectEpos } from "./flexsys_epos_direct_adapter";
 
 // Languages Odoo ships RTL for; kept as a small explicit list (rather than
 // trying to derive it from the locale code alone) since this only needs to
@@ -28,14 +29,19 @@ export class FlexSysKdsScreen extends Component {
         this.store = makeKdsStore();
         this.state = useState(this.store.state);
         this.action = useService("action");
-        // UI/DATA FIX ("Printing Cleanup - Toast + Job Record
-        // Simplification"), decision item 6: the notification service
-        // was injected here specifically for the Print/Reprint failure
-        // Toast (v7.17.0/v7.17.1), which is now removed entirely per
-        // explicit direction - "No Printer -> No Job is sufficient."
-        // No other part of this component currently needs the
-        // notification service, so the injection itself is removed
-        // too, rather than left unused.
+        // ORM/notification services: needed for the Direct Network
+        // print path merged in from the proven POC below
+        // (flexsys_epos_direct_adapter.js's own initLNA(notificationService,
+        // callback) call, and reading this station's own printing
+        // config, which the backend controller does not otherwise
+        // return with the order/station bootstrap data). Not the same
+        // notification-service need "Printing Cleanup - Toast + Job
+        // Record Simplification" removed in an earlier round (that
+        // was a print-result Toast, deliberately removed per explicit
+        // direction) - this is Direct Network's own LNA permission
+        // flow, an unrelated, genuinely new requirement.
+        this.flexsysOrm = useService("orm");
+        this.flexsysNotification = useService("notification");
         // KDS FULLSCREEN MODE (dev request "V1 Finalization", item 1):
         // deliberately a separate local reactive object, not folded into
         // this.store.state - fullscreen is a purely browser/DOM concern
@@ -335,10 +341,110 @@ export class FlexSysKdsScreen extends Component {
         this.store.orderAction(orderId, action);
     };
 
-    onPrintClick = (orderId) => {
-        // Default reason since the card's print button is a single tap,
-        // no reason-picker dialog - 'kitchen_request' reads reasonably
-        // as "requested from the station itself" in the audit log.
+    // MERGED FROM PROVEN POC (flexsys_kds_poc_1d) - confirmed PASS on
+    // real hardware. Direct Network stations use the Direct ePOS
+    // Adapter (a fully separate file - flexsys_epos_direct_adapter.js
+    // - this component never performs the actual printer connection
+    // itself, only reads this station's own printing config and hands
+    // off to that Adapter).
+    //
+    // COMPATIBILITY FIX ("POC -> Core Merge - One Compatibility Fix
+    // Before Regression Test"): explicit Truth Table, matched exactly
+    // (and identically on the Public Kiosk side - see
+    // controllers/kds_kiosk.py's own printOrder()), so Legacy Printing
+    // genuinely keeps working during this transition period:
+    //   direct_network + Printer IP set   -> Direct ePOS
+    //   direct_network + Printer IP empty -> Legacy Agent fallback
+    //                                         (the existing backend
+    //                                         itself decides whether a
+    //                                         kds.printer exists)
+    //   iot                               -> NOT Legacy Agent, NOT a
+    //                                         print attempt - a clear
+    //                                         "not implemented yet"
+    //                                         log only (IoT itself is
+    //                                         not built yet)
+    //   unset / false / any other legacy
+    //   state                             -> Legacy Agent path, exactly
+    //                                         as before this merge
+    // The prior round's own bug was the direct_network+empty-IP case
+    // stopping with an early return instead of falling through to
+    // store.reprint() - fixed below by restructuring this into a
+    // single ordered set of checks with only ONE terminal "print via
+    // Direct ePOS" branch, everything else falling through to the
+    // final, unconditional legacy call at the bottom.
+    onPrintClick = async (orderId) => {
+        const stationId = this.state.currentStationId;
+        if (!stationId) {
+            this.store.reprint(orderId, stationId, "kitchen_request");
+            return;
+        }
+
+        let stationData;
+        try {
+            stationData = await this.flexsysOrm.read(
+                "kds.station",
+                [stationId],
+                [
+                    "name",
+                    "company_id",
+                    "flexsys_printing_method",
+                    "flexsys_printer_ip",
+                    "flexsys_use_local_network_access",
+                ]
+            );
+        } catch (e) {
+            console.error("FlexSys: failed to read kds.station for printing config.", e);
+            this.store.reprint(orderId, stationId, "kitchen_request");
+            return;
+        }
+
+        const station = stationData?.[0];
+        const method = station?.flexsys_printing_method;
+
+        if (method === "iot") {
+            console.log(
+                "FlexSys: Printing Method is 'Odoo IoT' for this station - Odoo IoT " +
+                    "is not implemented yet. No print attempted (not falling back to " +
+                    "the legacy Agent path, which would be equally incorrect for an " +
+                    "IoT-configured station)."
+            );
+            return;
+        }
+
+        if (method === "direct_network" && station.flexsys_printer_ip) {
+            const rawOrder = this.state.orders.find((o) => o.id === orderId);
+            if (!rawOrder) {
+                console.error("FlexSys: order id " + orderId + " not found in this.state.orders.");
+                return;
+            }
+
+            const branchName = (station.company_id && station.company_id[1]) || rawOrder.company_name || "";
+            const normalizedOrder = window.FlexSysTicketBuilder.normalizeOrderForTicket(
+                rawOrder,
+                station.name,
+                "NEW",
+                branchName
+            );
+
+            const result = await flexsysPrintViaDirectEpos({
+                ip: station.flexsys_printer_ip,
+                useLna: Boolean(station.flexsys_use_local_network_access),
+                normalizedOrder,
+                notificationService: this.flexsysNotification,
+            });
+            if (!result || !result.successful) {
+                console.error("FlexSys: Direct Network print did not succeed.", result);
+            }
+            return;
+        }
+
+        // Falls through here for: direct_network with no Printer IP
+        // set yet, OR flexsys_printing_method unset/false/any other
+        // legacy value - the exact same Legacy Agent path this button
+        // always used, completely unchanged. Default reason since the
+        // card's print button is a single tap, no reason-picker
+        // dialog - 'kitchen_request' reads reasonably as "requested
+        // from the station itself" in the audit log.
         //
         // UI/DATA FIX ("Printing Cleanup - Toast + Job Record
         // Simplification"), decision item 6: the Toast requirement is
@@ -351,7 +457,7 @@ export class FlexSysKdsScreen extends Component {
         // added in v7.17.0/v7.17.1 for this specific requirement is
         // removed here, reverting to the simple fire-and-forget call
         // this method always had before that round.
-        this.store.reprint(orderId, this.state.currentStationId, "kitchen_request");
+        this.store.reprint(orderId, stationId, "kitchen_request");
     };
 }
 

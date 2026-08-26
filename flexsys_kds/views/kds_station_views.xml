@@ -123,6 +123,26 @@
                         <page string="Users" invisible="operating_mode == 'printer_only'">
                             <field name="user_ids" widget="many2many_tags"/>
                         </page>
+                        <!-- MERGED FROM PROVEN POC (flexsys_kds_poc_1d)
+                             - the target Direct Network / future Odoo
+                             IoT architecture per "Printing
+                             Architecture Baseline v1", deliberately a
+                             SEPARATE, independent tab from the legacy
+                             "Printers" (kds.printer/Agent) tab below -
+                             not merged into it - to keep the
+                             architectural distinction visually clear
+                             during this transition period. The legacy
+                             tab is left completely unchanged. -->
+                        <page name="flexsys_printing" string="Printing" invisible="operating_mode == 'kds_only'">
+                            <group>
+                                <field name="flexsys_printing_method" widget="radio"/>
+                                <field name="flexsys_printer_ip"
+                                       invisible="flexsys_printing_method != 'direct_network'"
+                                       placeholder="e.g. 192.168.1.50"/>
+                                <field name="flexsys_use_local_network_access"
+                                       invisible="flexsys_printing_method != 'direct_network'"/>
+                            </group>
+                        </page>
                         <page string="Printers" invisible="operating_mode == 'kds_only'">
                             <field name="printer_ids">
                                 <list editable="bottom">

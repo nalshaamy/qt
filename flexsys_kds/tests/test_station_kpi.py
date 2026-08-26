@@ -213,17 +213,20 @@ class TestStationKpi(FlexSysKdsTestCommon):
         self.assertLess(warning_min_pos, late_pct_pos)
         self.assertLess(late_pct_pos, late_min_pos)
 
-    def test_patch5_item1_sla_calculation_completely_unchanged(self):
-        """Non-regression: 'Do not change the existing SLA
-        calculation/business logic.' Confirms the computed minute
-        values (warning_threshold_minutes/late_threshold_minutes) still
-        compute exactly the same way - a pure view reorganization, zero
-        change to the underlying compute methods."""
-        self.station_kitchen.write({
-            'target_prep_time': 20, 'warning_threshold_pct': 80, 'late_threshold_pct': 120,
-        })
-        self.assertEqual(self.station_kitchen.warning_threshold_minutes, 16.0)
-        self.assertEqual(self.station_kitchen.late_threshold_minutes, 24.0)
+    # -----------------------------------------------------------------
+    # TEST SUITE RESET ("Test Suite Reset & Cleanup" project, Phase 5 -
+    # test_station_kpi.py Duplicate Density Review): removed
+    # test_patch5_item1_sla_calculation_completely_unchanged (was here,
+    # asserting target_prep_time=20/warning_threshold_pct=80/
+    # late_threshold_pct=120 -> warning_threshold_minutes=16.0/
+    # late_threshold_minutes=24.0). Confirmed a byte-for-byte literal
+    # duplicate, by direct side-by-side comparison, of
+    # test_item3_sla_threshold_minutes_computed_correctly above - same
+    # inputs, same assertions, same expected values, exactly. Kept the
+    # original, earlier test (item3) rather than the later
+    # regression-check one (patch5) - both proved the identical fact
+    # with identical code, no coverage lost either way.
+    # -----------------------------------------------------------------
 
     # -----------------------------------------------------------------
     # UI/DATA FIX ("Final Cleanup Request", item 1, "Printer Only -

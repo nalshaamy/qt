@@ -69,6 +69,17 @@ Technical module name: flexsys_kds
             'flexsys_kds/static/src/js/kds_audio.js',
             'flexsys_kds/static/src/js/kds_store.js',
             'flexsys_kds/static/src/js/kds_order_card.js',
+            # MERGED FROM PROVEN POC (flexsys_kds_poc_1d) - loaded
+            # before kds_app.js so window.FlexSysTicketBuilder is
+            # defined before kds_app.js's own onPrintClick could ever
+            # call it (a real ES import handles
+            # flexsys_epos_direct_adapter.js's own load-order
+            # automatically regardless of position here, but this
+            # shared renderer is called only via the global
+            # window.FlexSysTicketBuilder, not an import, so its own
+            # position here is what guarantees load order for it).
+            'flexsys_kds/static/src/shared/flexsys_ticket_renderer.js',
+            'flexsys_kds/static/src/js/flexsys_epos_direct_adapter.js',
             'flexsys_kds/static/src/js/kds_app.js',
             'flexsys_kds/static/src/xml/kds_templates.xml',
         ],
