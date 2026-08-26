@@ -1683,15 +1683,53 @@ class PosOrder(models.Model):
         # processes pending removals exactly as before - completely
         # unaffected.
         if not decrease_only:
+            # BUG-05B FIX ("CI Still Red" report, Failure 5, second root
+            # cause found beyond the earlier dead-code defect):
+            # confirmed by direct tracing that this sweep processes each
+            # pending_removal line INDIVIDUALLY, with no grouping by
+            # pos_order_line_id at all - so by the time execution
+            # reaches the separate active_lines_by_pos_line sweep
+            # further below in this same method (which DOES correctly
+            # group and log one CONSOLIDATED event), every line sharing
+            # this pos_order_line_id has already been cancelled here,
+            # individually, with no consolidated event - that later
+            # sweep's own `l.state != 'cancelled'` filter then finds
+            # nothing left to consolidate at all. Confirmed
+            # mathematically before writing this fix: original(qty=4,
+            # completed) + delta(qty=2, completed), both pending_removal
+            # -> both cancelled individually right here, zero active
+            # lines left for the later sweep to find.
+            #
+            # Fixed with the narrowest possible change: group by
+            # pos_order_line_id first. A single-line group (by far the
+            # most common case, and every existing test's own scenario)
+            # goes through the EXACT SAME code, unchanged, as before -
+            # zero behavioral difference. Only a genuine multi-line
+            # group (more than one active kds.order.line sharing this
+            # pos_order_line_id, all flagged pending_removal at once)
+            # additionally logs one consolidated event afterward -
+            # exactly matching the existing, established pattern the
+            # active_lines_by_pos_line sweep below already uses.
             pending_removed = kds_order.line_ids.filtered('pending_removal')
+            pending_groups = {}
             for kline in pending_removed:
-                if kline.state == 'completed':
-                    kline._system_cancel_after_completion(
-                        reason=_('Removed from POS order (was already completed)'))
-                elif kline.state != 'cancelled':
-                    kline.action_cancel(reason=_('Removed from POS order after send'), bypass_check=True)
-                else:
-                    kline.write({'pending_removal': False})
+                pending_groups.setdefault(kline.pos_order_line_id.id, []).append(kline)
+            for pos_line_id, group in pending_groups.items():
+                total_group_qty = sum(kl.qty for kl in group) if len(group) > 1 else None
+                for kline in group:
+                    if kline.state == 'completed':
+                        kline._system_cancel_after_completion(
+                            reason=_('Removed from POS order (was already completed)'))
+                    elif kline.state != 'cancelled':
+                        kline.action_cancel(reason=_('Removed from POS order after send'), bypass_check=True)
+                    else:
+                        kline.write({'pending_removal': False})
+                if total_group_qty is not None:
+                    self.env['kds.event'].log(
+                        kds_order, event_type='line_removed', station=group[0].station_id,
+                        note=_("%(product)s fully removed from POS order (quantity: "
+                               "%(qty)s -> 0, cancelled_qty: %(qty)s)")
+                        % {'product': group[0].product_name, 'qty': total_group_qty})
         # Only match against currently-active kds lines: a pos_order_line_id
         # can end up pointing at more than one kds.order.line over time (a
         # product-change reroute cancels the old one and creates a new one
@@ -1714,6 +1752,38 @@ class PosOrder(models.Model):
                 if kline.product_id != line.product_id:
                     touched_stations |= self._flexsys_kds_reroute_line(kds_order, kline, line)
                     continue
+                # BUG-06 FIX ("Delta Reconciliation Recovery - Truth
+                # Table Analysis"): confirmed by direct conceptual
+                # analysis before writing this code, `changed` (used
+                # below to gate entry into the `elif` branch for a
+                # non-historical kline) used to compare kline.qty - a
+                # STALE PARTIAL SHARE (this one line's own last-synced
+                # quantity) - against line.qty - the FULL CURRENT POS
+                # TOTAL. These are two different concepts colliding by
+                # numeric coincidence whenever kline's own stale share
+                # happens to equal the new total (exactly the failing
+                # scenario: delta line's own last-synced qty was 2, POS
+                # decreased 3->2, 2==2 by pure coincidence even though a
+                # real change happened). The correct concept for "did
+                # this specific line's own fair share genuinely change"
+                # is: current POS total, minus every OTHER active
+                # historical (ready/completed) sibling's own qty, minus
+                # what THIS line was last confirmed to represent
+                # (last_kds_sent_qty) - i.e. effective_qty (the same,
+                # sibling-aware quantity elif's own body already
+                # computes further below) compared against
+                # kline.last_kds_sent_qty, not kline.qty against
+                # line.qty directly. Computed once, early, here -
+                # deliberately with different local variable names
+                # (early_historical_siblings/early_effective_qty) from
+                # elif's own separate, unmodified re-computation further
+                # below, to avoid touching that already-working code at
+                # all; this is purely a correction to what `changed`
+                # itself measures.
+                early_historical_siblings = kds_order.line_ids.filtered(
+                    lambda l, pid=line.id, kid=kline.id: l.pos_order_line_id.id == pid
+                    and l.id != kid and l.state in ('ready', 'completed'))
+                early_effective_qty = line.qty - sum(early_historical_siblings.mapped('qty'))
                 # REAL BUG FIX, confirmed at runtime (dev request
                 # "Runtime Regression Fix Package", BUG-04, Case A):
                 # a POS line whose qty was set to 0 used to fall through
@@ -1734,36 +1804,115 @@ class PosOrder(models.Model):
                 # CANCELLED display treatment on both KDS screens, the
                 # same grace-period retention - not a special-cased
                 # silent removal.
-                if line.qty <= 0 and kline.state not in ('completed', 'cancelled'):
-                    kline.action_cancel(
-                        reason=_('Quantity reduced to zero in POS'), bypass_check=True)
-                    touched_stations |= kline.station_id
-                    continue
-                # REAL BUG FIX ("BUG-13 - Quantity Changes After
-                # COMPLETED Are Ignored While POS Order Is Still
-                # Active"): a Completed line reduced to zero while its
-                # POS order is still 'draft' (active/open) must also be
-                # cancellable - "KDS must continue receiving and
-                # processing... quantity decreases... removed products"
-                # applies here too, not just to a partial reduction.
-                # action_cancel() itself still correctly refuses a
-                # Completed line unconditionally (that restriction stays
-                # fully intact for every real user-facing path), so this
-                # routes through _system_cancel_after_completion()
-                # instead - the same dedicated path already established
-                # for a Completed line whose POS line was deleted
-                # outright (Change Request After BUG-11, item 1) - full
-                # audit trail, same CANCELLED display treatment. Once the
-                # POS order has itself closed, this branch is
-                # unreachable (kline.state == 'completed' and self.state
-                # != 'draft') and the line correctly stays frozen/
-                # historical, matching every terminal-order case.
-                if line.qty <= 0 and kline.state == 'completed' and self.state == 'draft':
-                    kline._system_cancel_after_completion(
-                        reason=_('Quantity reduced to zero in POS while order still active'))
-                    touched_stations |= kline.station_id
-                    continue
-                changed = (kline.qty != line.qty) or (kline.note != _pos_note(line)) \
+                # BUG-05 FIX ("Delta Reconciliation Recovery Plan" -
+                # the confirmed Root Cause for the original Problem 5),
+                # confirmed by direct tracing before writing any code:
+                # this branch used to only ever cancel `kline` - the one
+                # line `existing` resolves to for this pos_order_line_id
+                # - never the full set of active historical siblings
+                # sharing the same id (an increase-after-Ready/Completed
+                # that also matured to ready/completed, e.g.). A single
+                # historical line was the only realistic case this
+                # branch was ever exercised against before, so this
+                # never surfaced until multiple historical siblings plus
+                # a full zero-out were combined. Fixed by gathering
+                # EVERY currently-active kds.order.line sharing this
+                # pos_order_line_id (not just `kline`) and cancelling
+                # each one through its own correct, state-appropriate
+                # path - the same "gather every active sibling, not just
+                # the `existing`-dict winner" principle already
+                # established elsewhere in this same method for the
+                # full-POS-line-removal case (see active_lines_by_pos_line
+                # below) - plus one CONSOLIDATED audit event summarizing
+                # the total zeroed-out quantity, matching that same
+                # established pattern. Historical qty itself is never
+                # rewritten - only state changes, exactly as before.
+                if line.qty <= 0:
+                    # Only cancel siblings this branch is actually
+                    # authorized to touch: non-completed (cancellable
+                    # via action_cancel unconditionally), or completed
+                    # WHILE the POS order is still 'draft' (BUG-13's own
+                    # rule, via _system_cancel_after_completion). A
+                    # completed sibling with the POS order no longer
+                    # 'draft' is deliberately EXCLUDED here, not merely
+                    # skipped inside the loop - falling through to the
+                    # normal `changed`/kline_is_historical logic just
+                    # below instead, exactly as it already correctly did
+                    # before this fix (that logic's own treat_as_frozen
+                    # branch already handles "reduced to zero, POS order
+                    # closed" correctly, informationally, with no state
+                    # change) - this fix must never suppress that
+                    # already-correct path for this specific sub-case.
+                    zeroed_siblings = kds_order.line_ids.filtered(
+                        lambda l, pid=line.id: l.pos_order_line_id.id == pid
+                        and l.state not in ('cancelled',)
+                        and not (l.state == 'completed' and self.state != 'draft'))
+                    if zeroed_siblings:
+                        total_zeroed_qty = sum(zeroed_siblings.mapped('qty'))
+                        for sibling in zeroed_siblings:
+                            if sibling.state == 'completed':
+                                sibling._system_cancel_after_completion(
+                                    reason=_('Quantity reduced to zero in POS while order still active'))
+                            else:
+                                sibling.action_cancel(
+                                    reason=_('Quantity reduced to zero in POS'), bypass_check=True)
+                            touched_stations |= sibling.station_id
+                        # REAL BUG FIX ("Full CI Recovery" report,
+                        # Failure 3 - Audit Trail on Qty -> 0),
+                        # confirmed by direct tracing before writing
+                        # this fix: this consolidated event used to be
+                        # logged UNCONDITIONALLY, even for the single-
+                        # sibling case (by far the most common
+                        # scenario) - action_cancel()/
+                        # _system_cancel_after_completion() above
+                        # already log their OWN individual event, with
+                        # meaningful old_value/new_value (e.g.
+                        # 'preparing' -> 'cancelled'); the consolidated
+                        # event carries neither (a summary has no single
+                        # "old state" to report). Logged unconditionally,
+                        # the consolidated event became the LATEST
+                        # line_removed event for even a single-line
+                        # zero-out, masking the real transition event
+                        # from any query ordering by most-recent (e.g.
+                        # `order='id desc', limit=1`) - reported
+                        # directly: `old_value == False` instead of the
+                        # real 'preparing'. Fixed with the same
+                        # single-vs-multi distinction already
+                        # established for the pending_removal sweep
+                        # elsewhere in this method: only a genuine
+                        # multi-sibling group additionally logs this
+                        # summary - the single-sibling case now relies
+                        # solely on its own line's own individual,
+                        # meaningful event, exactly as before this
+                        # whole zeroing-out feature's own multi-sibling
+                        # support was added.
+                        if len(zeroed_siblings) > 1:
+                            self.env['kds.event'].log(
+                                kds_order, event_type='line_removed', station=zeroed_siblings[0].station_id,
+                                note=_("%(product)s reduced to zero in POS (quantity: %(qty)s -> 0, "
+                                       "cancelled_qty: %(qty)s)")
+                                % {'product': zeroed_siblings[0].product_name, 'qty': total_zeroed_qty})
+                        continue
+                    # zeroed_siblings is empty: every active sibling for
+                    # this pos_order_line_id is a completed line whose
+                    # POS order has already closed - nothing here is
+                    # authorized to touch it. Deliberately falls through
+                    # (no `continue`) to the normal reconciliation logic
+                    # below, matching the exact behavior this exact
+                    # sub-case already had before this fix.
+
+                # BUG-06 FIX (continued from the comment above, right
+                # after `kline` was resolved): `changed` now measures
+                # the correct concept - "did this line's own fair
+                # share, once every other historical sibling's own
+                # share is subtracted first, genuinely change" - using
+                # early_effective_qty/kline.last_kds_sent_qty (computed
+                # above) instead of the old, coincidence-prone
+                # kline.qty/line.qty direct comparison. note/variant
+                # remain correct as a per-line comparison exactly as
+                # before - unchanged.
+                changed = (early_effective_qty != kline.last_kds_sent_qty) \
+                    or (kline.note != _pos_note(line)) \
                     or (kline.variant_info != _pos_line_variant_info(line))
                 # REAL BUG FIX, confirmed at runtime (dev request
                 # "Remaining Fixes After v19.0.7.0.0 Review", item 2):
@@ -2361,6 +2510,41 @@ class PosOrder(models.Model):
                             and kline.note == _pos_note(line)
                             and kline.variant_info == _pos_line_variant_info(line)):
                         continue
+                    # BUG-02 FIX ("Delta Reconciliation Recovery Plan" -
+                    # Sequential decrease reconciliation calculates the
+                    # wrong remaining delta), confirmed by an actual
+                    # multi-stage simulation before writing any code: 1
+                    # READY -> 3 -> 2 -> 4 -> 1. `effective_qty` above
+                    # can legitimately go NEGATIVE here - it means the
+                    # required decrease exceeds THIS non-historical
+                    # line's own full share alone and must cascade into
+                    # historical_siblings (computed above) too, exactly
+                    # as the main ready/completed branch's own separate,
+                    # already-correct siblings.sorted() distribution
+                    # already does for a purely-historical case - never
+                    # reached by this branch before this fix. kline
+                    # itself is fully cancelled first (its own entire
+                    # share is genuinely gone), then the remaining
+                    # shortfall cascades into historical_siblings,
+                    # newest-first, via the small dedicated helper
+                    # method above - never writes a negative qty.
+                    if effective_qty < 0:
+                        old_kline_qty = kline.qty
+                        kline.action_cancel(
+                            reason=_("Quantity reduced in POS below this line's own share"),
+                            bypass_check=True)
+                        touched_stations |= kline.station_id
+                        self.env['kds.event'].log(
+                            kds_order, event_type='order_updated', station=kline.station_id,
+                            note=_("%(product)s (qty %(old_qty)s) fully cancelled - POS "
+                                   "quantity decrease exceeded this line's own full share, "
+                                   "cascading into earlier production history")
+                            % {'product': kline.product_name, 'old_qty': old_kline_qty})
+                        remaining_decrease = -effective_qty
+                        sorted_siblings = historical_siblings.sorted(key=lambda s: s.id, reverse=True)
+                        touched_stations |= self._flexsys_kds_distribute_decrease_over_siblings(
+                            kds_order, sorted_siblings, remaining_decrease)
+                        continue
                     # REAL BUG FIX ("BUG-11 [fourth report] - Sequential
                     # qty_delta baseline is still wrong at runtime"),
                     # confirmed STILL reproducing live even after the
@@ -2386,6 +2570,7 @@ class PosOrder(models.Model):
                     # report's own worked example, now correct: 2->1 =
                     # -1, then 1->3 = +2 (not +1), then 3->2 = -1.
                     qty_increment = effective_qty - kline.last_kds_sent_qty
+
                     kline.write({
                         'qty': effective_qty,
                         'note': _pos_note(line),
@@ -2406,6 +2591,33 @@ class PosOrder(models.Model):
                 # under decrease_only=True, deferred to the next
                 # genuine Send/Payment exactly as before.
                 if decrease_only:
+                    continue
+                # BUG-03 FIX ("Delta Reconciliation Recovery Plan" -
+                # Phantom zero line), confirmed by an actual identity
+                # trace before writing any code: `existing` (built
+                # above) deliberately excludes cancelled lines - correct
+                # for its own stated purpose ("closed history, not
+                # something later diffs should match against") - but a
+                # POS line whose own qty was reduced to 0 (cancelled by
+                # the qty<=0 branch on an earlier sync) is still
+                # physically present in self.lines (only unlink()
+                # removes it entirely) and so still reaches this exact
+                # `else` branch on every LATER sync, with `kline`
+                # resolving to None every time (its own real
+                # kds.order.line still exists, but cancelled, invisible
+                # to `existing` by design) - silently creating a brand-
+                # new, phantom kds.order.line at qty=0 on every single
+                # later sync, indistinguishable in the database from a
+                # genuinely new product. Fixed with the one check
+                # actually missing: a POS line at qty<=0 is never a
+                # genuinely new addition - skip entirely. Deliberately
+                # scoped to ONLY this branch (a line with no existing,
+                # active kds.order.line at all) so a legitimate later
+                # re-add (POS quantity later goes from 0 back to a
+                # positive value) is completely unaffected - at that
+                # point line.qty is positive again, so this check simply
+                # doesn't apply, and the line is added normally.
+                if line.qty <= 0:
                     continue
                 new_line_vals.append({
                     'order_id': kds_order.id,
@@ -2529,6 +2741,78 @@ class PosOrder(models.Model):
 
         from .kds_notify import notify_stations
         notify_stations(self.env, touched_stations)
+
+    def _flexsys_kds_distribute_decrease_over_siblings(self, kds_order, siblings, remaining_decrease):
+        """BUG-02 FIX ("Delta Reconciliation Recovery Plan" - Sequential
+        decrease reconciliation calculates the wrong remaining delta),
+        confirmed by an actual multi-stage simulation before writing
+        any code: 1 READY -> 3 -> 2 -> 4 -> 1. At the final step,
+        `existing` resolves to a still-'new' (non-historical) delta
+        line whose own share alone (2) is smaller than the required
+        decrease (3, from 4 down to 1) - the `elif` branch this helper
+        is called from has no mechanism of its own to cascade the
+        remainder into READY/COMPLETED siblings once the non-historical
+        line's own full share is exhausted, unlike the main
+        ready/completed branch just above it (which already handles
+        this correctly for a purely-historical case via its own,
+        separate, already-correct sorted-siblings distribution).
+        Writing `effective_qty` directly in that case would silently
+        write a NEGATIVE quantity onto a kds.order.line - never
+        acceptable.
+
+        This is a small, dedicated, elif-only helper - deliberately NOT
+        a shared refactor of the main branch's own already-correct,
+        already-tested distribution logic just above it in this same
+        file, to avoid any risk of touching that proven-correct code
+        path. Same distribution semantics though (newest-created sibling
+        absorbs the decrease first, cascading into older ones only if
+        genuinely needed - the earliest/original portion is never
+        touched unless the decrease truly requires reaching into it),
+        applied here to whichever siblings this call site passes in.
+
+        `siblings` must be sorted newest-first by the caller (matches
+        the main branch's own `ready_siblings.sorted(key=..., reverse=True)`
+        convention). Mutates each sibling in place (cancels or reduces),
+        logs one audit event per touched sibling, and returns the set of
+        touched stations.
+        """
+        touched_stations = self.env['kds.station']
+        for sibling in siblings:
+            if remaining_decrease <= 0:
+                break
+            reducible = min(sibling.qty, remaining_decrease)
+            if reducible <= 0:
+                continue
+            sib_old_qty = sibling.qty
+            sib_new_qty = sibling.qty - reducible
+            if sib_new_qty <= 0:
+                sibling.action_cancel(
+                    reason=_('Quantity reduced in POS, cascading into this historical '
+                             'portion after the more recent line was fully absorbed'),
+                    bypass_check=True)
+                self.env['kds.event'].log(
+                    kds_order, event_type='order_updated', station=sibling.station_id,
+                    note=_("%(product)s (qty %(old_qty)s, previously %(state)s) fully "
+                           "cancelled - POS quantity decrease cascaded into and absorbed "
+                           "this entire portion")
+                    % {'product': sibling.product_name, 'old_qty': sib_old_qty, 'state': sibling.state})
+            else:
+                sibling.write({
+                    'qty': sib_new_qty,
+                    'line_change': 'updated',
+                    'qty_delta': -reducible,
+                    'last_kds_sent_qty': sib_new_qty,
+                })
+                self.env['kds.event'].log(
+                    kds_order, event_type='order_updated', station=sibling.station_id,
+                    note=_("%(product)s reduced after original line was already "
+                           "%(state)s (qty %(old_qty)s -> %(new_qty)s) - decrease cascaded "
+                           "into this portion, no production reopened")
+                    % {'product': sibling.product_name, 'state': sibling.state,
+                       'old_qty': sib_old_qty, 'new_qty': sib_new_qty})
+            touched_stations |= sibling.station_id
+            remaining_decrease -= reducible
+        return touched_stations
 
     def _flexsys_kds_reroute_line(self, kds_order, kline, pos_line):
         """Handle a POS line whose product_id changed after the ticket was

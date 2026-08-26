@@ -1,9 +1,23 @@
 # FlexSys KDS — Translation Glossary (Arabic)
 
-`i18n/ar.po` already contains working Arabic translations for every
+`i18n/ar.po` now contains working Arabic translations for every
 Python-side runtime message (the `_()`-wrapped strings — errors,
-notifications, audit log notes). That file is safe to import as-is via
-**Settings > Translations > Import Translation**.
+notifications, audit log notes) **and**, as of the "Arabic Backend
+Finalization" sweep, every view field label/help text (form, list,
+search), selection option label, and remaining view/menu string swept
+across the module's own backend screens (Stations, Routing, Printers,
+Print Jobs, Printer Hub, Orders, Events, POS Config Settings, Product
+views, and the module's own menus). That file is safe to import as-is
+via **Settings > Translations > Import Translation**.
+
+The tables below remain the authoritative terminology reference and
+are kept up to date — but the file no longer needs a live Odoo
+instance's own export to complete the coverage described in the
+"Recommended workflow" section further down; that workflow is
+preserved here only as a reference for how the entries below were
+originally scoped, and as the correct process for verifying/importing
+`ar.po` on your own instance, or for any *future* string this module
+gains that isn't in `ar.po` yet.
 
 LOCALIZATION ARCHITECTURE UPDATE ("Arabic Localization & RTL
 Specification"): the Internal KDS Screen's own operational labels
@@ -18,7 +32,11 @@ small, self-contained bilingual dictionary (`KDS_LABELS_EN`/
 user's own language; `KIOSK_LABELS_EN`/`KIOSK_LABELS_AR` for the
 Public Kiosk, selected by the station's own `kiosk_language` field) —
 **not** extracted by Odoo's own translation exporter, and not
-importable via `.po`. To change or extend these labels, edit those two
+importable via `.po`, and **out of scope for the Backend Finalization
+sweep** (that sweep covers Odoo's own standard backend screens only —
+Configuration/Operations/Analytics menus — not the Internal Screen or
+Kiosk, which have their own separate, already-complete Arabic
+dictionaries). To change or extend these labels, edit those two
 dictionaries directly; the tables below document their current values
 for reference and for keeping the two screens' own terminology
 consistent with each other and with the backend.

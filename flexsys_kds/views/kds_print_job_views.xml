@@ -51,9 +51,28 @@
                  groups appear first (item 17), while print_number
                  (unchanged, still ascending) keeps each individual
                  order's own jobs reading 1, 2, 3 top to bottom within
-                 its own group (the earlier fix this doesn't undo). -->
+                 its own group (the earlier fix this doesn't undo).
+                 REAL BUG FIX ("CI Full Run" report, Printing sorting
+                 regression), confirmed by direct tracing of
+                 kds.order's own `_order = 'create_date desc'`: Odoo's
+                 ORM resolves an `order=`/`default_order=` clause on a
+                 Many2one field (`order_id`) by joining to the related
+                 model and sorting by THAT model's own `_order` -
+                 never the raw FK id column directly - unless the
+                 dotted `field.id` form is used, which explicitly
+                 tells the ORM to sort by the FK column itself, on
+                 this table, bypassing the related model's own
+                 `_order` entirely. Plain `order_id desc` was
+                 therefore actually sorting by kds.order's own
+                 create_date desc (its `_order`), not by id - usually
+                 producing the same result (create_date generally
+                 tracks id), but not guaranteed, and confirmed live to
+                 diverge. `order_id.id desc` is the correct, explicit
+                 way to sort by the newest order's own database id
+                 specifically, matching this exact sorting contract
+                 (see TEST_CONTRACTS.md, Section 7). -->
             <list string="Print Jobs" create="false" edit="false"
-                  default_order="order_id desc, print_number">
+                  default_order="order_id.id desc, print_number">
                 <field name="order_id"/>
                 <field name="station_id"/>
                 <field name="printer_id"/>

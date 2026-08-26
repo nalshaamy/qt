@@ -1,294 +1,278 @@
 # FlexSys KDS
 
-A multi-station Kitchen Display System module for Odoo 19, built for the
-FlexSys restaurant/café POS platform. Routes POS orders to the right
-production stations in real time, tracks preparation SLA, optionally
-runs an Expeditor/Packing final-assembly stage, and manages kitchen
-receipt printing through an external Print Agent.
+**Professional Multi-Station Kitchen Display & Production Management
+for Odoo POS.**
 
-For the full round-by-round development history, see
-[CHANGELOG.md](CHANGELOG.md). For deeper technical detail, see
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
-[docs/PRINT_AGENT.md](docs/PRINT_AGENT.md).
+FlexSys KDS routes every order from Odoo Point of Sale to the correct
+kitchen or production station in real time, tracks preparation against
+each station's own SLA, and gives every role — from a line cook to a
+branch manager — exactly the visibility and control they need. Built
+for multi-branch, multi-station restaurant and café operations.
 
-## Current status
+For technical/integration detail, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+and [docs/PRINT_AGENT.md](docs/PRINT_AGENT.md).
 
-**Release 19.0.6.0.0 — code-complete against the "Final Master Gap
-Analysis & Release Closure" request's Sections A-B; not yet signed
-off.** See [RELEASE_STATUS.md](RELEASE_STATUS.md) for the full
-item-by-item mapping of that request's own structure to what's actually
-verified versus what still needs a human on a live Odoo 19 instance
-before this release can be tagged - in short: every automatable check
-(546 tests, `py_compile`/XML well-formedness/JS syntax on every file)
-passes, and every known live-runtime bug found so far has been fixed
-(see CHANGELOG.md's v5.2.1 through v5.5.1 entries for that history) -
-but a live two-screen realtime check, a visual density/breadcrumb
-check, and a manual walkthrough watching for Tracebacks/RPC_ERROR/
-OwlError have not been performed in this environment, which has no
-running Odoo instance to perform them against. Phase 2 (device
-enrollment, QR pairing, PWA) has not been started, per that same
-request's explicit instruction not to.
+---
 
-## Features
+## 1. What is FlexSys KDS
 
-- **Two KDS screens**: an authenticated backend screen (Odoo login) and
-  a public kiosk screen (per-station token, no Odoo session needed) -
-  functionally and visually equivalent.
-- **Station-based routing** with a rule engine (product / POS category /
-  inventory category / order type / source / POS config), multi-company
-  isolated, with a product/category-level fallback chain.
-- **Configurable POS→KDS send trigger** per point of sale - After
-  Payment (default), or On Send to KDS (uses Odoo's own native POS
-  Send/New action - not a custom button - so a dine-in order can reach
-  the kitchen before payment when configured).
-- **Full order lifecycle**: New → Accepted → Preparing → Ready →
-  (Expeditor/Packing, if enabled) → Completed, plus Cancel/Hold and an
-  Administrator-tier override for reopening.
-- **Live SLA tracking** per station (target time + warning/late
-  thresholds, validated at configuration time), with its own separate
-  SLA for the Expeditor/Packing stage.
-- **Printing**: a print job queue with an atomic claim/lease mechanism
-  and a versioned JSON payload contract for an external Print Agent
-  process (see [docs/PRINT_AGENT.md](docs/PRINT_AGENT.md) - Odoo does
-  not talk to a physical printer directly).
-- **Role-based security**: Operator / Supervisor / Branch Manager /
-  Administrator tiers, station-scoped record rules, and write-guards on
-  every workflow-significant field (state, priority, timestamps) so they
-  can only change through the workflow engine, never a raw write.
-- **Full audit trail**: every state transition, override, and system
-  correction is logged to `kds.event`.
+FlexSys KDS is a Kitchen Display System built directly on Odoo Point of
+Sale. It replaces paper tickets and shouted orders with a live,
+station-aware screen (or a printed ticket, or both) — so every station
+in a multi-station kitchen sees exactly the items it needs to prepare,
+the moment an order requires it, with no manual re-entry.
 
-## Architecture
+## 2. Key Benefits
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full breakdown
-(models, controllers, data flow). In brief:
+- **Faster, more accurate service** — orders reach the right station
+  automatically; nothing is re-typed or miscommunicated between the
+  POS and the kitchen.
+- **Full visibility across every station and branch** — managers see
+  live status, SLA compliance, and a complete audit trail.
+- **Scales with the business** — from a single-station café to a
+  multi-branch, multi-station kitchen with a dedicated
+  expeditor/packing stage.
+- **Works the way the kitchen already does** — flexible per-station
+  Operating Modes mean a screen, a printer, or both, per station.
+- **Bilingual out of the box** — Arabic and English, with RTL-aware
+  layouts for Arabic-speaking staff.
 
-- **`kds.order` / `kds.order.line`**: the core workflow models, driven
-  by a centralized transition engine (`_wf_transition`/
-  `_line_transition`) - every state change goes through it, including
-  system-triggered corrections (POS delta sync, cancellation
-  propagation), never a raw `write()`.
-- **`kds.station`**: a physical prep station (or the Expeditor/Packing
-  stage, marked via `is_expeditor`), with its own SLA config, printers,
-  and assigned users.
-- **`kds.routing.rule`**: matches an incoming product to a station.
-- **`kds.expeditor.task`**: the optional final-assembly/handoff stage,
-  independently tracked (own state machine, timestamps, SLA).
-- **`kds.print.job`**: the print queue an external Print Agent polls.
-- **`kds.event`**: the audit log.
-- **`pos.order`/`pos.order.line`/`pos.config` extensions**: the POS-side
-  integration (sync trigger, delta updates, cancellation propagation).
+## 3. Key Features
 
-## Installation
+- Multi-station Kitchen Display (authenticated backend screen +
+  Public Kiosk)
+- Intelligent, rule-based order routing
+- Flexible station Operating Modes
+- Automatic POS quantity reconciliation
+- Live SLA monitoring per station
+- Optional Expeditor / Packing final-assembly stage
+- Kitchen printing with external Print Agent integration
+- Role- and station-based security
+- Multi-company support
+- Arabic / English localization with RTL support
+- Complete audit log
+
+## 4. Operating Modes
+
+Every station has one of three Operating Modes, set independently:
+
+| Mode | Screen | Printing | Public Kiosk |
+|---|---|---|---|
+| **KDS Only** | Yes | — | Available |
+| **Printer Only** | — | Yes | **Not available** |
+| **KDS + Printer** (default) | Yes | Yes | Available |
+
+**Printer Only stations do not allow Public Kiosk access.** This is
+enforced at the backend, not only hidden in the interface — an old
+Kiosk link for a station later switched to Printer Only stops working
+immediately, even if bookmarked. Switching the station back to a
+screen-capable mode restores Kiosk access with the same URL, with no
+token regeneration needed.
+
+## 5. POS → KDS
+
+Each Point of Sale is configured with when an order should reach the
+kitchen:
+
+- **After Payment** (default) — the safest, simplest behavior: the
+  order reaches the kitchen once payment/order completion goes
+  through.
+- **When Sent from POS** — uses Odoo's own native POS Send/New action,
+  letting an order reach the kitchen before payment (e.g. for dine-in
+  service).
+
+**POS Quantity Reconciliation**: quantity increases are reconciled
+when the POS sends the updated preparation change (the next explicit
+Send), while decreases and zero-quantity cancellations are reflected
+on the kitchen ticket immediately. Historical production already in
+progress or completed is preserved — a later change never overwrites
+or duplicates what a station has already started or finished, and a
+repeated Send with no actual change never creates a duplicate update.
+
+## 6. Routing
+
+Orders are routed to a station using, in order:
+
+1. An explicit **Routing Rule** (matching by product, POS category,
+   inventory category, order type, source, and/or POS configuration).
+2. The product's own default station, if set.
+3. The product's inventory category's own default station, if set.
+
+Routing Rules are checked in priority order (lower sequence number
+first); the first matching rule wins. Every level — rules and both
+fallbacks — independently respects company and POS-configuration
+boundaries, so a rule or station never routes an order to the wrong
+branch or an ineligible POS. Inactive (archived) rules never
+participate in matching.
+
+## 7. Workflow
+
+Every order and order line follows one workflow: **New → Accepted →
+Preparing → Ready → Completed**, with **Cancelled** and **On Hold**
+reachable from active states.
+
+- **Ready and Complete are separate, deliberate steps.** Reaching
+  Ready never auto-completes an order — a dedicated Complete action
+  appears once every line is Ready, and the order waits there until
+  someone takes it.
+- **Reopen** (returning a Ready or Completed order to Preparing) is
+  available to **Supervisor and above**. It is a different action from
+  the general workflow override, which is Administrator-only —
+  Reopen itself does not require Administrator access.
+- **Completed orders remain visible for a short grace period** on both
+  screens before rolling off, so a just-completed order isn't
+  instantly gone — this affects only what the live screens display;
+  the full order record and its audit trail always remain available in
+  the backend.
+- **Multi-station orders** complete station by station — see below.
+
+## 8. Multi-Station
+
+An order touching more than one station (e.g. Kitchen and Bar)
+completes independently at each one. Completing one station's portion
+never affects another station's own progress, and each station can
+only act on the lines actually routed to it. The overall order reaches
+Completed only once every required station has finished its own part.
+
+## 9. Expeditor / Packing
+
+An optional final-assembly stage for kitchens where someone plates,
+boxes, or otherwise assembles a multi-station order before it's ready
+for pickup or delivery. Enable it by marking one station as the
+Expeditor/Packing station.
+
+When enabled, an order activates the Expeditor task only once every
+required production station is Ready. The task has its own state
+(Waiting → Packing → Ready → Completed) and its own SLA, tracked
+separately from production SLA. If production work reopens (a
+correction, or new items arriving), an active Expeditor task is
+automatically cancelled and the order returns to Preparing. With no
+Expeditor station configured, orders complete directly once Ready — no
+extra step.
+
+## 10. Printing
+
+FlexSys KDS manages a print job queue with an atomic claim mechanism,
+so a job can never be picked up by two agents at once. It does not
+talk to a physical printer directly — an external **Print Agent**
+process polls the queue, prints, and reports back (see
+[docs/PRINT_AGENT.md](docs/PRINT_AGENT.md) for the full protocol; the
+agent itself is deployed separately and is not included with this
+module).
+
+Includes automatic retry on failure, escalation to a configured backup
+printer after repeated failures, and a manual Reprint action with a
+required reason and sequential print numbering — so the original
+ticket and every reprint stay clearly distinguishable in the job
+history.
+
+## 11. SLA
+
+Each station has its own target preparation time and Warning/Late
+percentage thresholds. Status is computed live and refreshed
+periodically, so it always reflects true elapsed time — including time
+an order spent simply waiting before anyone started it. Once an order
+reaches Ready, its SLA reading is fixed at that point rather than
+continuing to climb while it waits for pickup or packing.
+
+The Expeditor/Packing stage, where enabled, has its own separate SLA —
+never blended with production SLA — so reporting can distinguish
+production time from packing wait time and active packing time.
+
+## 12. Security & Roles
+
+Four permission tiers, each including the one below it:
+
+- **Operator** — accept, start, and complete work at their own
+  assigned station(s) only.
+- **Supervisor** — everything an Operator can do, plus cancel, reopen,
+  reprint, and print a full order.
+- **Branch Manager** — full visibility and action across their entire
+  company, regardless of individual station assignment.
+- **Administrator** — unrestricted within the standard Odoo
+  multi-company boundary, including the general workflow override.
+
+Operators and Supervisors only see and act on the stations they're
+explicitly assigned to — no assignment means no access, not open
+access. Workflow-critical fields (state, timestamps) are protected
+against direct edits at the database level; they can only change
+through the normal workflow actions, regardless of role.
+
+## 13. Public Kiosk
+
+A secure, token-based screen requiring no Odoo login — suitable for a
+dedicated kitchen display device. Each station has its own token and
+URL; a station can be individually disabled (rejecting even a correct
+token, with no need to regenerate it) and re-enabled at any time. Kiosk
+access additionally follows the station's own Operating Mode (see
+Section 4) — Printer Only stations are never reachable via Kiosk, even
+with a valid, previously-working link. Each station's Kiosk language
+is set independently of any backend user's own language.
+
+## 14. Multi-Company
+
+Every model, permission tier, and routing rule is scoped to company
+boundaries. Stations, routing rules, and access are never
+inadvertently shared across companies (branches) — a rule or station
+explicitly marked to apply company-wide is the only exception, and
+remains under full administrator control.
+
+## 15. Arabic / RTL
+
+Arabic and English localization with RTL support. Arabic localization
+is provided for the Odoo backend, the Internal KDS screen, and the
+Public Kiosk, with RTL-aware layouts. Printed tickets support Arabic
+product names and notes; actual output quality depends on the
+configured Print Agent and printer's own font/encoding support.
+
+## 16. Installation
 
 1. Copy the module into your Odoo 19 `custom_addons/` directory.
 2. **Apps → Update Apps List** (Developer Mode required).
-3. Find "FlexSys KDS" and click **Install** (or **Upgrade** if updating
-   an existing install).
-4. Hard-refresh your browser (Ctrl+Shift+R) after any upgrade that
-   touches frontend assets.
+3. Find "FlexSys KDS" and click **Install**.
+4. Hard-refresh your browser (Ctrl+Shift+R) after installing or
+   upgrading.
 
-## Initial configuration
+## 17. Initial Configuration
 
 1. **FlexSys KDS → Configuration → Stations**: create one station per
-   physical prep area (Kitchen, Bar, Coffee, etc.). Set target
-   preparation time and warning/late thresholds (validated - Late must
-   exceed Warning, both must be positive). Assign the users who work
-   that station under its "Assigned Users" field - this is what scopes
-   what they can see/act on.
-2. **Routing**: either configure explicit **Routing Rules** (matching by
-   product, POS category, order type, source, or POS config), or rely on
-   the simpler per-product/per-category default station fields on the
-   product/category form - the rule engine tries rules first, then falls
-   back to those defaults.
-3. **Printing** (optional): create **Printers** under a station, then
-   set up an external Print Agent process to poll for jobs - see
-   [docs/PRINT_AGENT.md](docs/PRINT_AGENT.md). No agent is included in
-   this module.
-4. **POS Send-to-KDS Settings** (FlexSys KDS → Configuration): per POS,
-   choose when an order reaches the kitchen - defaults to **Payment**
-   (safest, matches a quick-service flow); **Order Validation** or **POS
-   Submit** let a dine-in order reach the kitchen before payment.
-5. **Expeditor/Packing** (optional): mark one station `is_expeditor` per
-   company to enable the final-assembly stage - see below. Leave every
-   station's `is_expeditor` off to keep the simpler direct-to-Completed
-   flow (the default, and the only behavior that existed before this
-   feature).
+   physical prep area. Set target preparation time and
+   Warning/Late thresholds. Assign the users who work that station —
+   this scopes what they can see and act on.
+2. **Routing**: configure explicit Routing Rules, or rely on the
+   simpler per-product/per-category default station fields.
+3. **Printing** (optional): create Printers under a station, then
+   deploy an external Print Agent process against the documented
+   protocol — see [docs/PRINT_AGENT.md](docs/PRINT_AGENT.md).
+4. **POS Send-to-KDS Settings**: per point of sale, choose when an
+   order reaches the kitchen (see Section 5).
+5. **Expeditor/Packing** (optional): mark one station as the
+   Expeditor/Packing station to enable the final-assembly stage.
 
-## Workflow
+## 18. Manual QA / Acceptance
 
-`kds.order`/`kds.order.line` share one state machine: **New → Accepted →
-Preparing → Ready → Completed**, with **Cancelled** and **On Hold**
-reachable from most active states. Reopening a Ready or Completed
-record back to Preparing requires the Administrator-tier override
-permission for a *manual* action - but the same correction happens
-automatically, through the same centralized engine, for system-triggered
-cases (see below), without needing a human to hold that permission.
+A written manual regression scenario set covering every core area of
+the product — POS/Quantity, Workflow, Routing, Expeditor/Packing,
+Printing, Security/Kiosk, SLA, and Arabic/RTL — is provided in
+[docs/QA_TEST_SCENARIOS.md](docs/QA_TEST_SCENARIOS.md), for use when
+verifying a deployment.
 
-**Ready and Complete are two separate, deliberate steps** - reaching
-Ready never auto-completes an order, with or without Expeditor/Packing
-enabled. An order sits at Ready indefinitely, with no time limit, until
-someone actually taps **Complete** on it - a dedicated button that
-appears on both KDS screens once every line is Ready (the public kiosk
-gained order-level completion specifically for this; it previously only
-supported line-level actions). With Expeditor/Packing enabled, Ready
-instead activates the packing task first, and completion happens once
-that task's own Complete step finishes (see below) - Expeditor's own
-completion step was always separate from Ready and is unaffected by
-this.
+## 19. Known Limitations
 
-**Both KDS screens have a real, dedicated COMPLETED tab** - `ALL | NEW |
-PREPARING | READY | COMPLETED` - not a Ready order displayed
-differently. READY means the order is sitting there waiting for someone
-to tap Complete; COMPLETED means someone already did. A completed order
-stays visible under COMPLETED (and under ALL) for a grace period **(5
-minutes, `COMPLETED_GRACE_MINUTES` in both controllers)** before
-disappearing from either screen, rather than vanishing the instant
-someone taps Complete - server-enforced (the query domain itself, not a
-frontend filter), so a page refresh can never bring an expired order
-back, and no cron is needed to hide it - the screens' own existing
-poll/realtime refresh naturally stops including it once the window
-closes. This is display retention only: the order record, its lines,
-and its full audit trail are never touched by expiring from these two
-screens - it remains permanently available in the backend Order
-History/Analytics. A completed order's card shows no action button at
-all (previously a disabled "DONE" one) and its status text reads
-"COMPLETED" rather than reusing "READY".
+- **External Print Agent is deployed separately** from the Odoo addon
+  — it is not included, and must be set up against the documented
+  protocol before physical printing will work.
+- **Printer hardware/encoding compatibility** (including for Arabic
+  text) depends on the configured Print Agent and the physical
+  printer itself, not on this module alone.
+- **Station, order-type, and source names** entered as operational
+  business data (e.g. a station's own display name) are user-maintained
+  data, not static translated UI labels — they display exactly as
+  entered, regardless of the viewing user's own language.
 
-**System-triggered corrections** (POS delta sync changing an
-already-Ready line, a reopened production line, POS-side cancellation)
-all route through the same internal methods every user-facing action
-uses (`_system_reset_for_delta_sync`, `_system_reopen_if_production_incomplete`)
-- never a raw `write()` - so every correction gets the same audit
-event, realtime notification, and Expeditor reconciliation a normal
-action would.
+## 20. Support / Technical Information
 
-## Routing
-
-`kds.routing.rule` records are matched in sequence order (first match
-wins) against product, POS category, inventory category, order type,
-source, and POS config. Both the matched rule *and* its destination
-station are checked for company and POS-config eligibility before being
-selected - a rule or station belonging to a different company, or scoped
-to a different POS config, is never returned. With no matching rule,
-routing falls back to the product's own default station, then its POS
-category's default, then its inventory category's default - each level
-checked the same way.
-
-## SLA
-
-Each station has its own target preparation time and warning/late
-percentage thresholds (validated: both must be positive, Late must
-exceed Warning). Both KDS screens compute SLA status live on every poll,
-so it's always current there; the backend's own stored `sla_status`
-field is kept fresh by a **1-minute scheduled job**
-(`_cron_refresh_sla_status`) rather than only updating when something
-happens to write to the record.
-
-**Expeditor/Packing has its own, separate SLA** - never blended with
-production SLA. Two distinct measurements: **Packing SLA** (wait time +
-active work combined, from `available_time` to `ready_time`) and
-**Packing Duration** (active work only, from `start_time` to
-`ready_time`) - `packing_duration ≠ packing SLA elapsed time`; the
-difference is however long the order sat waiting before someone
-actually started packing it. Analytics reading this data should use
-whichever of the two actually answers the question being asked, not
-treat them as interchangeable.
-
-## Printing
-
-Odoo's role is managing the print job queue, an atomic claim/lease
-mechanism (`FOR UPDATE SKIP LOCKED`, safe against concurrent/retrying
-agents), and a versioned JSON payload contract. **Odoo does not talk to
-a physical printer directly** - an external Print Agent process (not
-included in this module) polls `/flexsys_kds/print/agent/claim`,
-prints, then reports back via `/ack` and `/result`. See
-[docs/PRINT_AGENT.md](docs/PRINT_AGENT.md) for the full protocol. The
-printer form's "Mark as Online" button is exactly what it says - it does
-not verify a real physical connection, only the agent can do that.
-
-## Expeditor/Packing
-
-An optional final-assembly/handoff stage between production finishing
-and the order actually being marked done - useful for a kitchen where
-someone (an expeditor) plates, boxes, or otherwise assembles a
-multi-station order before it's truly ready for pickup/delivery.
-
-Enabled per-company by marking exactly one station `is_expeditor=True`
-(more than one is allowed but only the first active one is used). When
-enabled, an order only creates/activates the Expeditor task once *every*
-production line is Ready (cancelled lines don't block this); the task
-has its own state (Waiting → Packing → Ready → Completed), responsible
-user, and timestamps. A production line reopening, or new production
-work arriving via POS delta sync, automatically cancels an active task
-and pulls the order back to Preparing - even if packing had already
-started. Completing the task includes a server-side guard confirming
-production is *still* genuinely ready at that exact moment, protecting
-against a stale UI or a concurrent request.
-
-With no `is_expeditor` station configured anywhere in a company (the
-default), none of this applies - an order just goes straight from Ready
-to a manual Complete tap, with no intermediate Packing stage.
-
-## Security overview
-
-Four role tiers (Operator, Supervisor, Branch Manager, Administrator),
-each implying the one below it. Record rules scope what Operators/
-Supervisors can see and act on to their explicitly assigned stations (an
-empty assignment means *no* access, not open access); Branch Managers
-see their whole company; Administrators are unrestricted within the
-standard Odoo multi-company boundary. Every workflow-significant field
-(`state`, `priority`, and every timestamp) is protected against direct
-writes at the ORM level - only the workflow engine's own internal
-context, or a genuine `sudo()` call, can write them; a plain user-level
-`write()` is rejected regardless of role.
-
-## Current realtime behavior
-
-The two screens use different mechanisms, accurately reflecting their
-different authentication models:
-
-- **Backend screen** (authenticated): subscribes to Odoo's `bus.bus` for
-  push-based updates, scoped per-station (a leaked channel name reveals
-  only that *something* changed, never order content - actual data
-  still requires passing the normal access checks on the RPC that
-  fetches it). **The exact `bus_service` JS API used here has not been
-  verified against this specific Odoo 19 build** - it's written against
-  the pattern used in recent Odoo versions, but a live check is still
-  needed.
-- **Public kiosk** (unauthenticated, token-based): plain 4-second
-  polling - deliberately simpler, since the kiosk has no Odoo session to
-  subscribe a bus channel through.
-
-## Known current limitations
-
-- **A full, deliberate live-runtime regression pass has not been
-  performed in this environment**, because this environment has no
-  running Odoo 19 instance to perform it against. Live usage on the
-  developer's own instance did begin partway through this project and
-  already caught and fixed several real bugs static checks couldn't
-  (see CHANGELOG.md's v5.2.1 through v5.5.1 entries) - a useful
-  reminder that static verification and an actual running instance
-  catch genuinely different classes of problems. 546 automated test
-  methods exist and are known to be internally consistent
-  (`py_compile`/XML well-formedness/JS syntax checked on every file on
-  every change), but actually *running* the suite
-  (`--test-enable --test-tags flexsys_kds`) against a live registry, and
-  the specific manual regression items listed in
-  [RELEASE_STATUS.md](RELEASE_STATUS.md)'s "What still needs a human"
-  section, are outstanding. Treat any version-specific assumption called
-  out elsewhere in this README or in code comments (the bus API, the
-  exact `bus_service` JS method signatures, `ir.cron`'s field shape,
-  PostgreSQL's `FOR UPDATE SKIP LOCKED`/`make_interval`, POS's exact
-  `state` values) as unverified until that pass happens.
-- **No external Print Agent is included.** Physical printing requires
-  building and deploying a separate process against the documented
-  protocol - see [docs/PRINT_AGENT.md](docs/PRINT_AGENT.md). Explicitly
-  out of scope for this release's closure, per its own gap analysis.
-- **Device enrollment / QR pairing / PWA / device management / display
-  modes / sound preferences (Phase 2) have not been started**, per
-  explicit instruction that these must not delay this release.
-- **Advanced analytics (SLA compliance %, peak hours, station
-  throughput, prep-time-per-product, fulfillment trends) is future
-  work**, not part of this release's closure gate.
-
+- **Technical module name**: `flexsys_kds`
+- **Architecture reference**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **Print Agent protocol**: [docs/PRINT_AGENT.md](docs/PRINT_AGENT.md)
+- **Website**: https://flexsyssa.com

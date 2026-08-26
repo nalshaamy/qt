@@ -1,38 +1,44 @@
 {
     'name': 'FlexSys KDS',
-    'version': '19.0.7.29.5',
+    'version': '19.0.1.0.0',
     'category': 'Point of Sale',
-    'summary': 'Multi-station Kitchen Display System for Odoo POS',
+    'summary': 'Professional Multi-Station Kitchen Display & Production Management for Odoo POS',
     'description': """
 FlexSys KDS
 ===========
 Multi-station Kitchen Display System and production management layer
-for Odoo 19 Point of Sale.
+for Odoo Point of Sale — routes orders to the right station in real
+time, tracks preparation SLA, and gives every role exactly the
+visibility and control they need.
 
-Current Scope (Phase 1 - complete)
------------------------------------
-- Station-based routing engine (product / POS category / inventory
-  category / order type / source / POS config), multi-company isolated
-- Configurable POS -> KDS send trigger: After Payment (default) or On
-  Send to KDS (native Odoo Send/New action, not a custom button)
-- Centralized workflow engine (New / Accepted / Preparing / Ready /
-  Completed / Cancelled / On Hold) - every transition, including
-  system-triggered corrections, audited and never a raw state write
-- Live SLA tracking per station, with a 1-minute freshness refresh
-- Optional Expeditor / Packing final-assembly stage - a real tracked
-  task (own state machine, timestamps, separate SLA), not just a flag
-- Printing: job queue with an atomic claim/lease mechanism and a
-  versioned payload contract for an external Print Agent (not included)
-- Role-based security (Operator / Supervisor / Branch Manager /
-  Administrator), station-scoped record rules, protected-field write
-  guards
-- Two KDS screens: authenticated backend (bus.bus realtime) and public
-  token-based kiosk (polling)
-- Full audit log (kds.event)
+Key Capabilities
+-----------------
+- Multi-station Kitchen Display, with an authenticated backend screen
+  and a token-based Public Kiosk.
+- Intelligent station routing - explicit rules with product- and
+  category-level fallback, multi-company isolated.
+- Flexible station Operating Modes: KDS Only, Printer Only, or
+  KDS + Printer.
+- POS Quantity Reconciliation - quantity increases are reconciled
+  when the POS sends the updated preparation change, while decreases
+  and zero-quantity cancellations are reflected immediately,
+  preserving historical kitchen production without duplicate deltas.
+- SLA Monitoring per station, refreshed live.
+- Expeditor / Packing - an optional final-assembly stage with its own
+  tracked task and SLA.
+- Printing and external Print Agent integration - an atomic job
+  queue with retry and backup-printer fallback.
+- Role and station-based access controls (Operator / Supervisor /
+  Branch Manager / Administrator).
+- Public Kiosk with secure, per-station token access.
+- Company-aware routing, operational data isolation, and role-based
+  access controls for multi-company environments.
+- Arabic and English localization, with RTL-aware layouts.
+- Operational audit logging for workflow transitions, corrections,
+  printing events, and administrative actions.
 
-See README.md for current product documentation, docs/ARCHITECTURE.md
-and docs/PRINT_AGENT.md for technical detail, and CHANGELOG.md for the
-full development history.
+See README.md for full product documentation, docs/ARCHITECTURE.md and
+docs/PRINT_AGENT.md for technical/integration detail.
 
 Technical module name: flexsys_kds
     """,
