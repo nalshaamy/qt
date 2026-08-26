@@ -119,13 +119,18 @@
 
         var orderTime = "";
         if (rawOrder.created_time) {
-            // Same exact format Internal KDS's own card uses
-            // (kds_order_card.js's own orderedAtLabel getter) - not
-            // approximated, so the ticket's own printed time reads
-            // identically to the time shown on screen.
+            // FIX (CR-07, "Use 24-Hour Time"): explicit hour12:false -
+            // the prior round's own default-locale format produced
+            // AM/PM (and, combined with RTL paragraph context on the
+            // printed page, an Arabic "م" glyph appearing in an
+            // unstable position next to the Latin "Time:" label).
+            // 24-hour format has no AM/PM marker at all, sidestepping
+            // that RTL/LTR mixing problem entirely, not just
+            // formatting it differently.
             orderTime = new Date(rawOrder.created_time).toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
+                hour12: false,
             });
         }
 
@@ -187,8 +192,23 @@
 
     /**
      * Draws one logical ticket line (with automatic wrapping and
-     * automatic LTR/RTL handling per the text's own script), advancing
-     * and returning the new cursor y.
+     * automatic RTL/LTR text shaping per the text's own script),
+     * advancing and returning the new cursor y.
+     *
+     * FIX (CR-03/CR-04/CR-05, "Product Alignment for Arabic / Mixed
+     * Text"): a left-aligned line now ALWAYS anchors its own left
+     * edge at the same fixed x position (margin + indent) regardless
+     * of the text's own script - it no longer switches to a
+     * right-edge anchor for Arabic text. ctx.direction still controls
+     * correct internal RTL shaping/character-ordering (including
+     * genuinely mixed Arabic/English content within one line), but
+     * textAlign/anchor point is now independent of that - this is
+     * standard, well-supported Canvas 2D behavior (direction affects
+     * shaping only, textAlign affects only which edge anchors to x).
+     * The prior right-edge-anchor-for-RTL behavior was the actual
+     * cause of short Arabic lines appearing to "float centered" far
+     * from the qty prefix/indent column instead of sitting directly
+     * in it, per the explicit visual complaint this fixes.
      */
     function drawTextBlock(ctx, text, y, opts) {
         opts = opts || {};
@@ -206,24 +226,14 @@
 
         for (var i = 0; i < wrapped.length; i++) {
             var x;
-            var effectiveAlign = align;
-            if (ctx.direction === "rtl" && align === "left") {
-                // A left-aligned RTL line still starts from the same
-                // left margin visually (consistent left gutter for
-                // wrapped/indented body text regardless of script),
-                // but must be drawn with textAlign 'right' against the
-                // RIGHT edge of its own available width so the Arabic
-                // text itself flows correctly within that box -
-                // otherwise word order reads backwards.
-                ctx.textAlign = "right";
-                x = MARGIN + indent + maxWidth;
-            } else if (align === "center") {
+            if (align === "center") {
                 ctx.textAlign = "center";
                 x = CANVAS_WIDTH / 2;
             } else if (align === "right") {
                 ctx.textAlign = "right";
                 x = CANVAS_WIDTH - MARGIN;
             } else {
+                // Always left-anchored now, for both LTR and RTL text.
                 ctx.textAlign = "left";
                 x = MARGIN + indent;
             }
@@ -302,12 +312,18 @@
     /**
      * Draws the qty-prominent product line: a bold "Nx" prefix and the
      * product name on the same visual line, wrapping the name alone
-     * if it's long (the qty prefix itself never wraps). Handles an
-     * Arabic product name by drawing the qty prefix as its own
-     * left-side element and letting the name flow RTL in the
-     * remaining space - keeping quantity legible regardless of the
-     * product name's own script, per the explicit "quantity must
-     * never get lost" requirement.
+     * if it's long (the qty prefix itself never wraps).
+     *
+     * FIX (CR-03, "Product Alignment for Arabic / Mixed Text"): the
+     * product name now ALWAYS starts immediately after the qty
+     * prefix (left-anchored at that fixed x), for both English and
+     * Arabic/mixed names - it no longer floats to the far right edge
+     * for Arabic text, which was the actual cause of the "centered"
+     * look the client's own example showed. ctx.direction is still
+     * set from the text's own script so genuinely mixed
+     * Arabic/English content (e.g. "TUNA - ساندوتش تونه SANDWICH")
+     * shapes/orders correctly via the browser's own real bidi
+     * handling - only the anchor point changed, not the shaping.
      */
     function drawProductLine(ctx, qty, productName, y, size) {
         var qtyText = qty + "x";
@@ -321,18 +337,13 @@
         ctx.font = "bold " + nameSize + "px " + FONT_FAMILY;
         var nameDirection = isArabicText(productName) ? "rtl" : "ltr";
         ctx.direction = nameDirection;
+        ctx.textAlign = "left";
         var nameMaxWidth = CONTENT_WIDTH - qtyWidth;
         var wrapped = wrapText(ctx, productName, nameMaxWidth);
         var lineHeight = Math.round(nameSize * 1.35);
         var lineY = y;
         for (var i = 0; i < wrapped.length; i++) {
-            if (nameDirection === "rtl") {
-                ctx.textAlign = "right";
-                ctx.fillText(wrapped[i], MARGIN + qtyWidth + nameMaxWidth, lineY);
-            } else {
-                ctx.textAlign = "left";
-                ctx.fillText(wrapped[i], MARGIN + qtyWidth, lineY);
-            }
+            ctx.fillText(wrapped[i], MARGIN + qtyWidth, lineY);
             lineY += lineHeight;
         }
         return lineY;
@@ -345,6 +356,11 @@
      * at normal weight - same one-line-then-wrap technique as
      * drawProductLine's own qty prefix, so the label never gets
      * separated from the start of the note text it belongs to.
+     *
+     * FIX (CR-05): the note text now always starts immediately after
+     * the label (left-anchored), for both English and Arabic notes -
+     * same anchor-point fix as drawProductLine above, for the same
+     * reason.
      */
     function drawNoteLine(ctx, noteText, y, size, indent) {
         var isArabicNote = isArabicText(noteText);
@@ -359,18 +375,48 @@
         ctx.font = size + "px " + FONT_FAMILY;
         var noteDirection = isArabicNote ? "rtl" : "ltr";
         ctx.direction = noteDirection;
+        ctx.textAlign = "left";
         var maxWidth = CONTENT_WIDTH - indent - labelWidth;
         var wrapped = wrapText(ctx, noteText, maxWidth);
         var lineHeight = Math.round(size * 1.35);
         var lineY = y;
         for (var i = 0; i < wrapped.length; i++) {
-            if (noteDirection === "rtl") {
-                ctx.textAlign = "right";
-                ctx.fillText(wrapped[i], MARGIN + indent + labelWidth + maxWidth, lineY);
-            } else {
-                ctx.textAlign = "left";
-                ctx.fillText(wrapped[i], MARGIN + indent + labelWidth, lineY);
-            }
+            ctx.fillText(wrapped[i], MARGIN + indent + labelWidth, lineY);
+            lineY += lineHeight;
+        }
+        return lineY;
+    }
+
+    /**
+     * Draws a "Label: Value" footer-style line as ONE continuous,
+     * left-anchored, correctly-shaped run - fixing CR-08 ("Table /
+     * Floor RTL"): the label and value are now treated as structured
+     * fields drawn with the same one-line-then-wrap technique as
+     * drawNoteLine above (bold label, then value immediately
+     * following, left-anchored throughout), instead of naively
+     * concatenating "Label: " + value into one string and letting the
+     * browser's own bidi algorithm guess the paragraph direction of
+     * the combined result - which is what previously produced
+     * unstable/reversed-looking ordering for an Arabic value after an
+     * English label (e.g. "Table: <Arabic branch/table text>").
+     */
+    function drawLabelValueLine(ctx, label, value, y, size) {
+        ctx.font = "bold " + size + "px " + FONT_FAMILY;
+        ctx.direction = "ltr";
+        ctx.textAlign = "left";
+        ctx.fillText(label, MARGIN, y);
+        var labelWidth = ctx.measureText(label).width;
+
+        ctx.font = size + "px " + FONT_FAMILY;
+        var valueDirection = isArabicText(value) ? "rtl" : "ltr";
+        ctx.direction = valueDirection;
+        ctx.textAlign = "left";
+        var maxWidth = CONTENT_WIDTH - labelWidth;
+        var wrapped = wrapText(ctx, value, maxWidth);
+        var lineHeight = Math.round(size * 1.35);
+        var lineY = y;
+        for (var i = 0; i < wrapped.length; i++) {
+            ctx.fillText(wrapped[i], MARGIN + labelWidth, lineY);
             lineY += lineHeight;
         }
         return lineY;
@@ -414,9 +460,28 @@
                 align: "center",
                 lineHeight: 24,
             });
-            y += 2;
+            // FIX (CR-01, "Header Spacing / ORDER Overlap"): the prior
+            // round's own small "+2" gap did not account for the big
+            // order-number font's own real ascent - fillText's own y
+            // is the text BASELINE, and a 56px bold digit's own
+            // ascent reaches roughly 40+ px ABOVE that baseline,
+            // meaning the big number's own top edge was landing
+            // above/into "ORDER"'s own descender, producing the
+            // reported overlap. Measured here with the browser's own
+            // real actualBoundingBoxAscent (not a fixed guess) for
+            // the exact order-number text about to be drawn, so the
+            // gap is always genuinely sufficient regardless of font
+            // rendering specifics.
+            var bigNumberSize = 56;
+            ctx.font = "bold " + bigNumberSize + "px " + FONT_FAMILY;
+            var numberMetrics = ctx.measureText(String(order.orderNumber));
+            var numberAscent =
+                numberMetrics.actualBoundingBoxAscent != null
+                    ? numberMetrics.actualBoundingBoxAscent
+                    : bigNumberSize * 0.8;
+            y += Math.ceil(numberAscent) + 12;
             y = drawTextBlock(ctx, String(order.orderNumber), y, {
-                size: 56,
+                size: bigNumberSize,
                 bold: true,
                 align: "center",
                 lineHeight: 60,
@@ -472,36 +537,39 @@
             y = drawDivider(ctx, y);
             y += 18;
 
-            // --- Footer: enlarged (22 -> 26) for readability, Table/
-            // Floor and Order Time added when present (never a blank
-            // line when absent). Employee/cashier name deliberately
-            // NOT printed this round, per the explicit direction -
-            // it remains available in the normalized payload only.
+            // --- Footer: vertical, one field per line (CR-06),
+            // enlarged for readability, Table/Floor and Order Time
+            // added when present (never a blank line when absent).
+            // FIX (CR-08, "Table / Floor RTL"): Station/Order Type/
+            // Table/Time are now drawn via drawLabelValueLine() -
+            // label and value as one structured, left-anchored run
+            // (same technique as Notes above) - instead of naively
+            // concatenating "Label: " + value into a single string
+            // and letting the browser guess the combined paragraph's
+            // own bidi direction, which is what produced the unstable
+            // ordering for an Arabic Table value after the English
+            // "Table:" label. Employee/cashier name deliberately NOT
+            // printed this round, per the explicit direction - it
+            // remains available in the normalized payload only.
             if (order.stationName) {
-                y = drawTextBlock(ctx, "Station: " + order.stationName, y, { size: 26, align: "left" });
+                y = drawLabelValueLine(ctx, "Station: ", order.stationName, y, 26);
             }
             if (order.orderTypeLabel) {
-                y = drawTextBlock(ctx, "Order Type: " + order.orderTypeLabel, y, {
-                    size: 26,
-                    align: "left",
-                });
+                y = drawLabelValueLine(ctx, "Order Type: ", order.orderTypeLabel, y, 26);
             }
             if (order.tableLabel) {
-                y = drawTextBlock(ctx, "Table: " + order.tableLabel, y, { size: 26, align: "left" });
+                y = drawLabelValueLine(ctx, "Table: ", order.tableLabel, y, 26);
             }
             if (order.orderTime) {
-                y = drawTextBlock(ctx, "Time: " + order.orderTime, y, { size: 26, align: "left" });
+                y = drawLabelValueLine(ctx, "Time: ", order.orderTime, y, 26);
             }
-            y += 10;
-            // Shrunk substantially (20 -> 13) per "can be shrunk a lot
-            // or removed if it adds no operational value" - kept, but
-            // deliberately minimal now rather than removed outright.
-            y = drawTextBlock(ctx, "FLEX KDS", y, { size: 13, align: "center" });
-            // FIX: excess trailing white space before cut - reduced
-            // final padding from 30 to a short, deliberate gap (12)
-            // that still keeps the cut clear of the last text line's
-            // own descenders.
-            y += 12;
+            // FIX (CR-10, "Remove FLEX KDS Footer Branding"): removed
+            // entirely - no operational value, and its own line was
+            // part of the excess bottom white space.
+            // FIX (CR-11, "Reduce Bottom White Space"): short, fixed
+            // gap only before the cut - enough to clear the last
+            // footer line's own descenders, no more.
+            y += 14;
 
             return y;
         }
