@@ -3,36 +3,24 @@
 
     <!--
         FlexSys KDS - POC-1D ONLY (TEMPORARY).
-        Separate "Printing (POC)" tab - deliberately NOT touching the
-        existing "Printers" tab, which belongs entirely to the current
-        kds.printer/Agent system and must stay untouched.
-
-        VIEW-INSTALL FIX: Odoo 19 rejects @string as an inherited-view
-        xpath selector ("View inheritance may not use attribute
-        'string' as a selector"). The page is now appended directly
-        inside the notebook itself (xpath="//notebook",
-        position="inside") instead of positioned relative to the
-        existing Printers page by its own string attribute - it simply
-        lands as the last tab, still fully separate from Printers.
+        MERGE UPDATE: the "Printing" tab itself (and its
+        flexsys_printing_method/flexsys_printer_ip/
+        flexsys_use_local_network_access fields) now lives permanently
+        in flexsys_kds's own kds_station_views.xml
+        (page name="flexsys_printing"). This view now only ADDS the
+        one remaining POC-only field (flexsys_iot_device_placeholder,
+        confirmed to have zero runtime dependency, not
+        production-proven) into that same, already-existing tab -
+        never a separate tab of its own anymore.
     -->
     <record id="view_kds_station_form_poc1d" model="ir.ui.view">
         <field name="name">kds.station.form.poc1d</field>
         <field name="model">kds.station</field>
         <field name="inherit_id" ref="flexsys_kds.view_kds_station_form"/>
         <field name="arch" type="xml">
-            <xpath expr="//notebook" position="inside">
-                <page name="flexsys_printing_poc" string="Printing (POC)">
-                    <group>
-                        <field name="flexsys_printing_method" widget="radio"/>
-                        <field name="flexsys_printer_ip"
-                               invisible="flexsys_printing_method != 'direct_network'"
-                               placeholder="e.g. 192.168.1.50"/>
-                        <field name="flexsys_use_local_network_access"
-                               invisible="flexsys_printing_method != 'direct_network'"/>
-                        <field name="flexsys_iot_device_placeholder"
-                               invisible="flexsys_printing_method != 'iot'"/>
-                    </group>
-                </page>
+            <xpath expr="//page[@name='flexsys_printing']/group" position="inside">
+                <field name="flexsys_iot_device_placeholder"
+                       invisible="flexsys_printing_method != 'iot'"/>
             </xpath>
         </field>
     </record>
