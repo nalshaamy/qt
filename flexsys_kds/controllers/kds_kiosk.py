@@ -526,6 +526,119 @@ class FlexSysKdsKioskController(http.Controller):
             return _kds_error(e)
         return {'ok': True, 'job_id': job.id}
 
+    # -----------------------------------------------------------------
+    # PHASE 2 ("Direct Printing <-> kds.print.job Integration"): two
+    # new, narrow, station/token-validated routes for the Direct
+    # Network transport - deliberately NOT direct ORM access from the
+    # Public Kiosk (a standalone, unauthenticated page), per explicit
+    # direction. The Direct ePOS transport itself (LNA, protocol,
+    # endpoint, timeout, response parsing) executes entirely in the
+    # browser via the unchanged Public Adapter - these two routes only
+    # create the job record first, and record its own eventual result
+    # after the browser's own attempt - the server never itself talks
+    # to the printer.
+    # -----------------------------------------------------------------
+
+    @http.route('/flexsyskds/public/api/print/prepare', type='jsonrpc', auth='public', csrf=False)
+    def kiosk_prepare_direct_print(self, station_code, token, order_id):
+        """Step 1 of the Direct Network lifecycle: validates the
+        station/token exactly like every other kiosk route, confirms
+        the order genuinely belongs to this station, then creates the
+        kds.print.job record BEFORE the browser attempts to print -
+        same bypass_check=True convention as kiosk_print() above (no
+        logged-in user on a public kiosk to gate by a permission tier)."""
+        env = request.env
+        station = _station_from_token(env, station_code, token)
+        if not station:
+            return {'ok': False, 'error': 'Invalid or expired kiosk link'}
+
+        order = env['kds.order'].sudo().browse(order_id).exists()
+        if not order or station not in order.station_ids:
+            return {'ok': False, 'error': 'Order not found for this station'}
+
+        try:
+            result = env['kds.print.job'].sudo().create_direct_print_job(
+                order.id, station.id, job_type='manual',
+                reason='kitchen_request', bypass_check=True,
+                # CORRECTION ("Phase 2 - Final Corrections Before
+                # Regression Test"), item 4: source='public_kiosk'
+                # here is what makes create_direct_print_job() set
+                # user_id=False explicitly, rather than letting the
+                # field's own default=lambda: self.env.user fall
+                # through - a public, unauthenticated kiosk request
+                # must never be attributed to whichever technical user
+                # this sudo()'d request happens to run as.
+                source='public_kiosk')
+        except UserError as e:
+            return _kds_error(e)
+        return {'ok': True, 'job_id': result['job_id']}
+
+    @http.route('/flexsyskds/public/api/print/result', type='jsonrpc', auth='public', csrf=False)
+    def kiosk_report_direct_print_result(self, station_code, token, job_id,
+                                          successful, error_code=False, error_message=False):
+        """Step 2 of the Direct Network lifecycle: reports the
+        browser's own Direct ePOS attempt result back for the SAME
+        job created by kiosk_prepare_direct_print() above.
+
+        SECURITY (Ownership Guard - "One Final Public Result Guard"):
+        validates station/token exactly like every other kiosk route,
+        then explicitly confirms the given job_id exists AND belongs
+        to THIS SAME station AND was itself created by a Public Kiosk
+        request (source == 'public_kiosk') - a public client supplying
+        an arbitrary job_id belonging to a different station, a
+        Legacy Agent job entirely, or even a Direct Network job at the
+        SAME station that Internal KDS itself created, is rejected
+        outright. Never allowed to update a job it has no genuine
+        ownership claim over, in any of those three ways.
+
+        LIFECYCLE GUARD ("One Final Public Result Guard"): only a job
+        still genuinely 'dispatched' (awaiting its first real result)
+        is actually written here. Reporting the exact SAME outcome
+        again for a job already in its own matching terminal state
+        (successful=True on an already-'printed' job, or
+        successful=False on an already-'failed' job) is treated as a
+        safe, idempotent retry of the same callback - accepted with no
+        further write at all, so a flaky network re-sending the same
+        result never causes a spurious duplicate update. Any
+        genuinely CONFLICTING result for a job already in a terminal
+        state (printed -> failed, failed -> printed, or any result at
+        all for an already-'cancelled' job) is rejected - a terminal
+        state, once reached, never moves to a different terminal state
+        through this route.
+        """
+        env = request.env
+        station = _station_from_token(env, station_code, token)
+        if not station:
+            return {'ok': False, 'error': 'Invalid or expired kiosk link'}
+
+        job = env['kds.print.job'].sudo().browse(job_id).exists()
+        if (not job or job.station_id != station or job.transport != 'direct_network'
+                or job.source != 'public_kiosk'):
+            return {'ok': False, 'error': 'Print job not found for this station'}
+
+        if job.status == 'dispatched':
+            # The normal, expected path - the job's own first result.
+            if successful:
+                job.action_mark_printed()
+            else:
+                job.action_mark_direct_failed(
+                    error_code=error_code or 'UNKNOWN',
+                    error_message=error_message or 'Unknown error')
+            return {'ok': True}
+
+        if (job.status == 'printed' and successful) or (job.status == 'failed' and not successful):
+            # Idempotent retry of the exact same, already-recorded
+            # outcome - accepted, no write, no error - a flaky network
+            # re-sending this same callback must never itself look
+            # like a failure to the caller.
+            return {'ok': True}
+
+        # Any other combination is a genuine conflict against an
+        # already-terminal status (printed<->failed disagreement, or
+        # any result at all for an already-cancelled job) - rejected,
+        # never silently overwritten.
+        return {'ok': False, 'error': 'Print job is already in a terminal state'}
+
 
 _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="%(kiosk_lang)s" dir="%(kiosk_dir)s">
@@ -883,6 +996,39 @@ const FLEXSYS_PRINTING_CONFIG = {
   printerIp: %(flexsys_printer_ip)r,
   useLocalNetworkAccess: %(flexsys_use_local_network_access)s,
 };
+
+// CORRECTION ("Phase 2 - Final Corrections Before Regression Test"),
+// item 3: the SAME normalization logic as Internal KDS's own
+// normalizeDirectPrintError() (static/src/js/kds_app.js) - kept
+// identical by hand since these two contexts cannot literally share
+// one file (see this file's own top-of-<head> comment on why the
+// Public Kiosk is standalone classic JS, not an ES module). Handles
+// every shape either Adapter can actually return: a bare
+// {errorCode: null/"", error: <raw JS exception>} with no
+// distinguishing code (a fetch()-level failure), a
+// {parseError: "..."} shape, or a genuine Epson-returned error code.
+// Never persists the raw JS exception object or raw response text as
+// the message - only this function's own short, stable description.
+function normalizeDirectPrintError(result) {
+  const code = (result && result.errorCode) || '';
+  const KNOWN_MESSAGES = {
+    LNA_DENIED: 'Local network access permission was denied.',
+    LNA_INIT_ERROR: 'Local network access permission could not be initialized.',
+    TIMEOUT: 'Printer connection timed out.',
+    NETWORK_ERROR: 'Unable to reach the printer over the local network.',
+  };
+  if (KNOWN_MESSAGES[code]) {
+    return { code: code, message: KNOWN_MESSAGES[code] };
+  }
+  if (result && result.parseError) {
+    return { code: code || 'PARSE_ERROR', message: 'Invalid response received from printer.' };
+  }
+  if (code) {
+    return { code: code, message: 'Direct printer returned error: ' + code };
+  }
+  return { code: 'UNKNOWN', message: 'Direct printing failed for an unknown reason.' };
+}
+
 let ORDERS = [];
 let FILTER = 'all';
 let PRINTING_ENABLED = false;
@@ -1574,6 +1720,28 @@ async function printOrder(orderId) {
       console.error('FlexSys: order id ' + orderId + ' not found in ORDERS.');
       return;
     }
+
+    // PHASE 2 ("Direct Printing <-> kds.print.job Integration"): the
+    // server creates/owns the job FIRST, via the station/token-
+    // validated 'prepare' route - never raw ORM access from this
+    // standalone public page. Renderer/Raster/LNA/Epson endpoint/
+    // Direct Adapter themselves are completely untouched below - only
+    // this lifecycle wrapping is new.
+    let jobId;
+    try {
+      const prepared = await api('/flexsyskds/public/api/print/prepare', {
+        station_code: STATION_CODE, token: TOKEN, order_id: orderId
+      });
+      if (!prepared || !prepared.ok) {
+        console.error('FlexSys: failed to create kds.print.job for Direct Network print.', prepared);
+        return;
+      }
+      jobId = prepared.job_id;
+    } catch (e) {
+      console.error('FlexSys: failed to create kds.print.job for Direct Network print.', e);
+      return;
+    }
+
     const normalizedOrder = window.FlexSysTicketBuilder.normalizeOrderForTicket(
       rawOrder, STATION_NAME, 'NEW', COMPANY_NAME
     );
@@ -1582,8 +1750,24 @@ async function printOrder(orderId) {
       useLocalNetworkAccess: FLEXSYS_PRINTING_CONFIG.useLocalNetworkAccess,
       normalizedOrder: normalizedOrder,
     });
+
+    // RESULT CONTRACT: the Adapter's own {successful, errorCode, ...}
+    // shape is reported back via the station/token-validated 'result'
+    // route - never a raw, unfiltered browser exception saved
+    // server-side, and never a direct ORM write from this public page.
     if (!result || !result.successful) {
       console.error('FlexSys: Direct Network print did not succeed.', result);
+    }
+    const normalizedError = normalizeDirectPrintError(result);
+    try {
+      await api('/flexsyskds/public/api/print/result', {
+        station_code: STATION_CODE, token: TOKEN, job_id: jobId,
+        successful: Boolean(result && result.successful),
+        error_code: normalizedError.code,
+        error_message: normalizedError.message,
+      });
+    } catch (e) {
+      console.error("FlexSys: failed to report the print result back to the job's own record.", e);
     }
     return;
   }

@@ -9,6 +9,44 @@ import { KdsOrderCard } from "./kds_order_card";
 import { getKdsLabels } from "./kds_i18n";
 import { flexsysPrintViaDirectEpos } from "./flexsys_epos_direct_adapter";
 
+// CORRECTION ("Phase 2 - Final Corrections Before Regression Test"),
+// item 3: a small, module-level helper - normalizes the Direct ePOS
+// Adapter's own {errorCode, error, parseError, ...} result shape into
+// a stable code + a genuinely readable message, instead of saving the
+// raw errorCode string (e.g. "NETWORK_ERROR") as the job's own error
+// MESSAGE with no description. Handles every shape either Adapter can
+// actually return (confirmed by reading both files directly before
+// writing this): a bare {errorCode: null, error: <raw JS exception>}
+// with no distinguishing code at all (this Internal Adapter's own
+// fetch()-failure case, which - unlike the Public Adapter - does not
+// itself distinguish TIMEOUT from a generic network error), a
+// {parseError: "..."} shape (a malformed/unparseable printer
+// response), or a genuine Epson-returned error code in errorCode
+// itself. Never persists the raw JS exception object or raw response
+// text as the message - only this function's own short, stable
+// description.
+function normalizeDirectPrintError(result) {
+    const code = (result && result.errorCode) || "";
+    const KNOWN_MESSAGES = {
+        LNA_DENIED: "Local network access permission was denied.",
+        LNA_INIT_ERROR: "Local network access permission could not be initialized.",
+        TIMEOUT: "Printer connection timed out.",
+        NETWORK_ERROR: "Unable to reach the printer over the local network.",
+    };
+    if (KNOWN_MESSAGES[code]) {
+        return { code, message: KNOWN_MESSAGES[code] };
+    }
+    if (result && result.parseError) {
+        return { code: code || "PARSE_ERROR", message: "Invalid response received from printer." };
+    }
+    if (code) {
+        // A genuine code the printer itself returned, not one of the
+        // Adapter's own known transport-level codes above.
+        return { code, message: "Direct printer returned error: " + code };
+    }
+    return { code: "UNKNOWN", message: "Direct printing failed for an unknown reason." };
+}
+
 // Languages Odoo ships RTL for; kept as a small explicit list (rather than
 // trying to derive it from the locale code alone) since this only needs to
 // flip the *custom* KDS screen's own layout - the rest of the Odoo backend
@@ -418,6 +456,27 @@ export class FlexSysKdsScreen extends Component {
                 return;
             }
 
+            // PHASE 2 ("Direct Printing <-> kds.print.job
+            // Integration"): the server creates/owns the job FIRST -
+            // every Direct print now has a real kds.print.job record,
+            // visible under Printing -> Print Jobs, exactly like the
+            // Legacy Agent path always did. Renderer/Raster/LNA/Epson
+            // endpoint/Direct Adapter themselves are completely
+            // untouched below - only this lifecycle wrapping is new.
+            let jobId;
+            try {
+                const prepared = await this.flexsysOrm.call(
+                    "kds.print.job",
+                    "create_direct_print_job",
+                    [orderId, stationId],
+                    { job_type: "manual", reason: "kitchen_request", source: "internal_kds" }
+                );
+                jobId = prepared.job_id;
+            } catch (e) {
+                console.error("FlexSys: failed to create kds.print.job for Direct Network print.", e);
+                return;
+            }
+
             const branchName = (station.company_id && station.company_id[1]) || rawOrder.company_name || "";
             const normalizedOrder = window.FlexSysTicketBuilder.normalizeOrderForTicket(
                 rawOrder,
@@ -432,8 +491,33 @@ export class FlexSysKdsScreen extends Component {
                 normalizedOrder,
                 notificationService: this.flexsysNotification,
             });
-            if (!result || !result.successful) {
+
+            // RESULT CONTRACT: the Adapter's own {successful, errorCode,
+            // ...} shape is translated here into the job's own
+            // Printed/Failed status - never a raw, unfiltered browser
+            // exception saved server-side.
+            if (result && result.successful) {
+                try {
+                    await this.flexsysOrm.call("kds.print.job", "action_mark_printed", [jobId], {});
+                } catch (e) {
+                    console.error("FlexSys: print succeeded but failed to update the job's own status.", e);
+                }
+            } else {
                 console.error("FlexSys: Direct Network print did not succeed.", result);
+                const normalizedError = normalizeDirectPrintError(result);
+                try {
+                    await this.flexsysOrm.call(
+                        "kds.print.job",
+                        "action_mark_direct_failed",
+                        [jobId],
+                        {
+                            error_code: normalizedError.code,
+                            error_message: normalizedError.message,
+                        }
+                    );
+                } catch (e) {
+                    console.error("FlexSys: print failed and failed to update the job's own status too.", e);
+                }
             }
             return;
         }

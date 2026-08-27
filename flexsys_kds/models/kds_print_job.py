@@ -42,6 +42,47 @@ class KdsPrintJob(models.Model):
     printer_id = fields.Many2one('kds.printer', string='Printer')
     user_id = fields.Many2one('res.users', default=lambda self: self.env.user)
 
+    # ---------------------------------------------------------------
+    # PHASE 2 ("Direct Printing <-> kds.print.job Integration"):
+    # kds.print.job becomes Transport-Neutral. `transport` is the ONE
+    # new field distinguishing HOW a job is/was executed - deliberately
+    # separate from job_type (WHAT kind of print request this is:
+    # auto/manual/reprint, unchanged) and from printer_id (WHICH
+    # kds.printer record, still only meaningful for the 'agent'
+    # transport - printer_id was already NOT required=True at the
+    # field level; the only place that ever effectively required one
+    # was create_reprint()'s own explicit check below, which is
+    # unchanged and still Agent-only). default='agent' so every
+    # existing job (created before this field existed) is correctly
+    # classified as the legacy path with zero migration/backfill
+    # needed - Odoo applies a field's own default to existing rows
+    # automatically when a new column is added.
+    transport = fields.Selection([
+        ('agent', 'Legacy Agent'),
+        ('direct_network', 'Direct Network'),
+        ('iot', 'Odoo IoT'),
+    ], default='agent', required=True,
+        help="How this job is/was actually executed - never assumed "
+             "from printer_id's own presence/absence. 'Legacy Agent' "
+             "is the original kds.printer/Print Agent path, unchanged. "
+             "'Direct Network' is the browser-executed Epson ePOS path "
+             "- printer_id is not set for these; see printer_target "
+             "instead. 'Odoo IoT' is reserved, not yet implemented.")
+
+    # A snapshot of the printer IP actually used for a 'direct_network'
+    # job, captured at creation time - so the job's own history record
+    # stays accurate even if the station's own Printer IP is later
+    # changed or the station reconfigured to a different transport
+    # entirely. Not a secret (a printer IP is deliberately not treated
+    # as sensitive elsewhere in this codebase either - see the "no
+    # secrets exposed" note on the Public Kiosk's own printing-config
+    # bootstrap). Empty for every 'agent'/'iot' job.
+    printer_target = fields.Char(
+        string='Printer Target',
+        help="Snapshot of the printer IP address used for a Direct "
+             "Network job at the time it was created - kept even if "
+             "the station's own configured IP changes later.")
+
     job_type = fields.Selection([
         ('auto', 'Auto Print'),
         ('manual', 'Manual Print'),
@@ -142,6 +183,46 @@ class KdsPrintJob(models.Model):
              "and a manager alert event has been logged.")
     retry_count = fields.Integer(default=0)
     error = fields.Char()
+
+    # ---------------------------------------------------------------
+    # CORRECTION ("Phase 2 - Final Corrections Before Regression
+    # Test"), item 2: error_code and failed_at were accepted as
+    # parameters by action_mark_direct_failed() but never actually
+    # persisted, and no explicit failure timestamp existed at all
+    # (write_date is not a substitute - it changes on ANY write to the
+    # record, not specifically a failure). Both fields apply to any
+    # transport, not only Direct Network - kept generic rather than
+    # Direct-only, since a stable, non-translated error_code is a
+    # genuinely useful concept for the Legacy Agent path too, even
+    # though no current Agent code path sets it yet (nothing about the
+    # Legacy Agent's own logic is changed this round).
+    # ---------------------------------------------------------------
+    error_code = fields.Char(
+        string='Error Code',
+        help="A stable, non-translated code identifying why this job "
+             "failed (e.g. TIMEOUT, NETWORK_ERROR, LNA_DENIED) - for "
+             "programmatic handling, distinct from the human-readable "
+             "error message.")
+    failed_at = fields.Datetime(
+        string='Failed At',
+        help="When this job's own status last became 'failed' - never "
+             "inferred from write_date, which changes on any update to "
+             "this record, not specifically a failure.")
+
+    # CORRECTION, item 4: distinguishes which screen actually requested
+    # this print, independent of user_id (which is False for a Public
+    # Kiosk job - there is no logged-in internal user on that
+    # standalone page, and one must never be invented/defaulted to the
+    # calling context's own env.user, which would incorrectly attribute
+    # a public request to whichever user happens to run the request,
+    # e.g. an Administrator/Superuser context).
+    source = fields.Selection([
+        ('internal_kds', 'Internal KDS'),
+        ('public_kiosk', 'Public Kiosk'),
+    ], string='Source',
+        help="Which screen actually requested this print. Independent "
+             "of user_id, which is genuinely empty for a Public Kiosk "
+             "job rather than attributed to any internal user.")
 
     reason = fields.Selection([
         ('printer_error', 'Printer Error'),
@@ -438,3 +519,150 @@ class KdsPrintJob(models.Model):
                 'reason': reason, 'note': ': ' + reason_note if reason_note else ''}
         )
         return job
+
+    # ---------------------------------------------------------------
+    # PHASE 2 ("Direct Printing <-> kds.print.job Integration"): the
+    # Direct Network counterpart to create_reprint() above - a fully
+    # SEPARATE method, not a modification of it (create_reprint() and
+    # its own Agent-only printer_ids assumption are completely
+    # untouched, per the explicit "do not break Legacy Agent"
+    # direction). Same permission level (_kds_check_action('reprint',
+    # ...)) as create_reprint() - this is the same Print button's own
+    # request, just executed over a different transport, so it must
+    # not be held to a different (weaker) permission bar than the path
+    # it replaces.
+    # ---------------------------------------------------------------
+    @api.model
+    def create_direct_print_job(self, order_id, station_id, job_type='manual',
+                                 reason=False, reason_note=False,
+                                 scope='station_items', bypass_check=False,
+                                 source='internal_kds'):
+        """Creates a kds.print.job for the Direct Network transport -
+        never requires station.printer_ids (the Legacy Agent-only
+        assumption audited and confirmed in create_reprint() above),
+        only that the station itself is genuinely configured for
+        Direct Network with a printer IP set. Returns the job already
+        in 'dispatched' status - the browser is about to execute the
+        actual print immediately after this call returns, not queue it
+        for a separate agent process to pick up later, so 'pending'
+        (which specifically means "waiting for an agent to claim it")
+        would be inaccurate here.
+
+        Takes order_id/station_id (plain integer ids), NOT recordsets,
+        deliberately unlike create_reprint() above - this method is
+        designed to be called directly over ORM/RPC from the frontend
+        (Internal KDS's own onPrintClick, and the Public Kiosk
+        controller's own prepare-print route below), which can only
+        ever pass plain ids, never a live Python recordset object.
+
+        CORRECTION ("Phase 2 - Final Corrections Before Regression
+        Test"), item 4: `source` distinguishes which screen requested
+        this print. For 'public_kiosk' specifically, user_id is set to
+        False EXPLICITLY in the create() call below, rather than left
+        to fall through to the field's own default=lambda:
+        self.env.user - that default exists for the normal, internal-
+        user call sites (Internal KDS, and every other job-creating
+        method in this model), and must not be allowed to silently
+        attribute a public, unauthenticated kiosk request to whichever
+        technical user happens to be running that request's own env
+        context (e.g. sudo()'s own caller identity) - a public request
+        genuinely has no requesting internal user, and must record
+        that honestly rather than inventing one.
+        """
+        order = self.env['kds.order'].browse(order_id)
+        station = self.env['kds.station'].browse(station_id)
+        if not order.exists() or not station.exists():
+            raise ValidationError(_("Order or Station not found."))
+
+        job_model = self.env['kds.print.job']
+        job_model._kds_check_action('reprint', station=station, bypass=bypass_check)
+        if station.flexsys_printing_method != 'direct_network' or not station.flexsys_printer_ip:
+            # Server-side enforcement of the same Compatibility Guard
+            # already applied client-side (kds_app.js/kds_kiosk.py) -
+            # the server must never trust the client's own routing
+            # decision alone. Same exception class/error_code as the
+            # Legacy Agent's own "no printer configured" case, since
+            # from an operator's own point of view it is the identical
+            # situation: nothing to print to.
+            raise NoPrinterConfiguredError(
+                _("No printer is configured for this station."))
+        job_vals = {
+            'order_id': order.id,
+            'station_id': station.id,
+            'transport': 'direct_network',
+            'printer_target': station.flexsys_printer_ip,
+            'job_type': job_type,
+            'scope': scope,
+            'reason': reason,
+            'reason_note': reason_note,
+            'status': 'dispatched',
+            'dispatched_at': fields.Datetime.now(),
+            'source': source,
+        }
+        if source == 'public_kiosk':
+            job_vals['user_id'] = False
+        job = job_model.create(job_vals)
+        event_type = 'reprint' if job_type == 'reprint' else 'print_retry'
+        # UI/DATA FIX consistency note: 'reprint' event_type is reused
+        # for job_type == 'reprint' exactly like create_reprint() above
+        # already does; for a plain 'manual' print (this round's own
+        # actual test case - Manual Print, per the explicit scope of
+        # this phase), no dedicated "manual print requested" audit
+        # event_type currently exists in kds.event's own Selection -
+        # rather than invent one outside this round's own scope, or
+        # misuse an existing type whose own label doesn't genuinely
+        # describe this action, the job record itself
+        # (transport/job_type/status/timestamps) is already a
+        # complete, queryable audit trail on its own via Printing ->
+        # Print Jobs - no separate kds.event log call is made for the
+        # plain-manual case, unlike create_reprint() above whose own
+        # job_type is always 'reprint'.
+        if job_type == 'reprint':
+            self.env['kds.event'].log(
+                order, event_type='reprint', station=station,
+                note=_("Reprint requested (%(reason)s)%(note)s") % {
+                    'reason': reason or '', 'note': ': ' + reason_note if reason_note else ''}
+            )
+        # Returns a plain dict, NOT the job recordset itself -
+        # deliberately, unlike create_reprint() above, since this
+        # method is called directly over ORM/RPC and a live recordset
+        # object is not RPC/JSON-serializable. job_id is the one piece
+        # of information either caller (Internal KDS's own
+        # onPrintClick, the Public Kiosk's own prepare-print route)
+        # needs to report the eventual browser-side print result back
+        # against the SAME job.
+        return {'job_id': job.id}
+
+    def action_mark_direct_failed(self, error_code=False, error_message='Unknown error'):
+        """Direct Network's own failure handler - deliberately NOT a
+        reuse of action_mark_failed() above, whose own retry/backup-
+        printer escalation logic is entirely Agent-specific (retrying
+        "the same printer" or escalating to a station's own configured
+        kds.printer backup has no equivalent meaning for a
+        browser-executed Direct Network attempt - a failed direct
+        attempt is simply failed; the operator can press Print again
+        themselves, which creates a fresh job, exactly like any other
+        manual action in this system). No automatic retry, no fallback
+        printer creation - just an honest, final, timestamped failure
+        record. No separate kds.event log call either, for the same
+        reason noted in create_direct_print_job() above - no existing
+        event_type genuinely describes "a direct print attempt
+        failed", and the job record itself (status='failed', error,
+        error_code, failed_at, printer_target) is already the
+        complete, queryable record of what happened, exactly where
+        Printing -> Print Jobs already looks.
+
+        CORRECTION ("Phase 2 - Final Corrections Before Regression
+        Test"), item 2: error_code and failed_at (fields.now()) are
+        now genuinely persisted - they were previously accepted as
+        parameters here but silently discarded, and no explicit
+        failure timestamp existed at all (write_date is not a
+        substitute - it changes on any write, not specifically this
+        one).
+        """
+        self.write({
+            'status': 'failed',
+            'error': error_message,
+            'error_code': error_code or False,
+            'failed_at': fields.Datetime.now(),
+        })

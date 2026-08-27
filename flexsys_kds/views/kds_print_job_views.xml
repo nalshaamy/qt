@@ -75,7 +75,21 @@
                   default_order="order_id.id desc, print_number">
                 <field name="order_id"/>
                 <field name="station_id"/>
+                <!-- CORRECTION ("Phase 2 - Final Corrections Before
+                     Regression Test"), item 1: a Direct Network job's
+                     own printer_id is empty by design (it has no
+                     kds.printer record at all) - transport/
+                     printer_target now shown alongside it so a Direct
+                     job is never mistaken for one with no printer
+                     configured at all. Existing Agent columns
+                     (printer_id, retry_count, escalated) are otherwise
+                     completely unchanged - no redesign. -->
+                <field name="transport" widget="badge"
+                       decoration-info="transport == 'direct_network'"
+                       decoration-muted="transport == 'agent'"/>
                 <field name="printer_id"/>
+                <field name="printer_target" string="Target (Direct)"
+                       invisible="transport != 'direct_network'"/>
                 <field name="display_job_type" string="Job Type" widget="badge"
                        decoration-info="display_job_type == 'print'"
                        decoration-warning="display_job_type == 'reprint'"/>
@@ -104,6 +118,12 @@
                        help="True on the original job when it was escalated to a backup printer after repeated failures - see the backup printer's own separate job row, right next to this one once grouped by Order."/>
                 <field name="user_id"/>
                 <field name="create_date" string="Created On"/>
+                <!-- CORRECTION, item 1: Printed/Failed time and Error
+                     now visible directly in the list, not only inside
+                     each job's own form. -->
+                <field name="printed_at"/>
+                <field name="failed_at"/>
+                <field name="error" string="Error"/>
             </list>
         </field>
     </record>
@@ -205,13 +225,30 @@
                         <group string="Job">
                             <field name="order_id"/>
                             <field name="station_id"/>
+                            <!-- CORRECTION ("Phase 2 - Final
+                                 Corrections Before Regression Test"),
+                                 item 1: transport/printer_target now
+                                 shown explicitly so a Direct Network
+                                 job's own empty printer_id is never
+                                 mistaken for "no printer configured at
+                                 all". -->
+                            <field name="transport"/>
                             <field name="printer_id"/>
+                            <field name="printer_target"
+                                   invisible="transport != 'direct_network'"/>
                             <field name="display_job_type" string="Job Type"/>
                             <field name="print_number" string="Print #"/>
                             <field name="scope"/>
                             <field name="reason" string="Reprint Reason" invisible="not reason"/>
                             <field name="reason_note" invisible="not reason_note"/>
-                            <field name="user_id"/>
+                            <!-- CORRECTION, item 4: user_id is False
+                                 for a Public Kiosk-sourced job (no
+                                 internal user - never attributed to
+                                 Administrator/Superuser); source
+                                 states plainly where the request
+                                 itself came from either way. -->
+                            <field name="user_id" invisible="not user_id"/>
+                            <field name="source"/>
                             <field name="create_date" string="Created On"/>
                         </group>
                         <group string="Status">
@@ -219,6 +256,7 @@
                             <field name="dispatched_at"/>
                             <field name="acknowledged_at"/>
                             <field name="printed_at"/>
+                            <field name="failed_at"/>
                             <field name="copies"/>
                         </group>
                     </group>
@@ -226,19 +264,38 @@
                          "Agent, Lease information" - claimed_by_agent/
                          claimed_at/lease_expires_at were already tracked
                          by the engine (models/kds_print_job.py) but had
-                         no view exposing them at all before this fix. -->
-                    <group string="Agent / Lease">
+                         no view exposing them at all before this fix.
+                         CORRECTION, item 1: only meaningful for the
+                         Legacy Agent transport - hidden entirely for a
+                         Direct Network job, which has no agent/claim/
+                         lease concept at all, per the "make Agent/Lease
+                         fields meaningful only for the Agent transport"
+                         request (no redesign, just this one
+                         invisible= addition on the group itself). -->
+                    <group string="Agent / Lease" invisible="transport != 'agent'">
                         <field name="claimed_by_agent" string="Claimed By (Agent)"/>
                         <field name="claimed_at"/>
                         <field name="lease_expires_at"/>
                     </group>
                     <!-- UI/DATA FIX ("Master Change Request", item 17):
                          "Failure/Error" - retry_count/error were also
-                         already tracked with no view exposing them. -->
-                    <group string="Failure / Retry" invisible="not error and retry_count == 0 and not escalated">
-                        <field name="retry_count"/>
+                         already tracked with no view exposing them.
+                         CORRECTION, item 2: error_code/failed_at now
+                         shown alongside the existing error message and
+                         retry_count - retry_count/escalated remain
+                         Agent-specific concepts (Direct Network has
+                         neither automatic retry nor backup-printer
+                         escalation - see action_mark_direct_failed()'s
+                         own docstring), hidden for a Direct job without
+                         redesigning this group's own visibility rule
+                         beyond that one addition. -->
+                    <group string="Failure / Retry"
+                           invisible="not error and retry_count == 0 and not escalated and not error_code">
+                        <field name="error_code" invisible="not error_code"/>
                         <field name="error" invisible="not error"/>
-                        <field name="escalated"/>
+                        <field name="failed_at" invisible="not failed_at"/>
+                        <field name="retry_count" invisible="transport != 'agent'"/>
+                        <field name="escalated" invisible="transport != 'agent'"/>
                     </group>
                 </sheet>
             </form>
