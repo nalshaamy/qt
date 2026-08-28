@@ -675,7 +675,17 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
        network, where a failed remote font fetch is worse than a
        graceful local fallback. */
     background:var(--fs-bg); color:#eef2f7; font-family:'Cairo','Segoe UI',Tahoma,sans-serif;
-    overflow:hidden; transition:background .2s;
+    /* RUNTIME UI ADJUSTMENT ("Vertical Scroll + Slightly Narrower
+       Cards"), confirmed live on Odoo.sh: overflow:hidden here was
+       blocking ANY vertical scroll for the page - once the header +
+       filters + a 3x2 card grid together exceeded the available
+       viewport height, the overflow was simply clipped, never
+       scrollable, cutting off the second row and making Pagination
+       itself unreachable in that case. overflow-y:auto restores real
+       vertical scrolling when content genuinely exceeds the viewport;
+       overflow-x:hidden keeps the explicit "no horizontal scroll"
+       requirement. */
+    overflow-y:auto; overflow-x:hidden; transition:background .2s;
   }
   /* Light mode (toggle button in header): only the page/grid background
      changes to a light gradient - header, filters, and cards deliberately
@@ -759,10 +769,16 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
        capping every card at that width regardless of how much wider
        its own grid column actually was on a Full HD screen's own
        3-column layout, leaving large, wasted horizontal gaps between
-       cards. width:100%% (kept, combined with .grid's own
-       justify-items:stretch) now lets each card genuinely use its
-       full column width. */
-    width:100%%;
+       cards. width:100%% (combined with .grid's own
+       justify-items:stretch) let each card genuinely use its
+       full column width.
+       UI ADJUSTMENT ("Vertical Scroll + Slightly Narrower Cards"):
+       confirmed live - 100%% read as slightly too wide once seen on
+       the actual screen. width:95%% + justify-self:center takes a
+       small, even margin off both sides of each card within its own
+       grid column (not the grid's own 24px gap between columns),
+       still comfortably wider than the old, removed 380px cap. */
+    width:95%%; justify-self:center;
     /* HIGH-DENSITY LAYOUT (dev request, point 5: "a single order may
        contain many products... do not allow one very large order to
        destroy the entire grid layout... define a reasonable maximum

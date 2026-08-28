@@ -116,7 +116,20 @@ body.o_flexsys_kiosk {
     .o_web_client {
         height: 100vh !important;
     }
-    overflow: hidden;
+    // RUNTIME UI ADJUSTMENT ("Vertical Scroll + Slightly Narrower
+    // Cards"), confirmed live on Odoo.sh: overflow: hidden here
+    // (combined with height: 100vh !important above) was blocking ANY
+    // vertical scroll for the whole page - once the header + filters +
+    // a 3x2 card grid together exceeded the available viewport height,
+    // the overflow was simply clipped, never scrollable, cutting off
+    // the second row and making Pagination itself unreachable in that
+    // case. overflow-y: auto restores real vertical scrolling when
+    // content genuinely exceeds the viewport; overflow-x: hidden keeps
+    // the explicit "no horizontal scroll" requirement. .fs-sticky-top
+    // below still works correctly against body as its own scroll
+    // container - nothing else here changed.
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 // HIGH-DENSITY LAYOUT (dev request, point 6: "the overall KDS orders
@@ -365,12 +378,23 @@ body.o_flexsys_kiosk {
     // column actually was (a Full HD screen's own 3-column layout
     // leaves each column comfortably wider than 380px), leaving large,
     // wasted horizontal gaps between cards instead of each card
-    // actually filling its own column. width: 100% (kept, combined
-    // with .fs-grid's own justify-items: stretch above) now lets each
+    // actually filling its own column. width: 100% (combined
+    // with .fs-grid's own justify-items: stretch above) let each
     // card genuinely use its full column width - product names,
     // mixed Arabic/English text, modifiers, and notes all get the
     // extra room this was meant to free up.
-    width: 100%;
+    //
+    // UI ADJUSTMENT ("Vertical Scroll + Slightly Narrower Cards"):
+    // confirmed live - 100% read as slightly too wide once seen on the
+    // actual Full HD screen. width: 95% + justify-self: center takes
+    // a small, even margin off both sides of each card within its own
+    // grid column (not the grid's own gap between columns, which stays
+    // at 24px) - still comfortably wider than the old, removed 380px
+    // cap, keeping product names/notes/mixed Arabic-English text just
+    // as readable, while avoiding the card touching its own column's
+    // full edge-to-edge width.
+    width: 95%;
+    justify-self: center;
     // HIGH-DENSITY LAYOUT (dev request, point 5: "a single order may
     // contain many products... do not allow one very large order to
     // destroy the entire grid layout... define a reasonable maximum
