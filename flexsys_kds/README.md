@@ -191,6 +191,24 @@ Every job — Direct or Legacy Agent — is visible under **Printing →
 Print Jobs**, showing its own transport, target, status, and
 timestamps.
 
+**POS Direct Auto Print (Phase 3)** — server-triggered Auto Print
+(Printer Only stations, and KDS+Printer stations with Auto Print
+switched on) now also has a Direct Network execution path that needs
+zero Legacy Agent configuration: the POS Browser's own worker claims
+and executes the print itself, over the same Direct ePOS transport and
+shared ticket renderer as the two paths above. A job created this way
+starts `Pending` (waiting for an eligible POS Browser to claim it, own
+claim deadline) rather than `Dispatched` immediately, since nothing is
+executing the print yet at creation time. No automatic retry and no
+Legacy Agent fallback for this path either — an unclaimed job fails
+with `NO_EXECUTOR`, a claimed-but-unreported one fails with
+`RESULT_TIMEOUT`, exactly like any other Direct Network failure. The
+Legacy Agent path itself is **retained internally, temporarily, for
+compatibility in this phase** — this is an additional execution path,
+not a replacement. A separate removal phase is planned, but only
+after Direct Auto Print passes real Odoo.sh regression and real Epson
+hardware validation.
+
 ## 11. SLA
 
 Each station has its own target preparation time and Warning/Late

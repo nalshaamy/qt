@@ -15,13 +15,14 @@ models that no longer exist).
 
 `19.0.1.0.0` — the first Commercial Demo Candidate baseline.
 
-**Last confirmed live Odoo.sh regression baseline: 0 failed, 0
-error(s) of 588 post-tests.** That result is real and stands - but it
-was run against the package *before* this round's own new Pagination
-regression tests were added (see "Restore the approved pagination
-design" below). This current package includes those additional
-tests and has **not yet** been run against a live Odoo 19 instance -
-see "Commercial Readiness Status" below for the exact, current gate
+**Last confirmed live Odoo.sh regression baseline (pre-Phase-3): 0
+failed, 0 error(s) of 636 post-tests (662 tests total).** That result
+is real and stands - but it was run against the package *before*
+Phase 3's own new POS Direct Auto Print Worker tests (and this
+round's own audit-correction tests) were added. This current package
+includes those additional tests (692 static test methods total) and
+has **not yet** been run against a live Odoo 19 instance - see
+"Commercial Readiness Status" below for the exact, current gate
 status; no runtime result is claimed for this package until that run
 happens.
 
@@ -316,21 +317,26 @@ below for the schema-removal decision this is pending.
 
 ## Automated Test Count
 
-**596 tests** as of this document (`py_compile`, XML well-formedness,
-and JS syntax checked on every file on every change, plus
-functional/behavioral coverage for every area above, including the
-Direct Printing / `kds.print.job` lifecycle and this round's own new
-Pagination regression suite - 8 tests, `tests/test_pagination.py`).
+**692 static test methods** as of this document (`py_compile`, XML
+well-formedness, and JS syntax checked on every file on every change,
+plus functional/behavioral coverage for every area above, including
+the Direct Printing / `kds.print.job` lifecycle, the Pagination
+regression suite, and Phase 3's own POS Direct Auto Print Worker
+suite - operating-mode enforcement, job creation/idempotency, atomic
+claim/eligibility revalidation, session ownership, timeouts, payload
+content, and the audit-correction tests from this round).
 
 The **last confirmed live Odoo.sh run (0 failed, 0 error(s))** covered
-**588** of these tests - the package as it stood before the Pagination
-suite was added. The additional 8 Pagination tests have been verified
-by direct execution in this environment (a real, standalone
-`unittest` run against this exact file, not Odoo's own test runner -
-see that file's own HONEST SCOPE NOTE) but **not yet** as part of a
-live Odoo 19 regression run. No claim is made here that all 596 have
-passed together against a live instance - that run is still pending
-(see "Commercial Readiness Status" below).
+**636 post-tests (662 tests total)** - the package as it stood
+*before* Phase 3. Every test added since (Phase 3's own suite, plus
+this round's own audit-correction tests) has been verified by direct
+static execution in this environment (real, standalone `unittest`
+runs, or direct source-contract checks against the actual files - see
+each suite's own HONEST SCOPE NOTE for what that does and does not
+prove) but **not yet** as part of a live Odoo 19 regression run. No
+claim is made here that all 692 have passed together against a live
+instance - that run is still pending (see "Commercial Readiness
+Status" below).
 
 ---
 
@@ -371,9 +377,9 @@ passed together against a live instance - that run is still pending
 | Manifest parses, no orphaned data-file references | ✅ Pass |
 | ACL entries all reference an existing model | ✅ Pass (verified programmatically) |
 | Menu items all reference an existing action | ✅ Pass (verified programmatically) |
-| Automated test suite (596 tests) internally consistent | ✅ Pass |
-| Last confirmed live Odoo.sh regression baseline | ✅ **0 failed, 0 error(s) of 588 post-tests** (pre-Pagination-suite package) |
-| Current 596-test package (incl. new Pagination suite) run against live Odoo 19 | ⚠️ **Not yet run - awaiting a fresh Odoo.sh regression** |
+| Automated test suite (692 static test methods) internally consistent | ✅ Pass |
+| Last confirmed live Odoo.sh regression baseline | ✅ **0 failed, 0 error(s) of 636 post-tests (662 tests total)** (pre-Phase-3 package) |
+| Current 692-test package (incl. Phase 3 + this round's audit corrections) run against live Odoo 19 | ⚠️ **Not yet run - awaiting a fresh Odoo.sh regression** |
 | Live two-screen realtime check (backend + kiosk simultaneously) | ⚠️ **Requires a live instance** |
 | Module upgrade test on an existing development database | ⚠️ **Requires a live instance** |
 | Live regression pass: POS → Routing → KDS → Preparing → Ready → Completed, quantity increase/decrease/to-zero, cancellation, refund, multi-station, all three Operating Modes, Public Kiosk token enforcement, printing claim/lease | ⚠️ **Requires a live instance - the client's own environment is the only one available for this** |

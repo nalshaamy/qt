@@ -170,8 +170,43 @@ class FlexSysPosDirectPrintWorker {
             // results FIRST, before claiming anything new - a result
             // that already happened (the printer already printed)
             // must never be lost behind a fresh claim attempt.
-            await this._flushPendingResults();
-            await this._claimAndPrintOne();
+            //
+            // AUDIT FIX ("Version 43 - Final Phase 3 Corrections"),
+            // item 2: confirmed - _flushPendingResults() used to
+            // catch a failed report RPC internally and return
+            // normally either way, so a previously-printed job's own
+            // unacknowledged result could sit in localStorage while
+            // the worker went ahead and claimed (and physically
+            // printed) another job in the SAME cycle. Result-first
+            // must genuinely BLOCK new claims when any pending
+            // report could not be acknowledged - _flushPendingResults()
+            // now returns whether every pending marker was actually
+            // acknowledged by the server, and a new claim is only
+            // attempted when that's true.
+            const allFlushed = await this._flushPendingResults();
+            if (!allFlushed) {
+                return;
+            }
+            // AUDIT FIX ("Version 43 - Final Phase 3 Corrections"),
+            // item 4: confirmed - the old code called `this._runCycle()`
+            // from INSIDE _claimAndPrintOne(), while the OUTER
+            // _runCycle() invocation still had cycleInFlight=true set -
+            // that inner call exited immediately on its own
+            // `if (this.cycleInFlight) return;` guard, so "immediately
+            // check for another job" never actually happened; only the
+            // next 2-second poll tick did. Replaced with a genuine
+            // sequential loop HERE instead: each iteration fully
+            // awaits _claimAndPrintOne() (one claim RPC, one physical
+            // print attempt, one result report) before the next
+            // iteration even starts - still exactly one job claimed
+            // and printed at a time, never concurrently, per the
+            // explicit "sequential one-at-a-time execution remains
+            // mandatory" requirement. The loop naturally stops the
+            // first time there's nothing left to claim.
+            // eslint-disable-next-line no-await-in-loop
+            while (await this._claimAndPrintOne()) {
+                // Intentionally empty - see comment above.
+            }
         } catch (error) {
             console.error("FlexSys KDS: Direct Auto Print worker cycle failed", error);
         } finally {
@@ -179,8 +214,17 @@ class FlexSysPosDirectPrintWorker {
         }
     }
 
+    /**
+     * @returns {Promise<boolean>} true only if every locally-persisted
+     * pending result was successfully reported to and acknowledged by
+     * the server this cycle (or there were none to begin with) -
+     * false if at least one marker still remains (report RPC failed/
+     * dropped), in which case the caller must not proceed to claim a
+     * new job this cycle.
+     */
     async _flushPendingResults() {
         const pending = readPendingResults();
+        let allFlushed = true;
         for (const entry of pending) {
             try {
                 await this.pos.data.call("kds.print.job", "report_pos_direct_auto_result", [
@@ -202,20 +246,36 @@ class FlexSysPosDirectPrintWorker {
                         + "(will retry next cycle)",
                     error
                 );
+                allFlushed = false;
             }
         }
+        return allFlushed;
     }
 
+    /**
+     * @returns {Promise<boolean>} true ONLY when a job was claimed,
+     * physically printed (successful or not - print failure is not
+     * this method's own failure), AND its own result was successfully
+     * reported to and acknowledged by the server (marker cleared) -
+     * the one case where continuing the sequential loop is safe.
+     * false covers every other case: nothing to claim, a precondition/
+     * claim RPC error, OR (AUDIT FIX, "Version 44") the result report
+     * RPC itself failing after a genuine physical print attempt - in
+     * that last case a job WAS printed but its own marker deliberately
+     * remains in localStorage, unacknowledged, and the caller must NOT
+     * claim another job until a later cycle's own _flushPendingResults()
+     * successfully reports it.
+     */
     async _claimAndPrintOne() {
         const executorId = this.pos.device && this.pos.device.identifier;
         if (!executorId) {
             // No stable device identifier available yet - nothing safe
             // to claim under.
-            return;
+            return false;
         }
         const sessionId = this.pos.session && this.pos.session.id;
         if (!sessionId) {
-            return;
+            return false;
         }
 
         let claimed;
@@ -227,10 +287,10 @@ class FlexSysPosDirectPrintWorker {
             ]);
         } catch (error) {
             console.error("FlexSys KDS: Direct Auto Print claim RPC failed", error);
-            return;
+            return false;
         }
         if (!claimed || !claimed.length) {
-            return;
+            return false;
         }
 
         const payload = claimed[0];
@@ -290,17 +350,38 @@ class FlexSysPosDirectPrintWorker {
                 resultEntry.error_message,
             ]);
             clearPendingResult(resultEntry.job_id);
+            // AUDIT FIX ("Version 44 - One Remaining Worker Runtime
+            // Blocker"): confirmed - this method used to unconditionally
+            // `return true;` after the try/catch above, regardless of
+            // whether the report RPC actually succeeded. That meant a
+            // report RPC failure DURING the sequential while loop (as
+            // opposed to an already-stale marker caught by
+            // _flushPendingResults() at the very START of a cycle) was
+            // silently ignored by the loop's own continuation
+            // condition - Job A's own result stayed correctly
+            // unacknowledged in localStorage, but the loop still
+            // claimed and physically printed Job B in the very same
+            // cycle. The result-first contract requires that ANY
+            // physically-executed print result still unacknowledged by
+            // the server blocks every further claim until it's
+            // acknowledged - `return true` here (report genuinely
+            // acknowledged, marker cleared) is the ONLY case where it's
+            // safe for the while loop in _runCycle() to continue.
+            return true;
         } catch (error) {
             console.error(
                 "FlexSys KDS: failed to report Direct Auto Print result immediately "
                     + "(will retry next cycle)",
                 error
             );
+            // The marker deliberately stays in localStorage (never
+            // cleared here) - the NEXT cycle's own _flushPendingResults()
+            // retries only the REPORT, never the physical print itself.
+            // Returning false stops the sequential while loop
+            // immediately, so no further job is claimed this cycle
+            // while Job A's own result remains unacknowledged.
+            return false;
         }
-
-        // item M: immediately check for another job after finishing
-        // this one, rather than waiting for the next poll interval.
-        this._runCycle();
     }
 }
 
@@ -324,8 +405,25 @@ patch(PosStore.prototype, {
         // are all genuinely ready by the time the worker starts.
         await super.setup(...args);
         try {
-            this._flexsysDirectPrintWorker = new FlexSysPosDirectPrintWorker(this);
-            this._flexsysDirectPrintWorker.start();
+            // AUDIT FIX ("Version 43 - Final Phase 3 Corrections"),
+            // item 3: confirmed - start()'s own `if (this.running)
+            // return;` guard only protects a SINGLE worker instance
+            // from starting twice; it does nothing if setup() itself
+            // runs more than once (a real Odoo POS lifecycle
+            // possibility), since a brand-new
+            // FlexSysPosDirectPrintWorker was unconditionally created
+            // here every time, with its own fresh running=false - a
+            // second poll timer and a second 'online' listener would
+            // then both keep running forever alongside the first,
+            // neither ever cleaned up. The guard now lives at the
+            // PosStore level instead: a worker is only ever created
+            // and started ONCE per PosStore instance - an existing,
+            // already-running worker is never overwritten or
+            // duplicated by a later setup() call.
+            if (!this._flexsysDirectPrintWorker) {
+                this._flexsysDirectPrintWorker = new FlexSysPosDirectPrintWorker(this);
+                this._flexsysDirectPrintWorker.start();
+            }
         } catch (error) {
             // Never let a worker startup failure break POS startup
             // itself - the cashier's own order flow must never depend

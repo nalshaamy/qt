@@ -68,6 +68,68 @@ so any future entry point inherits it automatically.
 | `kds.event` | The audit log - every transition, override, and system correction. |
 | `kds.access.mixin` | Shared station-scope and action-tier permission checks, inherited by every model that needs them. |
 
+### POS Direct Auto Print (Phase 3)
+
+Server-triggered Auto Print (Printer Only, or KDS+Printer with Auto
+Print on) creates a `kds.print.job` (`transport='direct_network'`,
+`job_type='auto'`, `source='pos_auto'`) that starts `Pending` - waiting
+for an eligible POS Browser's own worker to claim it as the local
+executor, rather than `Dispatched` immediately the way a
+browser-initiated Manual/Public Kiosk Direct job does.
+
+- `create_direct_auto_print_job(order_id, station_id)` - creation-time
+  eligibility (`operating_mode`, effective `auto_print`,
+  `flexsys_printing_method`, `flexsys_printer_ip`) plus a plain
+  application-level idempotency guard (one initial Auto job per
+  order+station, never blocking a later manual Reprint).
+- `claim_direct_auto_jobs(pos_session_id, executor_id, limit=1)` - an
+  `@api.model` RPC entry point (required for Odoo's own `call_kw`
+  argument handling - a non-`@api.model` method would have its own
+  first argument misinterpreted as record ids to browse). Validates
+  the calling session genuinely exists, is open, and belongs to the
+  authenticated RPC user; **re-validates the same four eligibility
+  conditions again at claim time** (a station's own configuration can
+  legitimately change between job creation and claim); then performs
+  the same proven `FOR UPDATE SKIP LOCKED` atomic claim pattern
+  `_claim_pending_jobs()` (the Legacy Agent's own claim method) uses -
+  deliberately without any reclaim/lease concept, since a Direct Auto
+  job claimed once is never reclaimed by a second executor. Returns a
+  fully-serialized payload per claimed job (order/station/printer
+  details already resolved server-side) rather than a raw recordset,
+  so the POS worker never needs a second per-job RPC.
+- `report_pos_direct_auto_result(...)` - a plain instance method (NOT
+  `@api.model` - relies on Odoo's own automatic `self=browse(job_id)`
+  from the RPC's first argument). Validates session ownership and that
+  the reporting device/config match whoever actually claimed the job,
+  then delegates to the existing `report_direct_print_result()` so
+  Phase 2's own idempotency/conflict rules stay the single source of
+  truth.
+- Unclaimed jobs past their own `claim_deadline` fail with
+  `NO_EXECUTOR`; claimed-but-unreported jobs past `dispatch_deadline`
+  fail with `RESULT_TIMEOUT` - both handled by the same cron that
+  already handles Manual/Public Kiosk Direct timeouts. No automatic
+  retry, no Legacy Agent fallback, in either case.
+- The POS worker (`static/src/js/flexsys_pos_direct_print_worker.js`)
+  patches `PosStore.prototype.setup()`, `await`ing `super.setup()`
+  before starting - this only genuinely waits for Odoo's own real
+  `setup()` (which populates `this.config`/`this.device` and makes
+  `this.session` resolvable) if *every* patch earlier in the same
+  chain also awaits its own `super.setup()` call; see
+  `flexsys_kds_offline_send_warning.js`'s own `setup()` patch, fixed
+  to do exactly that for the same reason. Reuses the exact same shared
+  ticket renderer and Direct ePOS adapter Internal KDS/Public Kiosk
+  already use - no second renderer, no second transport
+  implementation. Persists a terminal print result to `localStorage`
+  before reporting it, so a dropped/failed report RPC is retried on
+  the next cycle without ever re-attempting the physical print itself.
+
+The Legacy Agent path (`kds.printer`, Agent routes/keys,
+retry/backup-printer escalation) is completely untouched by this
+phase and remains fully functional - retained internally, temporarily,
+for compatibility in this phase. A separate removal phase is planned,
+but only after Direct Auto Print passes real Odoo.sh regression and
+real Epson hardware validation.
+
 ## Controllers
 
 - `controllers/kds.py` - authenticated backend JSON API (`auth='user'`),

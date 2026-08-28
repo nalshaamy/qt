@@ -579,8 +579,86 @@ value/label; the Legacy Agent's Claim/Ack/Result/lease mechanism;
 
 ---
 
+## 12. POS Direct Auto Print Contract (Phase 3)
+
+**Job lifecycle**: `create_direct_auto_print_job()` →
+`Pending` (own `claim_deadline`) → `claim_direct_auto_jobs()` →
+`Dispatched` (`direct_executor_id`, `direct_executor_pos_config_id`,
+`direct_claimed_at`, own `dispatch_deadline`) →
+`report_pos_direct_auto_result()` → `Printed` / `Failed`.
+
+**RPC contract (audit-verified)**: `claim_direct_auto_jobs` is
+`@api.model` (its own first argument, `pos_session_id`, must NOT be
+consumed by Odoo's `call_kw` as record ids - a plain, non-`@api.model`
+method would silently shift every subsequent argument).
+`report_pos_direct_auto_result` is deliberately NOT `@api.model` - it
+relies on Odoo's own automatic `self=browse(job_id)` from the RPC's
+first argument, exactly like every other single-job action method in
+this module.
+
+**Eligibility is revalidated at claim time, not only trusted from
+creation time**: `claim_direct_auto_jobs()` re-checks
+`operating_mode != kds_only`, `auto_print == True`,
+`flexsys_printing_method == direct_network`, and a configured
+`flexsys_printer_ip` - the exact same four conditions
+`create_direct_auto_print_job()` itself checks at creation. A station's
+own configuration can legitimately change between a job's creation and
+some POS Browser later claiming it; a stale `Pending` job created under
+a now-superseded configuration must not become claimable/executable.
+
+**Session ownership**: both `claim_direct_auto_jobs()` and
+`report_pos_direct_auto_result()` verify the calling
+`pos_session_id` genuinely exists, is open, AND
+`session.user_id == self.env.user` - existence alone does not prove
+the authenticated RPC caller actually owns that session. Company,
+POS-config linkage, and claiming-device (`direct_executor_id`)
+ownership checks are separate, additional layers on top of this.
+
+**No reclaim/lease**: once `Dispatched`, a Direct Auto job is never
+reclaimed by a second executor, regardless of elapsed time - unlike
+the Legacy Agent's own `lease_expires_at` mechanism. A claimed job
+whose executor never reports back is instead failed outright
+(`RESULT_TIMEOUT`) by the same cron that already handles Manual/Public
+Kiosk Direct timeouts.
+
+**No automatic retry, no Legacy Agent fallback, anywhere in this
+path** - an unclaimed `Pending` job past `claim_deadline` fails with
+`error_code=NO_EXECUTOR`; nothing here ever creates or falls back to
+an `'agent'`-transport job.
+
+**Legacy Agent isolation**: `_cron_timeout_stale_direct_jobs()`'s own
+new `NO_EXECUTOR` branch only ever touches
+`transport=direct_network, job_type=auto, source=pos_auto` jobs - an
+`'agent'`-transport job is never selected, matched, or affected by it.
+
+**POS worker readiness (`setup()` patch chain)**: every patch of
+`PosStore.prototype.setup()` in this module must be `async` and must
+genuinely `await super.setup(...args)` - a single non-awaiting patch
+anywhere earlier in the chain breaks the readiness guarantee for every
+patch after it, since each one's own `await super.setup()` only
+resolves as far down the chain as the nearest non-awaiting patch, not
+necessarily all the way to Odoo's own real `setup()`. Verified for
+both `flexsys_kds_offline_send_warning.js` and
+`flexsys_pos_direct_print_worker.js`.
+
+**UI contract**: `auto_print` on the Station form - hidden for
+`kds_only` (unchanged), freely editable for `kds_printer` (unchanged),
+visible but `readonly` for `printer_only` (the backend already forces
+it `True` for that mode; the field itself must visibly reflect that
+rather than appear freely editable and silently revert on save).
+
+---
+
 ## Change Log for This Document
 
+- v4: added Section 12, POS Direct Auto Print Contract (Phase 3) -
+  verified directly against `models/kds_print_job.py`,
+  `models/kds_station.py`, `static/src/js/
+  flexsys_pos_direct_print_worker.js`, and `static/src/js/
+  flexsys_kds_offline_send_warning.js` during the Phase 3 audit-
+  corrections pass (RPC `@api.model` contract, claim-time eligibility
+  revalidation, session ownership, and the `setup()` patch-chain
+  await requirement).
 - v1: initial authoritative contract, Sections 1–5 and the Helper
   Table verified directly against code.
 - v2: Sections 6 (Printing) and 7 (Kiosk) completed from a full,

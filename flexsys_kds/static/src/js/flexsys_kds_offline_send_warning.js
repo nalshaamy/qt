@@ -83,8 +83,28 @@ function hasAnyPending() {
 }
 
 patch(PosStore.prototype, {
-    setup(...args) {
-        super.setup(...args);
+    async setup(...args) {
+        // AUDIT FIX ("Phase 3 - Audit Corrections Before Odoo.sh"),
+        // blocker 2: confirmed - this patch sits in PosStore's own
+        // prototype chain BEFORE flexsys_pos_direct_print_worker.js's
+        // own patch (both patch the same setup() method; whichever
+        // loads first becomes the "super" the next one calls). This
+        // method itself was neither `async` nor did it `await
+        // super.setup(...args)` - meaning the REAL Odoo setup()
+        // (which internally awaits initServerData(), populating
+        // this.config/this.device and making this.session
+        // resolvable) could still be mid-flight when this synchronous
+        // wrapper already returned. Any LATER patch in the chain whose
+        // own `await super.setup(...args)` resolves against THIS
+        // patch (not the real one further down) would then wrongly
+        // believe setup was fully complete - exactly the readiness
+        // guarantee the Phase 3 worker's own patch depends on. Making
+        // this both `async` and genuinely `await`ing super.setup()
+        // closes that gap - every patch in the chain now correctly
+        // propagates the real completion signal all the way through,
+        // regardless of load order. sendOrderInPreparation's own
+        // behavior below is completely unchanged.
+        await super.setup(...args);
         // REAL BUG FIX ("Offline Recovery"): on reconnect, the warning
         // is re-shown (not auto-retried) if any Send is still pending -
         // "Reconnect → warning remains." Registered once per POS

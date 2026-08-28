@@ -575,6 +575,7 @@ class KdsPrintJob(models.Model):
         })
         return job
 
+    @api.model
     def claim_direct_auto_jobs(self, pos_session_id, executor_id, limit=1):
         """Atomic claim for an eligible POS Browser's own Direct Auto
         Print worker (item J). Same FOR UPDATE SKIP LOCKED pattern as
@@ -587,6 +588,21 @@ class KdsPrintJob(models.Model):
         _cron_timeout_stale_direct_jobs() below now separately handles
         by failing it outright (item F), never by making it claimable
         again.
+
+        AUDIT FIX ("Version 43 - Final Phase 3 Corrections"), blocker
+        1: claim_deadline is now enforced INSIDE the same atomic SQL
+        WHERE clause (claim_deadline IS NOT NULL AND claim_deadline >
+        current UTC database time), not left to the cron alone.
+        Without this, a Pending job whose 120-second claim deadline
+        had already expired could still be claimed and physically
+        printed in the window before
+        _cron_timeout_stale_direct_jobs() got around to failing it -
+        a stale ticket printing hours later just because a POS
+        browser happened to reconnect first is exactly the outcome
+        this whole mechanism exists to prevent. The cron remains the
+        mechanism that actually FAILS an expired job (NO_EXECUTOR) -
+        this check only ensures such a job can never be claimed in
+        the meantime, before the cron gets to it.
 
         Security (item J's own explicit requirements): this is called
         by an authenticated POS session's own RPC - never public. The
@@ -603,6 +619,16 @@ class KdsPrintJob(models.Model):
         """
         session = self.env['pos.session'].sudo().browse(pos_session_id)
         if not session.exists() or session.state not in ('opening_control', 'opened'):
+            return self.browse()
+        # AUDIT FIX ("Phase 3 - Audit Corrections Before Odoo.sh"),
+        # item 4: existence + state alone only proves SOME open
+        # session with this id exists - not that the authenticated
+        # caller actually owns it. Without this check, any
+        # authenticated user could pass an arbitrary open
+        # pos_session_id belonging to someone else and claim jobs
+        # through it. session.user_id (the cashier who opened this
+        # session) must match the RPC's own authenticated user.
+        if session.user_id != self.env.user:
             return self.browse()
         config = session.config_id
 
@@ -622,6 +648,22 @@ class KdsPrintJob(models.Model):
             ('active', '=', True),
             ('company_id', '=', config.company_id.id),
             '|', ('pos_config_ids', '=', False), ('pos_config_ids', '=', config.id),
+            # AUDIT FIX ("Phase 3 - Audit Corrections Before Odoo.sh"),
+            # item 3: eligibility is REVALIDATED here, not only trusted
+            # from the moment the job was created - a station's own
+            # configuration can legitimately change in the window
+            # between a job's own creation (Auto Print enabled) and
+            # some POS Browser actually claiming it later (Auto Print
+            # since disabled, or the station switched to KDS Only). A
+            # stale Pending job created under the OLD configuration
+            # must not be claimable/executed once that configuration
+            # no longer allows it - the same four conditions
+            # create_direct_auto_print_job() itself already checks at
+            # creation time, checked again here at claim time.
+            ('operating_mode', '!=', 'kds_only'),
+            ('auto_print', '=', True),
+            ('flexsys_printing_method', '=', 'direct_network'),
+            ('flexsys_printer_ip', '!=', False),
         ])
         if not eligible_stations:
             return self.browse()
@@ -643,6 +685,8 @@ class KdsPrintJob(models.Model):
                   AND source = 'pos_auto'
                   AND status = 'pending'
                   AND station_id = ANY(%(station_ids)s)
+                  AND claim_deadline IS NOT NULL
+                  AND claim_deadline > (NOW() AT TIME ZONE 'UTC')
                 ORDER BY create_date
                 LIMIT %(limit)s
                 FOR UPDATE SKIP LOCKED
@@ -743,6 +787,12 @@ class KdsPrintJob(models.Model):
         session = self.env['pos.session'].sudo().browse(pos_session_id)
         if not session.exists():
             raise ValidationError(_("Invalid POS session."))
+        # AUDIT FIX ("Phase 3 - Audit Corrections Before Odoo.sh"),
+        # item 4: same ownership check as claim_direct_auto_jobs()
+        # above - existence alone does not prove the authenticated
+        # caller owns this exact session.
+        if session.user_id != self.env.user:
+            raise ValidationError(_("This POS session does not belong to the current user."))
         if (self.transport != 'direct_network' or self.job_type != 'auto'
                 or self.source != 'pos_auto'):
             raise ValidationError(_("This job is not a POS Direct Auto Print job."))

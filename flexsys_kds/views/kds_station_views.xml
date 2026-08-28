@@ -78,7 +78,25 @@
                                  own backend logic are completely
                                  unchanged either way. -->
                             <field name="auto_accept_orders" invisible="operating_mode == 'printer_only'"/>
-                            <field name="auto_print" invisible="operating_mode == 'kds_only'"/>
+                            <!-- AUDIT FIX ("Phase 3 - Audit Corrections
+                                 Before Odoo.sh"), item 5: backend
+                                 enforcement (create()/write() on
+                                 kds.station) already forces this field
+                                 to True for printer_only and False for
+                                 kds_only - but the field itself was
+                                 still freely editable in the UI for
+                                 printer_only, letting an administrator
+                                 uncheck it and see it silently snap
+                                 back to True on the next save with no
+                                 visible explanation why. readonly= for
+                                 printer_only makes the enforced,
+                                 already-true value visibly locked
+                                 instead - kds_only stays fully hidden
+                                 (unchanged), kds_printer stays freely
+                                 editable (unchanged). -->
+                            <field name="auto_print"
+                                   invisible="operating_mode == 'kds_only'"
+                                   readonly="operating_mode == 'printer_only'"/>
                         </group>
                     </group>
                     <notebook>
