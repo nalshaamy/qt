@@ -8,14 +8,20 @@
  * "Same Order Data -> Same Pagination Behavior" is a structural fact,
  * not a promise kept by hand-syncing two separate implementations.
  *
- * APPROVED FINAL DENSITY (Commercial Demo Sprint 1 Closeout): fixed
- * 3 columns x 2 rows = 6 cards/page maximum, ALWAYS - including on a
- * Full HD (1920px) display. There is no wider/"compact" mode that
- * raises the card count on a larger screen - a wider viewport gives
- * each card more breathing room instead, never more cards per page.
- * The only thing that ever reduces the 6-card maximum is an
- * unusually large individual order (see LARGE_ORDER_LINE_THRESHOLD
- * below) - never screen width.
+ * APPROVED DENSITY ("Commercial Demo Layout Adjustment - Adaptive 4x2
+ * Density"): SUPERSEDES the prior round's own "fixed 3x2 always,
+ * including Full HD" decision - a real Visual Runtime Review on
+ * Odoo.sh showed the fixed-3x2 card was still wider than it needed to
+ * be on a Full HD display, with room for a genuine 4th column instead
+ * of being stretched to fill 3 wide ones. The approved rule now is:
+ *   viewport width <  1600px -> 3 columns x 2 rows = 6 cards/page
+ *   viewport width >= 1600px -> 4 columns x 2 rows = 8 cards/page
+ * Never more than 4 columns or 8 cards/page at any width, however
+ * wide. The ONLY thing that ever further reduces the page's own
+ * effective card count below whichever of those two maximums applies
+ * is an unusually large individual order (see
+ * LARGE_ORDER_LINE_THRESHOLD below) - not screen width itself beyond
+ * the two-tier rule above.
  *
  * DETERMINISM: both controllers/kds.py and controllers/kds_kiosk.py
  * already sort orders identically (`sorted(key=lambda o:
@@ -32,30 +38,37 @@
 (function () {
     "use strict";
 
-    // Fixed, final density - 3 x 2 = 6 cards/page, at any viewport
-    // width. No COMPACT_* variant exists any more.
-    var COLUMNS = 3;
-    var ROWS = 2;
-    var MAX_CARDS_PER_PAGE = COLUMNS * ROWS;
+    // Smaller-desktop density.
+    var NORMAL_COLUMNS = 3;
+    var NORMAL_ROWS = 2;
+    // Large/Full-HD-and-above density.
+    var WIDE_COLUMNS = 4;
+    var WIDE_ROWS = 2;
+    // The single boundary between the two tiers - a viewport at or
+    // above this width uses WIDE_*, below it uses NORMAL_*. Matches a
+    // typical Full HD (1920px) display's own usable width comfortably,
+    // while still applying to some smaller-but-still-wide desktop
+    // displays right at the boundary, per the explicit worked
+    // examples (1599px -> 3x2, 1600px -> 4x2).
+    var WIDE_MIN_VIEWPORT_WIDTH = 1600;
 
     // A card is considered "unusually large" past this many product
     // lines - a page containing one is given a reduced effective
     // capacity (rather than forcing every card on that page to
-    // compress to illegibility to fit the normal count). This is the
-    // ONLY thing that ever lowers the page's own card count below the
-    // fixed maximum above - viewport width never does.
+    // compress to illegibility to fit the normal count). This applies
+    // on top of whichever of the two density tiers above is active -
+    // it never itself raises the count past that tier's own maximum.
     var LARGE_ORDER_LINE_THRESHOLD = 8;
 
     /**
-     * Fixed density - kept as its own function (rather than inlining
-     * the constants at every call site) only so callers reading
-     * columns/rows/maxCardsPerPage have one obvious place to look, and
-     * so this file's own public shape didn't need to change everywhere
-     * else when the compact/viewport-based variant was removed.
+     * @param {number} viewportWidth
      * @returns {{columns: number, rows: number, maxCardsPerPage: number}}
      */
-    function computeDensity() {
-        return { columns: COLUMNS, rows: ROWS, maxCardsPerPage: MAX_CARDS_PER_PAGE };
+    function computeDensity(viewportWidth) {
+        if (viewportWidth >= WIDE_MIN_VIEWPORT_WIDTH) {
+            return { columns: WIDE_COLUMNS, rows: WIDE_ROWS, maxCardsPerPage: WIDE_COLUMNS * WIDE_ROWS };
+        }
+        return { columns: NORMAL_COLUMNS, rows: NORMAL_ROWS, maxCardsPerPage: NORMAL_COLUMNS * NORMAL_ROWS };
     }
 
     /**
@@ -111,18 +124,13 @@
     }
 
     /**
-     * Full pagination pass: fixed 3x2 density, builds pages, and
-     * clamps the requested page number into the valid range - the one
-     * function callers actually need. viewportWidth is still accepted
-     * (and ignored) rather than removed from the signature, so neither
-     * caller (kds_app.js's own pagination getter, kds_kiosk.py's own
-     * render()) needs a second, incompatible call-site change on top
-     * of this fix - both already pass window.innerWidth today, and
-     * continuing to do so costs nothing.
+     * Full pagination pass: computes density from viewport width
+     * (Adaptive - see the two-tier rule at the top of this file),
+     * builds pages, and clamps the requested page number into the
+     * valid range - the one function callers actually need.
      *
      * @param {Array} orders - already filtered, in stable order.
-     * @param {number} viewportWidth - accepted for call-site
-     *   compatibility only; density no longer varies by width.
+     * @param {number} viewportWidth
      * @param {number} requestedPage - 1-based; typically "the page the
      *   user/screen was already on" - clamped here rather than reset,
      *   so a realtime refresh that doesn't change the page count keeps
@@ -130,7 +138,7 @@
      * @returns {{pages: Array<Array>, totalPages: number, currentPage: number, currentPageOrders: Array, columns: number, rows: number}}
      */
     function paginate(orders, viewportWidth, requestedPage) {
-        var density = computeDensity();
+        var density = computeDensity(viewportWidth);
         var pages = buildPages(orders, density.maxCardsPerPage);
         var totalPages = pages.length;
         var clampedPage = Math.min(Math.max(1, requestedPage || 1), totalPages);
@@ -148,9 +156,11 @@
         computeDensity: computeDensity,
         buildPages: buildPages,
         paginate: paginate,
-        COLUMNS: COLUMNS,
-        ROWS: ROWS,
-        MAX_CARDS_PER_PAGE: MAX_CARDS_PER_PAGE,
+        NORMAL_COLUMNS: NORMAL_COLUMNS,
+        NORMAL_ROWS: NORMAL_ROWS,
+        WIDE_COLUMNS: WIDE_COLUMNS,
+        WIDE_ROWS: WIDE_ROWS,
+        WIDE_MIN_VIEWPORT_WIDTH: WIDE_MIN_VIEWPORT_WIDTH,
         LARGE_ORDER_LINE_THRESHOLD: LARGE_ORDER_LINE_THRESHOLD,
     };
 })();

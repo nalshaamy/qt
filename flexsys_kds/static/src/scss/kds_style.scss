@@ -21,7 +21,37 @@ $fs-ready: #43a047;
 .fs-kds-app {
     background: $fs-bg;
     color: #f5f7fa;
-    min-height: 100vh;
+    // RUNTIME UI FIX ("Version 38 Review - Incomplete Runtime UI
+    // Fix"), confirmed live: the earlier body.o_flexsys_kiosk fix
+    // (still correct and unchanged below) only ever applies in
+    // ?kiosk=1 mode - that class is never added to <body> for the
+    // NORMAL Internal KDS backend action (navbar/breadcrumbs visible),
+    // so this screen's own vertical scroll was still broken there:
+    // min-height: 100vh forced this element to be at least the FULL
+    // viewport height even though its own real parent container
+    // (Odoo's own action/content area, already smaller than the full
+    // viewport once the navbar/breadcrumbs take their own space) had
+    // no matching overflow handling for that overflow - the second
+    // card row and Pagination itself were clipped below the visible
+    // area, with no scrollbar anywhere.
+    //
+    // height: 100% (not min-height: 100vh) makes this element respect
+    // its own real parent's actual available height instead of always
+    // claiming the full viewport; min-height: 0 is required alongside
+    // it for a flex/grid-context parent (Odoo's own action container)
+    // to let this element genuinely shrink to fit rather than forcing
+    // its own intrinsic content size back upward; overflow-y: auto
+    // gives this element its own scrollbar directly when its content
+    // is taller than that available height - not dependent on which
+    // ancestor happens to be the actual scrolling container. See the
+    // scoped .o_action_manager/.o_content :has() rule further below,
+    // added only because height: 100% requires a real parent height
+    // to resolve against, and Odoo's own backend chrome is not
+    // something this stylesheet controls globally.
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
     font-family: "Cairo", "Segoe UI", sans-serif;
     // RUNTIME UI FIX ("Card Width / Excessive Grid Spacing"): slightly
     // increased (12px -> 20px) to stay visually balanced against the
@@ -128,6 +158,26 @@ body.o_flexsys_kiosk {
     // the explicit "no horizontal scroll" requirement. .fs-sticky-top
     // below still works correctly against body as its own scroll
     // container - nothing else here changed.
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+// RUNTIME UI FIX ("Version 38 Review - Incomplete Runtime UI Fix"):
+// scoped ONLY to an Odoo action container that actually contains
+// .fs-kds-app (via :has(), well-supported in the Chrome/Edge-class
+// browsers Odoo 19 itself targets) - deliberately NOT a global change
+// to .o_action_manager/.o_content, which would affect every other
+// Odoo action in the backend. This exists purely so .fs-kds-app's own
+// height: 100% above has a real, non-auto parent height to resolve
+// against - Odoo's own action container does not guarantee one on its
+// own for an arbitrary embedded client action. Applies in the NORMAL
+// (non-?kiosk=1) Internal KDS backend mode specifically - the
+// ?kiosk=1 case already has its own separate, working fix above
+// (body.o_flexsys_kiosk's own height: 100vh !important + overflow-y:
+// auto).
+.o_action_manager:has(.fs-kds-app),
+.o_content:has(.fs-kds-app) {
+    height: 100%;
     overflow-y: auto;
     overflow-x: hidden;
 }
@@ -295,14 +345,16 @@ body.o_flexsys_kiosk {
     // HIGH-DENSITY LAYOUT ("Restore the approved pagination design"):
     // grid-template-columns is now set inline per-render from
     // JS (kds_app.js's own pagination.columns, computed by the
-    // shared static/src/shared/flexsys_pagination.js) - a FIXED 3
-    // columns always, at any viewport width (Closeout: the earlier
-    // wider/"Compact" 4-column density has been removed entirely) -
-    // REPLACING the previous auto-fit/minmax approach, which let the
-    // browser pack an unbounded number of columns/rows and grow the
-    // whole order area vertically with no fixed page size at all.
-    // This base rule is now only a fallback for the brief instant
-    // before the first inline style is applied.
+    // shared static/src/shared/flexsys_pagination.js) - ADAPTIVE
+    // density (Commercial Demo Layout Adjustment): 3 columns below
+    // 1600px viewport width, 4 columns at/above it, never more than 4
+    // at any width - REPLACING the earlier auto-fit/minmax approach,
+    // which let the browser pack an unbounded number of columns/rows
+    // and grow the whole order area vertically with no fixed page
+    // size at all. This base rule is now only a fallback for the
+    // brief instant before the first inline style is applied - 3
+    // columns is a reasonable default for that brief window regardless
+    // of which tier the actual viewport resolves to.
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 24px;
