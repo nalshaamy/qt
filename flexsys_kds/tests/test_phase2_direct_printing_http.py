@@ -190,8 +190,9 @@ class TestPhase2DirectPrintingHttp(HttpCase):
 
         result = self._result(self.station, job_id, True)
         self.assertFalse(
-            result.get('ok'), result,
-            "The Public Kiosk's own /print/result route must reject a job whose source is 'internal_kds'."
+            result.get('ok'),
+            "The Public Kiosk's own /print/result route must reject "
+            "a job whose source is 'internal_kds'. Response: %r" % result,
         )
         job = self.env['kds.print.job'].browse(job_id)
         self.assertEqual(job.status, 'dispatched')
@@ -214,8 +215,9 @@ class TestPhase2DirectPrintingHttp(HttpCase):
 
         result = self._result(self.station, agent_job.id, True)
         self.assertFalse(
-            result.get('ok'), result,
-            "The Public Kiosk's own /print/result route must reject a Legacy Agent (transport='agent') job."
+            result.get('ok'),
+            "The Public Kiosk's own /print/result route must reject "
+            "a Legacy Agent job. Response: %r" % result,
         )
 
         agent_job.invalidate_recordset()

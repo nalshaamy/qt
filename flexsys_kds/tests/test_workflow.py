@@ -2556,12 +2556,61 @@ class TestWorkflow(FlexSysKdsTestCommon):
 
         with open(os.path.join(module_dir, 'i18n', 'ar.po'), encoding='utf-8') as f:
             po_content = f.read()
-        po_msgids = set()
-        for block in re.split(r'\n\n+', po_content)[1:]:
-            m_id = re.search(r'msgid\s+"((?:\\.|[^"\\])*)"', block)
-            m_str = re.search(r'msgstr\s+"((?:\\.|[^"\\])*)"', block)
-            if m_id and m_str and m_str.group(1):
-                po_msgids.add(m_id.group(1).replace('\\"', '"'))
+
+        # CI CLOSEOUT FIX: the prior parser here
+        # (re.search(r'msgid\s+"((?:\\.|[^"\\])*)"', block)) only ever
+        # captured the FIRST quoted line after 'msgid'/'msgstr' -
+        # confirmed live: a real, correctly-formed multiline .po entry
+        # (msgid "" followed by continuation lines, the standard
+        # gettext wrapping for a long string) was reported as
+        # "missing" purely because re.search stopped at the empty
+        # opener `""` and never joined the continuation lines that
+        # actually hold the text. Replaced with a real line-based
+        # parser that walks msgid/msgstr and every subsequent quoted
+        # continuation line, joining them - the correct way to read
+        # this file's own actual format, not an assumption that every
+        # entry is exactly one line.
+        def _parse_po_entries(content):
+            entries = []
+            current_msgid_lines = None
+            current_msgstr_lines = None
+            mode = None
+
+            def unescape(s):
+                return s.replace('\\"', '"').replace('\\n', '\n').replace('\\\\', '\\')
+
+            for raw_line in content.splitlines():
+                line = raw_line.strip()
+                if line.startswith('msgid '):
+                    if current_msgid_lines is not None:
+                        entries.append((''.join(current_msgid_lines), ''.join(current_msgstr_lines or [])))
+                    current_msgid_lines = []
+                    current_msgstr_lines = None
+                    mode = 'msgid'
+                    m = re.match(r'msgid\s+"(.*)"$', line)
+                    if m:
+                        current_msgid_lines.append(m.group(1))
+                elif line.startswith('msgstr '):
+                    current_msgstr_lines = []
+                    mode = 'msgstr'
+                    m = re.match(r'msgstr\s+"(.*)"$', line)
+                    if m:
+                        current_msgstr_lines.append(m.group(1))
+                elif line.startswith('"') and line.endswith('"') and mode:
+                    content_line = line[1:-1]
+                    if mode == 'msgid' and current_msgid_lines is not None:
+                        current_msgid_lines.append(content_line)
+                    elif mode == 'msgstr' and current_msgstr_lines is not None:
+                        current_msgstr_lines.append(content_line)
+                elif not line:
+                    mode = None
+
+            if current_msgid_lines is not None:
+                entries.append((''.join(current_msgid_lines), ''.join(current_msgstr_lines or [])))
+
+            return [(unescape(mid), unescape(mstr)) for mid, mstr in entries]
+
+        po_msgids = {mid for mid, mstr in _parse_po_entries(po_content) if mid and mstr}
 
         missing = current_msgids - po_msgids
         self.assertEqual(missing, set(),
