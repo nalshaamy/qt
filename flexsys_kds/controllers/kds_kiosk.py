@@ -737,7 +737,7 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
        shared flexsys_pagination.js computes - no independent copy of
        that density logic here. No more height/overflow-y - the page
        bar below replaces scrolling as the way to reach more orders. */
-    display:grid; gap:14px; padding:14px 18px;
+    display:grid; gap:24px; padding:20px 24px;
     align-content:start; justify-content:start; justify-items:stretch; align-items:start;
   }
   .pagination{
@@ -754,7 +754,15 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
     background:#fff; border-radius:14px; overflow:hidden;
     display:flex; flex-direction:column; position:relative;
     box-shadow:0 4px 14px rgba(0,0,0,.35);
-    width:100%%; max-width:380px;
+    /* RUNTIME UI FIX ("Card Width / Excessive Grid Spacing"),
+       confirmed live on Odoo.sh: max-width:380px REMOVED - it was
+       capping every card at that width regardless of how much wider
+       its own grid column actually was on a Full HD screen's own
+       3-column layout, leaving large, wasted horizontal gaps between
+       cards. width:100%% (kept, combined with .grid's own
+       justify-items:stretch) now lets each card genuinely use its
+       full column width. */
+    width:100%%;
     /* HIGH-DENSITY LAYOUT (dev request, point 5: "a single order may
        contain many products... do not allow one very large order to
        destroy the entire grid layout... define a reasonable maximum
@@ -1497,7 +1505,7 @@ function render() {
   KIOSK_PAGE = pageResult.currentPage;
 
   const grid = document.getElementById('grid');
-  grid.style.gridTemplateColumns = `repeat(${pageResult.columns}, 1fr)`;
+  grid.style.gridTemplateColumns = `repeat(${pageResult.columns}, minmax(0, 1fr))`;
   if (!orders.length) {
     grid.innerHTML = `<div class="empty">${KIOSK_LABELS.noOrders}</div>`;
     document.getElementById('pagination').innerHTML = '';

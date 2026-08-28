@@ -23,7 +23,12 @@ $fs-ready: #43a047;
     color: #f5f7fa;
     min-height: 100vh;
     font-family: "Cairo", "Segoe UI", sans-serif;
-    padding: 12px;
+    // RUNTIME UI FIX ("Card Width / Excessive Grid Spacing"): slightly
+    // increased (12px -> 20px) to stay visually balanced against the
+    // grid's own larger 24px gap introduced in the same fix - outer
+    // padding around the whole card area, distinct from the gap
+    // between cards themselves.
+    padding: 20px;
 
     // UI FIX ("KDS Screen - Dropdown Styling"), confirmed live: every
     // <select> element's own CLOSED state (Station, Order Type,
@@ -286,8 +291,8 @@ body.o_flexsys_kiosk {
     // This base rule is now only a fallback for the brief instant
     // before the first inline style is applied.
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 24px;
     justify-content: start;
     justify-items: stretch;
     align-items: start;
@@ -354,8 +359,18 @@ body.o_flexsys_kiosk {
     flex-direction: column;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
     position: relative;
+    // RUNTIME UI FIX ("Card Width / Excessive Grid Spacing"), confirmed
+    // live on Odoo.sh: max-width: 380px REMOVED - it was capping every
+    // card at that width regardless of how much wider its own grid
+    // column actually was (a Full HD screen's own 3-column layout
+    // leaves each column comfortably wider than 380px), leaving large,
+    // wasted horizontal gaps between cards instead of each card
+    // actually filling its own column. width: 100% (kept, combined
+    // with .fs-grid's own justify-items: stretch above) now lets each
+    // card genuinely use its full column width - product names,
+    // mixed Arabic/English text, modifiers, and notes all get the
+    // extra room this was meant to free up.
     width: 100%;
-    max-width: 380px;
     // HIGH-DENSITY LAYOUT (dev request, point 5: "a single order may
     // contain many products... do not allow one very large order to
     // destroy the entire grid layout... define a reasonable maximum

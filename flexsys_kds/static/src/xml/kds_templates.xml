@@ -115,7 +115,7 @@
         </div>
         </div>
 
-        <div class="fs-grid" t-attf-style="grid-template-columns: repeat({{pagination.columns}}, 1fr);">
+        <div class="fs-grid" t-attf-style="grid-template-columns: repeat({{pagination.columns}}, minmax(0, 1fr));">
             <t t-foreach="paginatedOrders" t-as="order" t-key="order.id">
                 <KdsOrderCard order="order" onLineAction="onLineAction" onOrderAction="onOrderAction"
                               onPrintClick="onPrintClick" printingEnabled="printingEnabled"
@@ -131,11 +131,11 @@
              at-a-glance confirmation that everything currently
              matching the filter fits on one screen. -->
         <div class="fs-pagination" t-if="filteredOrders.length">
-            <button class="fs-pagination-btn" t-on-click="onPrevPage" disabled="pagState.page &lt;= 1">
+            <button class="fs-pagination-btn" t-on-click="onPrevPage" t-att-disabled="pagState.page &lt;= 1">
                 <t t-esc="isRtl ? '▶' : '◀'"/>
             </button>
             <span class="fs-pagination-status" t-esc="pagState.page + ' / ' + pagination.totalPages"/>
-            <button class="fs-pagination-btn" t-on-click="onNextPage" disabled="pagState.page &gt;= pagination.totalPages">
+            <button class="fs-pagination-btn" t-on-click="onNextPage" t-att-disabled="pagState.page &gt;= pagination.totalPages">
                 <t t-esc="isRtl ? '◀' : '▶'"/>
             </button>
         </div>

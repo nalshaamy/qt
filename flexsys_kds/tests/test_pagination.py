@@ -184,3 +184,51 @@ class TestPagination(TransactionCase):
         result = paginate(orders, 1920, 1)
         flattened = [o for page in result['pages'] for o in page]
         self.assertEqual(flattened, orders, "Pagination must never reorder its own input.")
+
+    def test_internal_kds_pagination_buttons_use_t_att_disabled(self):
+        """RUNTIME BUG FIX ("Commercial Demo Runtime UI Fix"), item 1:
+        confirmed live on Odoo.sh - the Next button stayed visually
+        Disabled and unclickable on page 1 of 2 (7 orders), even
+        though pagState.page (1) <= 1 was False. Root cause: OWL/QWeb's
+        plain `disabled="expr"` sets the literal HTML boolean attribute
+        the moment the attribute is present at all - it disables the
+        button regardless of whether expr evaluates true or false,
+        unlike `t-att-disabled="expr"`, which genuinely binds the
+        attribute's own presence to expr's real JS truthiness. This
+        guard reads static/src/xml/kds_templates.xml's own real source
+        text directly (not a rendered DOM - no browser/Odoo runtime
+        available in this environment) and fails if either pagination
+        button's own `disabled` attribute ever reverts to the plain,
+        literal form - regardless of how that regression might be
+        reintroduced later.
+        """
+        import os
+        import re
+        module_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        template_path = os.path.join(module_dir, 'static', 'src', 'xml', 'kds_templates.xml')
+        with open(template_path, encoding='utf-8') as f:
+            content = f.read()
+
+        # Matches a literal disabled="pag..." NOT preceded by "t-att-"
+        # - deliberately scoped to the pagination-related expressions
+        # specifically (pagState/pagination), so this guard cannot be
+        # accidentally tripped by some unrelated, legitimately-literal
+        # `disabled="..."` elsewhere in the same file (e.g. a genuinely
+        # static, always-disabled placeholder button, if one is ever
+        # added) - only the exact class of bug this round fixed.
+        literal_disabled_pattern = re.compile(r'(?<!t-att-)disabled="pag')
+        matches = literal_disabled_pattern.findall(content)
+        self.assertFalse(
+            matches,
+            "Internal KDS's own pagination buttons must use t-att-disabled=\"...\", "
+            "never a plain disabled=\"...\" - OWL/QWeb treats the plain form as an "
+            "always-present HTML boolean attribute regardless of the expression's "
+            "own truthiness, which is exactly the Next-button-always-disabled "
+            "regression this test exists to prevent."
+        )
+
+        # Positive confirmation the correct form is actually present -
+        # this test would otherwise also pass if BOTH buttons were
+        # deleted entirely, which is not the intent.
+        self.assertIn('t-att-disabled="pagState.page', content)
+        self.assertIn('t-att-disabled="pagState.page &gt;= pagination.totalPages', content)
