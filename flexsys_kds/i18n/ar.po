@@ -1869,3 +1869,37 @@ msgstr "مهمة تجميع KDS: مدير الفرع يرى شركته فقط"
 #: security/kds_security.xml (ir.rule)
 msgid "KDS Expeditor Task: administrator unrestricted"
 msgstr "مهمة تجميع KDS: المسؤول دون قيود"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py:644
+msgid "Order or Station not found."
+msgstr "الطلب أو المحطة غير موجودين."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py:767
+msgid "This job is not a Direct Network print job."
+msgstr "هذه العملية ليست عملية طباعة عبر الشبكة المباشرة."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py:772
+msgid "This job is already marked Printed - cannot report Failed now."
+msgstr "هذه العملية مُسجَّلة بالفعل كـ«تمت الطباعة» - لا يمكن الإبلاغ عنها كـ«فشلت» الآن."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py:777
+msgid "This job is already marked Failed - cannot report Printed now."
+msgstr "هذه العملية مُسجَّلة بالفعل كـ«فشلت» - لا يمكن الإبلاغ عنها كـ«تمت الطباعة» الآن."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py:780
+msgid "This job is not currently awaiting a Direct Network print result."
+msgstr "هذه العملية ليست حاليًا بانتظار نتيجة طباعة عبر الشبكة المباشرة."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py:814
+msgid ""
+"No print result was received before the deadline - the browser tab may "
+"have crashed, closed, or lost its connection."
+msgstr ""
+"لم تصل نتيجة الطباعة قبل الموعد النهائي - قد يكون تبويب المتصفح قد تعطَّل "
+"أو أُغلق أو فقد الاتصال."

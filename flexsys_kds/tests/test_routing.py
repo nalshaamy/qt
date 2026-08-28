@@ -84,7 +84,7 @@ class TestRouting(FlexSysKdsTestCommon):
         not mean "skip every eligibility check" - only the one specific
         check tied to the company/branch scope the rule itself was
         deliberately marked global for."""
-        pos_config_a = self.env['pos.config'].create({'name': 'QT001 (global test)'})
+        pos_config_a = self._make_test_pos_config('QT001 (global test)')
         self.station_kitchen.pos_config_ids = [(6, 0, [pos_config_a.id])]
         self.env['kds.routing.rule'].create({
             'name': 'Global rule, POS-restricted station (test)',
@@ -93,7 +93,7 @@ class TestRouting(FlexSysKdsTestCommon):
             'station_id': self.station_kitchen.id,
             'sequence': 10,
         })
-        pos_config_b = self.env['pos.config'].create({'name': 'QT002 (global test)'})
+        pos_config_b = self._make_test_pos_config('QT002 (global test)')
         self.assertFalse(
             self.env['kds.routing.rule'].route_product(
                 self.product_burger, pos_config=pos_config_b, company=self.company_b),
@@ -156,7 +156,7 @@ class TestRouting(FlexSysKdsTestCommon):
         is unchanged - it's exercising the same intended behavior
         (reject a missing pos_config when the rule is scoped), just via
         a different, TypeError-safe code path now."""
-        pos_config = self.env['pos.config'].create({'name': 'QT001 (test)'})
+        pos_config = self._make_test_pos_config('QT001 (test)')
         self.env['kds.routing.rule'].create({
             'name': 'QT001-only rule (test)',
             'pos_config_ids': [(6, 0, [pos_config.id])],
@@ -172,8 +172,8 @@ class TestRouting(FlexSysKdsTestCommon):
             "with no POS config at all.")
 
     def test_rule_scoped_to_pos_config_matches_only_that_config(self):
-        pos_config_a = self.env['pos.config'].create({'name': 'QT001 (test)'})
-        pos_config_b = self.env['pos.config'].create({'name': 'QT002 (test)'})
+        pos_config_a = self._make_test_pos_config('QT001 (test)')
+        pos_config_b = self._make_test_pos_config('QT002 (test)')
         self.env['kds.routing.rule'].create({
             'name': 'QT001-only rule (test 2)',
             'pos_config_ids': [(6, 0, [pos_config_a.id])],
@@ -194,8 +194,8 @@ class TestRouting(FlexSysKdsTestCommon):
         """Point: 'The selected Station must also allow the current POS
         configuration' - checked independently of the routing rule's own
         pos_config_ids, at every fallback level too."""
-        pos_config_a = self.env['pos.config'].create({'name': 'QT001 (test 3)'})
-        pos_config_b = self.env['pos.config'].create({'name': 'QT002 (test 3)'})
+        pos_config_a = self._make_test_pos_config('QT001 (test 3)')
+        pos_config_b = self._make_test_pos_config('QT002 (test 3)')
         self.station_kitchen.pos_config_ids = [(6, 0, [pos_config_a.id])]
         self.product_burger.kds_station_id = self.station_kitchen
         self.assertEqual(
@@ -210,7 +210,7 @@ class TestRouting(FlexSysKdsTestCommon):
 
     def test_station_with_no_pos_config_restriction_allows_any_pos(self):
         # Empty station.pos_config_ids means "all POS" per spec.
-        pos_config = self.env['pos.config'].create({'name': 'QT003 (test)'})
+        pos_config = self._make_test_pos_config('QT003 (test)')
         self.product_burger.kds_station_id = self.station_kitchen
         self.assertEqual(
             self.env['kds.routing.rule'].route_product(
@@ -473,7 +473,7 @@ class TestRouting(FlexSysKdsTestCommon):
         pos_config argument, confirming an unrestricted rule
         (pos_config_ids empty) matches regardless of which real POS is
         asking."""
-        pos_config = self.env['pos.config'].create({'name': 'Item2 Empty POS Test'})
+        pos_config = self._make_test_pos_config('Item2 Empty POS Test')
         rule = self.env['kds.routing.rule'].create({
             'name': 'Empty POS still matches all',
             'product_ids': [(6, 0, [self.product_burger.id])],
@@ -511,7 +511,7 @@ class TestRouting(FlexSysKdsTestCommon):
         above - `self.pos_config` was never defined anywhere. Fixed
         with a real, local `pos.config` record; the original OR-within-
         product_ids contract is otherwise completely unchanged."""
-        pos_config = self.env['pos.config'].create({'name': 'Items2to4 AND OR Test'})
+        pos_config = self._make_test_pos_config('Items2to4 AND OR Test')
         rule = self.env['kds.routing.rule'].create({
             'name': 'AND/OR semantics unaffected',
             'product_ids': [(6, 0, [self.product_burger.id, self.product_cappuccino.id])],

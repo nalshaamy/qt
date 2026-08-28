@@ -45,9 +45,7 @@ class TestPosSync(FlexSysKdsTestCommon):
         cls.product_burger.kds_station_id = cls.station_kitchen
         cls.product_cappuccino.kds_station_id = cls.station_coffee
 
-        cls.pos_config = cls.env['pos.config'].create({
-            'name': 'Test FlexSys POS',
-        })
+        cls.pos_config = cls._make_test_pos_config('Test FlexSys POS')
         cls.pos_session = cls.env['pos.session'].create({
             'config_id': cls.pos_config.id,
             'user_id': cls.env.uid,

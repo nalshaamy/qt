@@ -105,6 +105,46 @@ class FlexSysKdsTestCommon(TransactionCase):
             })
         return order
 
+    # -----------------------------------------------------------------
+    # CI RECOVERY ROUND ("CI Recovery + missing localization"), item 1:
+    # a live Odoo 19 run showed a large number of previously-passing
+    # tests now failing at fixture setup, all with the same root
+    # cause: pos_online_payment/models/pos_config.py's own
+    # _check_online_payment_methods constraint ("To use an online
+    # payment method in a POS config, it must have at least one
+    # published payment provider supporting the currency of that POS
+    # config") - triggered because a bare pos.config.create({'name':
+    # ...}) with no payment_method_ids specified picks up whatever
+    # online payment method(s) happen to already exist/be active in
+    # that Odoo.sh Staging database's own demo/seed data, none of
+    # which this test suite's own fixtures ever set up a published
+    # provider for (correctly - none of these tests are testing
+    # payment behavior at all).
+    #
+    # FIX: pass payment_method_ids=[(6, 0, [])] explicitly - a POS
+    # config with genuinely ZERO payment methods can never trip this
+    # constraint, since the constraint only fires for a config that
+    # actually HAS an online payment method configured. This does NOT
+    # disable or weaken the Odoo validation itself (still fully
+    # enforced for any config that legitimately configures online
+    # payment methods) - it is the correct fixture for tests that have
+    # no reason to configure ANY payment method at all. Explicitly NOT
+    # "invent a fake published payment provider just to satisfy the
+    # constraint" - that would be masking the real fix (an unrelated,
+    # unwanted payment method being attached at all) behind a second
+    # fake object with no test value of its own.
+    #
+    # Every test in this suite that creates a pos.config for
+    # Routing/Printing/general-sync purposes (never actually testing
+    # Payment) should use this helper instead of a bare
+    # self.env['pos.config'].create({...}).
+    # -----------------------------------------------------------------
+    @classmethod
+    def _make_test_pos_config(cls, name, **overrides):
+        vals = {'name': name, 'payment_method_ids': [(6, 0, [])]}
+        vals.update(overrides)
+        return cls.env['pos.config'].create(vals)
+
     @classmethod
     def _route_line_to_station(cls, line, station):
         """REAL BUG FIX, confirmed live on Odoo.sh (the test suite

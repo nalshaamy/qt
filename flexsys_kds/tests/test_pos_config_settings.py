@@ -18,7 +18,7 @@ class TestPosConfigSettings(FlexSysKdsTestCommon):
     def test_item10_pos_linked_to_station_is_in_scope(self):
         """Required Acceptance: 'أي POS مرتبط بـ POS Configs في Station
         واحدة على الأقل -> يعتبر داخل نطاق FlexSys KDS.'"""
-        config = self.env['pos.config'].create({'name': 'Item10 Linked POS'})
+        config = self._make_test_pos_config('Item10 Linked POS')
         self.station_kitchen.pos_config_ids = [(4, config.id)]
 
         in_scope = self.env['pos.config'].with_context(
@@ -29,7 +29,7 @@ class TestPosConfigSettings(FlexSysKdsTestCommon):
     def test_item10_pos_not_linked_to_any_station_is_out_of_scope(self):
         """Required Acceptance: 'POS غير مرتبط بأي Station -> لا يظهر
         في القائمة.'"""
-        config = self.env['pos.config'].create({'name': 'Item10 Unlinked POS'})
+        config = self._make_test_pos_config('Item10 Unlinked POS')
         # Explicitly NOT linked to any kds.station.
 
         in_scope = self.env['pos.config'].with_context(
@@ -40,7 +40,7 @@ class TestPosConfigSettings(FlexSysKdsTestCommon):
     def test_item10_removing_pos_from_all_stations_removes_it_from_scope(self):
         """Required: 'إذا تمت إزالة POS من جميع Stations: يختفي من
         الشاشة.'"""
-        config = self.env['pos.config'].create({'name': 'Item10 Removed POS'})
+        config = self._make_test_pos_config('Item10 Removed POS')
         self.station_kitchen.pos_config_ids = [(4, config.id)]
         self.assertTrue(
             self.env['pos.config'].with_context(flexsys_kds_scope_only=True)
@@ -57,7 +57,7 @@ class TestPosConfigSettings(FlexSysKdsTestCommon):
         """Required: 'لا يلزم حذف إعداداته التاريخية داخليًا.' Confirms
         kds_send_trigger itself is never touched by entering/leaving
         scope - only this screen's own visibility is affected."""
-        config = self.env['pos.config'].create({'name': 'Item10 Preserved Setting'})
+        config = self._make_test_pos_config('Item10 Preserved Setting')
         self.station_kitchen.pos_config_ids = [(4, config.id)]
         config.kds_send_trigger = 'send'
 
@@ -81,7 +81,7 @@ class TestPosConfigSettings(FlexSysKdsTestCommon):
         ordinary pos.config search elsewhere in the system (no such
         context key at all) must be completely unaffected, still
         finding a POS not linked to any station."""
-        config = self.env['pos.config'].create({'name': 'Item10 Ordinary Search POS'})
+        config = self._make_test_pos_config('Item10 Ordinary Search POS')
         # No context override at all - the default, ordinary case every
         # other screen/module relies on.
         found = self.env['pos.config'].search([('id', '=', config.id)])
@@ -92,7 +92,7 @@ class TestPosConfigSettings(FlexSysKdsTestCommon):
         """Confirms the underlying (unstored, display-only)
         kds_station_ids field itself correctly reflects which stations
         a POS is actually linked to."""
-        config = self.env['pos.config'].create({'name': 'Item10 Computed Field POS'})
+        config = self._make_test_pos_config('Item10 Computed Field POS')
         self.assertFalse(config.kds_station_ids)
 
         self.station_kitchen.pos_config_ids = [(4, config.id)]
@@ -104,7 +104,7 @@ class TestPosConfigSettings(FlexSysKdsTestCommon):
         confirms the underlying Selection VALUES stored in the database
         ('payment'/'send') are completely unchanged - only their own
         display labels were updated."""
-        config = self.env['pos.config'].create({'name': 'Item11 Values POS'})
+        config = self._make_test_pos_config('Item11 Values POS')
         selection_values = dict(config._fields['kds_send_trigger'].selection)
         self.assertIn('payment', selection_values)
         self.assertIn('send', selection_values)
@@ -161,8 +161,8 @@ class TestPosConfigSettings(FlexSysKdsTestCommon):
         it also returns the CORRECT scoped result - both the recursion
         fix and the original scoping requirement verified together in
         one real end-to-end call."""
-        in_scope_config = self.env['pos.config'].create({'name': 'Item10 Regression In Scope'})
-        out_of_scope_config = self.env['pos.config'].create({'name': 'Item10 Regression Out of Scope'})
+        in_scope_config = self._make_test_pos_config('Item10 Regression In Scope')
+        out_of_scope_config = self._make_test_pos_config('Item10 Regression Out of Scope')
         self.station_kitchen.pos_config_ids = [(4, in_scope_config.id)]
 
         result = self.env['pos.config'].with_context(
@@ -188,7 +188,7 @@ class TestPosConfigSettings(FlexSysKdsTestCommon):
         the one failure this test must catch, since that is the exact
         confirmed live bug being guarded against, and it's checked
         around EVERY attempted call shape, not just the first."""
-        in_scope_config = self.env['pos.config'].create({'name': 'Item10 WSR In Scope'})
+        in_scope_config = self._make_test_pos_config('Item10 WSR In Scope')
         self.station_kitchen.pos_config_ids = [(4, in_scope_config.id)]
         scoped_model = self.env['pos.config'].with_context(flexsys_kds_scope_only=True)
 
@@ -222,8 +222,8 @@ class TestPosConfigSettings(FlexSysKdsTestCommon):
         (safe, outside-the-override) field read returns - the fix
         changed HOW the in-scope ids are resolved, never WHAT they
         resolve to."""
-        config_a = self.env['pos.config'].create({'name': 'Item10 SQL Match A'})
-        config_b = self.env['pos.config'].create({'name': 'Item10 SQL Match B'})
+        config_a = self._make_test_pos_config('Item10 SQL Match A')
+        config_b = self._make_test_pos_config('Item10 SQL Match B')
         self.station_kitchen.pos_config_ids = [(4, config_a.id), (4, config_b.id)]
 
         field = self.env['kds.station']._fields['pos_config_ids']
