@@ -306,30 +306,36 @@ class TestStationKpi(FlexSysKdsTestCommon):
         self.assertIsNotNone(match)
         self.assertIn('invisible="operating_mode == \'printer_only\'"', match.group(0))
 
-    def test_final_cleanup_printing_tab_merged_contract(self):
-        """FINAL REGRESSION CLOSEOUT ("Station Printing Cleanup"):
-        replaces the now-stale test_final_cleanup_printers_tab_visibility_unaffected
-        above - that test protected the OLD, now-superseded behavior of
-        a separate "Printers" tab, which the approved "Station Printing
-        Configuration Cleanup" round deliberately merged into a single
-        "Printing" tab. Reintroducing the old separate tab to satisfy
-        that stale test would be a real regression, not a fix - this
-        replacement instead verifies the NEW approved contract, all 7
-        points required by the closeout report, against the real,
-        live Odoo view/model (not just a static file read) since this
-        test file already has that environment available."""
+    def test_final_cleanup_printing_tab_commercial_contract(self):
+        """FINAL REGRESSION CLOSEOUT ("One Stale Test After Agent UI
+        Cleanup"): replaces the now-stale
+        test_final_cleanup_printing_tab_merged_contract above - that
+        test's own point 3 (self.assertIn('field name="printer_ids"',
+        printing_tab_body)) asserted printer_ids must be VISIBLE in
+        the Station -> Printing tab, protecting the PREVIOUS approved
+        contract (Legacy Printer Management merged visibly into that
+        tab). The later, explicitly-approved "Commercial Agent UI
+        Cleanup" round deliberately SUPERSEDED that: Station ->
+        Printing is now Direct Network commercial configuration ONLY,
+        with Legacy printer_ids management hidden from that normal
+        commercial form entirely (kds.printer/data/backend runtime all
+        still fully intact - just not rendered there any more). This
+        replacement verifies the NEW approved contract, all 8 points
+        required by the closeout report, against the real, live Odoo
+        view/model/backend (not just a static file read)."""
+        import re
+
         form_view = self.env.ref('flexsys_kds.view_kds_station_form')
         arch = form_view.arch_db
-        import re
 
         # 1. Exactly one user-facing "Printing" tab.
         printing_matches = re.findall(r'<page\s+name="flexsys_printing"\s+string="Printing"[^>]*>', arch)
         self.assertEqual(len(printing_matches), 1, "Exactly one merged 'Printing' tab must exist.")
 
-        # 2. No separate, adjacent "Printers" tab.
+        # 2. No separate tab named "Printers".
         self.assertNotRegex(
             arch, r'<page[^>]*\bstring="Printers"',
-            "No separate 'Printers' tab may exist - it must be merged into 'Printing'."
+            "No separate 'Printers' tab may exist."
         )
 
         printing_tab_match = re.search(
@@ -338,39 +344,24 @@ class TestStationKpi(FlexSysKdsTestCommon):
         self.assertIsNotNone(printing_tab_match)
         printing_tab_body = printing_tab_match.group(0)
 
-        # 3. Legacy printer management remains accessible inside the
-        #    Printing tab itself.
-        self.assertIn('field name="printer_ids"', printing_tab_body)
+        # 3. Station -> Printing tab must NOT contain printer_ids -
+        #    this is the exact point that superseded the prior
+        #    contract; reintroducing this field here would itself be
+        #    the regression, not fixing one.
+        self.assertNotIn(
+            'field name="printer_ids"', printing_tab_body,
+            "printer_ids must NOT be rendered in the commercial Station -> Printing "
+            "tab - Legacy printer management is intentionally hidden from it."
+        )
 
-        # 4. printer_ids / existing printer records remain present and
-        #    genuinely usable - a real functional check, not just a
-        #    view-text check: create one and confirm it's readable
-        #    through the same relation the view itself uses.
-        printer = self.env['kds.printer'].create({
-            'name': 'Final Closeout Test Printer',
-            'station_id': self.station_kitchen.id,
-            'is_default': True,
-        })
-        self.assertIn(printer, self.station_kitchen.printer_ids)
-
-        # 5. Operating Mode visibility remains correct: hidden only for
-        #    kds_only, visible for printer_only and kds_printer (the
-        #    same single invisible= condition covers both "visible"
-        #    cases automatically - anything that isn't kds_only).
-        self.assertIn("invisible=\"operating_mode == 'kds_only'\"", printing_tab_body)
-
-        # 6. Direct Network settings remain accessible inside Printing.
+        # 4. Direct Network settings remain accessible inside Printing.
         self.assertIn('flexsys_printing_method', printing_tab_body)
         self.assertIn('flexsys_printer_ip', printing_tab_body)
         self.assertIn('flexsys_use_local_network_access', printing_tab_body)
 
-        # 7. Odoo IoT remains non-selectable in the normal Station UI -
+        # 5. Odoo IoT remains non-selectable in the normal Station UI -
         #    verified against the REAL, live selection the model
-        #    actually returns via fields_get(), not just a source-text
-        #    pattern match - the strongest possible confirmation
-        #    available in this environment that a normal station
-        #    (self.station_kitchen, already 'direct_network') is never
-        #    offered 'iot' as a choice.
+        #    actually returns via fields_get().
         field_info = self.station_kitchen.fields_get(['flexsys_printing_method'])
         selection_values = dict(field_info['flexsys_printing_method']['selection'])
         self.assertNotIn(
@@ -378,6 +369,41 @@ class TestStationKpi(FlexSysKdsTestCommon):
             "'iot' must not be offered as a selectable option for a normal station."
         )
         self.assertIn('direct_network', selection_values)
+
+        # 6. Legacy backend compatibility remains intact - the model,
+        #    the relation, and genuine create/read through it - WITHOUT
+        #    requiring it to be rendered in the commercial form (that's
+        #    exactly what point 3 above confirms is no longer the
+        #    case). A real functional check, not just a schema check.
+        self.assertIn('kds.printer', self.env)
+        self.assertIn('printer_ids', self.env['kds.station']._fields)
+        printer = self.env['kds.printer'].create({
+            'name': 'Final Closeout Test Printer',
+            'station_id': self.station_kitchen.id,
+            'is_default': True,
+        })
+        self.assertIn(printer, self.station_kitchen.printer_ids)
+
+        # 7. Existing Legacy Agent backend runtime remains untouched -
+        #    routes, retry/fallback constants, Agent key methods, and
+        #    Auto Print's own real entry point all still present and
+        #    genuinely callable, not just named in a comment somewhere.
+        printer.action_regenerate_agent_key()
+        self.assertTrue(printer.agent_key, "Agent key regeneration must still genuinely work.")
+        printer.action_set_default()
+        self.assertTrue(printer.is_default)
+        from odoo.addons.flexsys_kds.models.kds_print_job import MAX_AUTO_RETRY
+        self.assertEqual(MAX_AUTO_RETRY, 2, "Legacy Agent's own retry budget must be unchanged.")
+        self.assertTrue(hasattr(self.env['kds.print.job'], '_claim_pending_jobs'))
+        self.assertTrue(hasattr(self.env['kds.order'], 'action_print_full_order'))
+        from odoo.addons.flexsys_kds.controllers.kds import FlexSysKdsPrintAgentController
+        self.assertTrue(hasattr(FlexSysKdsPrintAgentController, 'agent_result'), "Agent's own result-reporting route must still exist.")
+
+        # 8. Printing landing-page commercial UI must not restore the
+        #    Printers card.
+        hub_form_view = self.env.ref('flexsys_kds.view_kds_printer_hub_form')
+        hub_arch = hub_form_view.arch_db
+        self.assertNotRegex(hub_arch, r'<h5[^>]*class="card-title"[^>]*>\s*Printers\s*<')
 
     # -----------------------------------------------------------------
     # REAL BUG FIX ("Final Cleanup Bug - Printer Only kiosk still opens
