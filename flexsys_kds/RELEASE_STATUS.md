@@ -13,10 +13,17 @@ models that no longer exist).
 
 ## Current Version
 
-`19.0.1.0.0` — the first Commercial Demo Candidate baseline. A real,
-clean Odoo 19 regression has been confirmed on Odoo.sh:
-**0 failed, 0 error(s) of 588 post-tests** (see "Commercial Readiness
-Status" below for exactly what that gate does and does not cover).
+`19.0.1.0.0` — the first Commercial Demo Candidate baseline.
+
+**Last confirmed live Odoo.sh regression baseline: 0 failed, 0
+error(s) of 588 post-tests.** That result is real and stands - but it
+was run against the package *before* this round's own new Pagination
+regression tests were added (see "Restore the approved pagination
+design" below). This current package includes those additional
+tests and has **not yet** been run against a live Odoo 19 instance -
+see "Commercial Readiness Status" below for the exact, current gate
+status; no runtime result is claimed for this package until that run
+happens.
 
 ---
 
@@ -181,9 +188,12 @@ criterion = OR; different criteria = AND. Multi-company isolated.
 - Token-based, public (`auth='public'`) access to a single station's
   own live order queue - no Odoo login required.
 - A single, central authentication function
-  (`_station_from_token()`) is called by all four public kiosk
-  routes (the initial page and three JSON-RPC API endpoints) - there is
-  no alternate path that resolves a station without going through it.
+  (`_station_from_token()`) is called by all six public kiosk routes
+  (the initial page, three original JSON-RPC API endpoints, and the
+  two Direct Network print routes added in Phase 2 -
+  `kiosk_prepare_direct_print`/`kiosk_report_direct_print_result`) -
+  there is no alternate path that resolves a station without going
+  through it.
 - Rejects a missing/mismatched token, a `kiosk_disabled` station, and a
   `printer_only` station - confirmed live and covered by dedicated
   regression tests for every combination (KDS Only, KDS + Printer,
@@ -261,12 +271,21 @@ below for the schema-removal decision this is pending.
 
 ## Automated Test Count
 
-**588 tests** as of this document (`py_compile`, XML well-formedness,
+**596 tests** as of this document (`py_compile`, XML well-formedness,
 and JS syntax checked on every file on every change, plus
 functional/behavioral coverage for every area above, including the
-Direct Printing / `kds.print.job` lifecycle). Confirmed passing a real
-run against a live Odoo 19 instance - see "Commercial Readiness
-Status" below.
+Direct Printing / `kds.print.job` lifecycle and this round's own new
+Pagination regression suite - 8 tests, `tests/test_pagination.py`).
+
+The **last confirmed live Odoo.sh run (0 failed, 0 error(s))** covered
+**588** of these tests - the package as it stood before the Pagination
+suite was added. The additional 8 Pagination tests have been verified
+by direct execution in this environment (a real, standalone
+`unittest` run against this exact file, not Odoo's own test runner -
+see that file's own HONEST SCOPE NOTE) but **not yet** as part of a
+live Odoo 19 regression run. No claim is made here that all 596 have
+passed together against a live instance - that run is still pending
+(see "Commercial Readiness Status" below).
 
 ---
 
@@ -307,8 +326,9 @@ Status" below.
 | Manifest parses, no orphaned data-file references | ✅ Pass |
 | ACL entries all reference an existing model | ✅ Pass (verified programmatically) |
 | Menu items all reference an existing action | ✅ Pass (verified programmatically) |
-| Automated test suite (588 tests) internally consistent | ✅ Pass |
-| Automated test suite actually run against live Odoo 19 | ✅ **Confirmed on Odoo.sh: 0 failed, 0 error(s) of 588 post-tests** |
+| Automated test suite (596 tests) internally consistent | ✅ Pass |
+| Last confirmed live Odoo.sh regression baseline | ✅ **0 failed, 0 error(s) of 588 post-tests** (pre-Pagination-suite package) |
+| Current 596-test package (incl. new Pagination suite) run against live Odoo 19 | ⚠️ **Not yet run - awaiting a fresh Odoo.sh regression** |
 | Live two-screen realtime check (backend + kiosk simultaneously) | ⚠️ **Requires a live instance** |
 | Module upgrade test on an existing development database | ⚠️ **Requires a live instance** |
 | Live regression pass: POS → Routing → KDS → Preparing → Ready → Completed, quantity increase/decrease/to-zero, cancellation, refund, multi-station, all three Operating Modes, Public Kiosk token enforcement, printing claim/lease | ⚠️ **Requires a live instance - the client's own environment is the only one available for this** |

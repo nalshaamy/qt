@@ -8,6 +8,15 @@
  * "Same Order Data -> Same Pagination Behavior" is a structural fact,
  * not a promise kept by hand-syncing two separate implementations.
  *
+ * APPROVED FINAL DENSITY (Commercial Demo Sprint 1 Closeout): fixed
+ * 3 columns x 2 rows = 6 cards/page maximum, ALWAYS - including on a
+ * Full HD (1920px) display. There is no wider/"compact" mode that
+ * raises the card count on a larger screen - a wider viewport gives
+ * each card more breathing room instead, never more cards per page.
+ * The only thing that ever reduces the 6-card maximum is an
+ * unusually large individual order (see LARGE_ORDER_LINE_THRESHOLD
+ * below) - never screen width.
+ *
  * DETERMINISM: both controllers/kds.py and controllers/kds_kiosk.py
  * already sort orders identically (`sorted(key=lambda o:
  * o.created_time)`, confirmed by direct read before writing this) -
@@ -23,45 +32,30 @@
 (function () {
     "use strict";
 
-    // Normal Full-HD reference layout: 3 x 2 = 6 cards/page.
-    var NORMAL_COLUMNS = 3;
-    var NORMAL_ROWS = 2;
-    // Compact/Fullscreen: 4 x 2 = 8 cards/page - the approved
-    // "High Density Pagination Requirement" layout for wide/fullscreen
-    // viewports.
-    var COMPACT_COLUMNS = 4;
-    var COMPACT_ROWS = 2;
-    // A viewport at or above this width is treated as wide enough for
-    // the compact 4-column layout - matches a typical Full HD (1920px)
-    // display's own usable width once fullscreen chrome/sidebars are
-    // accounted for, not a guess tied to the word "fullscreen" alone
-    // (per the explicit "don't rely on the word Fullscreen; use
-    // viewport width too" requirement).
-    var COMPACT_MIN_VIEWPORT_WIDTH = 1600;
+    // Fixed, final density - 3 x 2 = 6 cards/page, at any viewport
+    // width. No COMPACT_* variant exists any more.
+    var COLUMNS = 3;
+    var ROWS = 2;
+    var MAX_CARDS_PER_PAGE = COLUMNS * ROWS;
 
     // A card is considered "unusually large" past this many product
     // lines - a page containing one is given a reduced effective
     // capacity (rather than forcing every card on that page to
-    // compress to illegibility to fit the normal count).
+    // compress to illegibility to fit the normal count). This is the
+    // ONLY thing that ever lowers the page's own card count below the
+    // fixed maximum above - viewport width never does.
     var LARGE_ORDER_LINE_THRESHOLD = 8;
 
     /**
-     * @param {number} viewportWidth
+     * Fixed density - kept as its own function (rather than inlining
+     * the constants at every call site) only so callers reading
+     * columns/rows/maxCardsPerPage have one obvious place to look, and
+     * so this file's own public shape didn't need to change everywhere
+     * else when the compact/viewport-based variant was removed.
      * @returns {{columns: number, rows: number, maxCardsPerPage: number}}
      */
-    function computeDensity(viewportWidth) {
-        if (viewportWidth >= COMPACT_MIN_VIEWPORT_WIDTH) {
-            return {
-                columns: COMPACT_COLUMNS,
-                rows: COMPACT_ROWS,
-                maxCardsPerPage: COMPACT_COLUMNS * COMPACT_ROWS,
-            };
-        }
-        return {
-            columns: NORMAL_COLUMNS,
-            rows: NORMAL_ROWS,
-            maxCardsPerPage: NORMAL_COLUMNS * NORMAL_ROWS,
-        };
+    function computeDensity() {
+        return { columns: COLUMNS, rows: ROWS, maxCardsPerPage: MAX_CARDS_PER_PAGE };
     }
 
     /**
@@ -117,12 +111,18 @@
     }
 
     /**
-     * Full pagination pass: computes density from viewport width,
-     * builds pages, and clamps the requested page number into the
-     * valid range - the one function callers actually need.
+     * Full pagination pass: fixed 3x2 density, builds pages, and
+     * clamps the requested page number into the valid range - the one
+     * function callers actually need. viewportWidth is still accepted
+     * (and ignored) rather than removed from the signature, so neither
+     * caller (kds_app.js's own pagination getter, kds_kiosk.py's own
+     * render()) needs a second, incompatible call-site change on top
+     * of this fix - both already pass window.innerWidth today, and
+     * continuing to do so costs nothing.
      *
      * @param {Array} orders - already filtered, in stable order.
-     * @param {number} viewportWidth
+     * @param {number} viewportWidth - accepted for call-site
+     *   compatibility only; density no longer varies by width.
      * @param {number} requestedPage - 1-based; typically "the page the
      *   user/screen was already on" - clamped here rather than reset,
      *   so a realtime refresh that doesn't change the page count keeps
@@ -130,7 +130,7 @@
      * @returns {{pages: Array<Array>, totalPages: number, currentPage: number, currentPageOrders: Array, columns: number, rows: number}}
      */
     function paginate(orders, viewportWidth, requestedPage) {
-        var density = computeDensity(viewportWidth);
+        var density = computeDensity();
         var pages = buildPages(orders, density.maxCardsPerPage);
         var totalPages = pages.length;
         var clampedPage = Math.min(Math.max(1, requestedPage || 1), totalPages);
@@ -148,11 +148,9 @@
         computeDensity: computeDensity,
         buildPages: buildPages,
         paginate: paginate,
-        NORMAL_COLUMNS: NORMAL_COLUMNS,
-        NORMAL_ROWS: NORMAL_ROWS,
-        COMPACT_COLUMNS: COMPACT_COLUMNS,
-        COMPACT_ROWS: COMPACT_ROWS,
-        COMPACT_MIN_VIEWPORT_WIDTH: COMPACT_MIN_VIEWPORT_WIDTH,
+        COLUMNS: COLUMNS,
+        ROWS: ROWS,
+        MAX_CARDS_PER_PAGE: MAX_CARDS_PER_PAGE,
         LARGE_ORDER_LINE_THRESHOLD: LARGE_ORDER_LINE_THRESHOLD,
     };
 })();

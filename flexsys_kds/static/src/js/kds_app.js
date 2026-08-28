@@ -171,12 +171,14 @@ export class FlexSysKdsScreen extends Component {
                 this.fsState.isFullscreen = Boolean(document.fullscreenElement);
             };
             document.addEventListener("fullscreenchange", this._onFullscreenChange);
-            // HIGH-DENSITY LAYOUT: viewport width drives Normal (3x2)
-            // vs Compact (4x2) density directly - not the Fullscreen
-            // API/fsState alone (per the explicit "don't rely only on
-            // the word Fullscreen; use viewport width too"
-            // requirement) - so this listens for resize independently
-            // of the fullscreenchange listener above. Does not reset
+            // HIGH-DENSITY LAYOUT: resize listener kept even though
+            // density is now fixed (3x2, see
+            // static/src/shared/flexsys_pagination.js's own
+            // CLOSEOUT note) - a resize can still change how many
+            // pixels a 6-card page has to work with, and this keeps
+            // this.pagState.viewportWidth accurate for any future
+            // reintroduction of width-aware behavior, at zero cost
+            // today. Does not reset
             // the current page itself; a resize that doesn't change
             // the resulting page count leaves the operator on the same
             // page (paginate()'s own clamping in

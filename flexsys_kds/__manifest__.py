@@ -26,8 +26,10 @@ Key Capabilities
 - SLA Monitoring per station, refreshed live.
 - Expeditor / Packing - an optional final-assembly stage with its own
   tracked task and SLA.
-- Printing and external Print Agent integration - an atomic job
-  queue with retry and backup-printer fallback.
+- Printing: Direct Network (Epson ePOS) browser printing and the
+  legacy external Print Agent path, both tracked through the same
+  `kds.print.job` record; the Legacy Agent path additionally supports
+  automatic retry and backup-printer fallback.
 - Role and station-based access controls (Operator / Supervisor /
   Branch Manager / Administrator).
 - Public Kiosk with secure, per-station token access.

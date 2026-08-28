@@ -277,13 +277,14 @@ body.o_flexsys_kiosk {
     // HIGH-DENSITY LAYOUT ("Restore the approved pagination design"):
     // grid-template-columns is now set inline per-render from
     // JS (kds_app.js's own pagination.columns, computed by the
-    // shared static/src/shared/flexsys_pagination.js) - 3 columns at
-    // Normal density, 4 at Compact/Fullscreen density - REPLACING the
-    // previous auto-fit/minmax approach, which let the browser pack an
-    // unbounded number of columns/rows and grow the whole order area
-    // vertically with no fixed page size at all. This base rule is
-    // now only a fallback for the brief instant before the first
-    // inline style is applied.
+    // shared static/src/shared/flexsys_pagination.js) - a FIXED 3
+    // columns always, at any viewport width (Closeout: the earlier
+    // wider/"Compact" 4-column density has been removed entirely) -
+    // REPLACING the previous auto-fit/minmax approach, which let the
+    // browser pack an unbounded number of columns/rows and grow the
+    // whole order area vertically with no fixed page size at all.
+    // This base rule is now only a fallback for the brief instant
+    // before the first inline style is applied.
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 12px;

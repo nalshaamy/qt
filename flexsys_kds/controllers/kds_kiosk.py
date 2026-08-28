@@ -730,12 +730,13 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
   .grid{
     /* HIGH-DENSITY LAYOUT ("Restore the approved pagination design"):
        fixed-height scrolling grid REPLACED with a fixed page size -
-       grid-template-columns is now set inline from JS per render()
-       (see updateGridColumns()), matching the same Normal (3)/Compact
-       (4) column count Internal KDS's own shared
-       flexsys_pagination.js computes - no independent copy of that
-       density logic here. No more height/overflow-y - the page bar
-       below replaces scrolling as the way to reach more orders. */
+       grid-template-columns is now set inline from JS, inside
+       render() itself, matching the same FIXED 3-column count (at
+       any viewport width - Closeout: the earlier wider/"Compact"
+       4-column density has been removed entirely) Internal KDS's own
+       shared flexsys_pagination.js computes - no independent copy of
+       that density logic here. No more height/overflow-y - the page
+       bar below replaces scrolling as the way to reach more orders. */
     display:grid; gap:14px; padding:14px 18px;
     align-content:start; justify-content:start; justify-items:stretch; align-items:start;
   }
