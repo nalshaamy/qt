@@ -309,12 +309,14 @@ combination is itself the thing under test (as in the
 
 ## 8. Kiosk Contract
 
-All four public kiosk routes (`kiosk_page`, `kiosk_orders`,
-`kiosk_action`, `kiosk_print`) call the same single, central function,
-`_station_from_token(env, station_code, token)`
-(`controllers/kds_kiosk.py`) — confirmed by direct read, no route
-bypasses it. Its checks run in this exact order, each a hard reject
-(`return None`) on failure:
+All public kiosk routes (`kiosk_page`, `kiosk_orders`, `kiosk_action`,
+`kiosk_print`, and — added by the "Direct Printing ↔ kds.print.job
+Integration" round, Section 11 — `kiosk_prepare_direct_print` and
+`kiosk_report_direct_print_result`, six in total) call the same
+single, central function, `_station_from_token(env, station_code,
+token)` (`controllers/kds_kiosk.py`) — confirmed by direct read, no
+route bypasses it. Its checks run in this exact order, each a hard
+reject (`return None`) on failure:
 
 1. **Presence**: `station_code` and `token` must both be non-empty.
 2. **Station lookup**: an **active** `kds.station` with matching
@@ -435,6 +437,148 @@ whole family.
 
 ---
 
+## 11. Direct Printing / `kds.print.job` Transport-Neutral Contract ("Direct Printing ↔ kds.print.job Integration")
+
+**Not the same "Phase 2" as Section 10's own priority/VIP
+classification round above** — a different, later round, covering
+`kds.print.job` becoming Transport-Neutral. Referenced here by its
+full name to avoid any ambiguity between the two.
+
+### `transport` field (Selection, default `'agent'`)
+- `'agent'` — the original Legacy Agent path (`kds.printer`, Claim/
+  Ack/Result/Retry/Fallback). Every job created before this field
+  existed is correctly classified as `'agent'` automatically (Odoo
+  applies a new field's own default to existing rows with zero
+  migration/backfill needed).
+- `'direct_network'` — the browser-executed Epson ePOS path.
+  `printer_id` is **never** set for these — see `printer_target`
+  instead.
+- `'iot'` — reserved, not implemented. `create_direct_print_job()`
+  refuses to create a job for an `'iot'`-configured station (the same
+  guard as "no printer configured" — see below), so an `'iot'` job can
+  never be created by mistake through this method.
+
+### `printer_id` (`kds.printer` Many2one) — unchanged, still NOT required at the field level
+Confirmed by direct audit before this round: `printer_id` was never
+`required=True`. The only place that ever effectively required one
+was `create_reprint()`'s own explicit `if not printer: raise
+NoPrinterConfiguredError(...)` check — completely unchanged, still
+Agent-only. `create_direct_print_job()` is a **fully separate** method
+that never touches `station.printer_ids` at all — a Direct Network job
+is created successfully even when `station.printer_ids` is empty. This
+is the specific Agent-only assumption this whole round exists to
+remove, and it is removed by adding a new, separate creation path, not
+by modifying `create_reprint()`'s own contract.
+
+### `printer_target` (Char) — Direct Network's own printer_id equivalent
+A snapshot of `station.flexsys_printer_ip`, captured at job-creation
+time. Stays accurate even if the station's own configured IP changes
+later. Empty for every `'agent'`/`'iot'` job.
+
+### `source` (Selection: `'internal_kds'` / `'public_kiosk'`)
+Only meaningful for `'direct_network'` jobs (empty for `'agent'`/
+`'iot'`). `create_direct_print_job(..., source='public_kiosk')`
+explicitly sets `user_id=False` in that case — never falls through to
+the field's own `default=lambda: self.env.user`, which would
+otherwise silently attribute a public, unauthenticated kiosk request
+to whichever technical user happens to be running that request's own
+`sudo()` context.
+
+### Lifecycle for a Direct Network job
+```
+create_direct_print_job() -> status='dispatched' immediately
+                              (never 'pending' — the browser is about
+                              to execute the print attempt itself,
+                              right now, not queue it for a separate
+                              agent process to claim later)
+  -> report_direct_print_result(successful, error_code, error_message)
+       successful=True  -> action_mark_printed()  -> status='printed'
+       successful=False -> action_mark_direct_failed(...) -> status='failed'
+```
+`status` values themselves are **unchanged** (`pending`/`dispatched`/
+`printed`/`failed`/`cancelled`) — no new state was added or renamed.
+`dispatched` is reused to mean "actively being printed right now",
+correct for both the Legacy Agent (claimed, mid-print) and Direct
+Network (browser executing) transports.
+
+### `report_direct_print_result()` — the ONE place idempotency/conflict logic lives
+Both callers (Internal KDS's own `onPrintClick`, the Public Kiosk's
+own `/print/result` route) call this — never
+`action_mark_printed()`/`action_mark_direct_failed()` directly for a
+Direct job's own terminal result — so the exact same rules apply
+identically regardless of which screen is reporting:
+- `status == 'printed'` + `successful=True` reported again ->
+  **silent no-op**, no error, timestamp unchanged (idempotent retry of
+  a flaky network resend).
+- `status == 'failed'` + `successful=False` reported again -> same,
+  silent no-op.
+- `status == 'printed'` + `successful=False` (or the reverse) ->
+  **`ValidationError`**, the original terminal outcome is never
+  overwritten.
+- `transport != 'direct_network'` -> **`ValidationError`** (this
+  method refuses to touch a Legacy Agent/IoT job at all).
+- any status other than `dispatched`/`printed`/`failed` (e.g. still
+  `pending`, or `cancelled`) -> **`ValidationError`**.
+
+### `error` / `error_code` / `failed_at` — three genuinely independent fields
+`error` (human-readable message, shared with the Legacy Agent's own
+use of the same field) / `error_code` (machine-readable, e.g.
+`'RESULT_TIMEOUT'`, `'LNA_DENIED'`, `'NETWORK_ERROR'` — Direct Network-
+only) / `failed_at` (Datetime, set only by
+`action_mark_direct_failed()` — deliberately **not** added to the
+Legacy Agent's own `action_mark_failed()`, which has no single clean
+"final failure moment" the same way a Direct attempt does, and is
+unchanged by this round).
+
+### `action_mark_direct_failed()` vs. `action_mark_failed()` — deliberately NOT shared
+`action_mark_failed()` (Legacy Agent) retries the same job up to
+`MAX_AUTO_RETRY` times, then escalates to a station's own backup
+`kds.printer` if configured — both concepts specific to a persistent
+physical printer an agent process can retry against. Neither has an
+equivalent meaning for a browser-executed Direct attempt (there is no
+"same printer" to retry against from a fresh browser-side connection,
+and no `kds.printer` backup relationship for Direct Network at all).
+`action_mark_direct_failed()` is a fully separate method: one write,
+no retry, no backup-printer job creation, no `kds.event` log call (no
+existing `event_type` genuinely describes "a direct print attempt
+failed", and the job record itself — `status`, `error`, `error_code`,
+`failed_at`, `printer_target` — is already the complete, queryable
+record, exactly where **Printing → Print Jobs** already looks).
+
+### `dispatch_deadline` + `_cron_timeout_stale_direct_jobs()` — abandoned browser detection
+Set at creation time (`dispatched_at + DIRECT_RESULT_TIMEOUT_SECONDS`,
+currently 60s). A 1-minute `ir.cron`
+(`ir_cron_kds_timeout_stale_direct_jobs`, `data/kds_data.xml`) searches
+`transport='direct_network' AND status='dispatched' AND
+dispatch_deadline < now`, and fails each via
+`action_mark_direct_failed(error_code='RESULT_TIMEOUT', ...)` — the
+case where a browser tab executing a Direct print crashed, was closed,
+or lost its connection before ever calling
+`report_direct_print_result()`, which would otherwise leave that job
+showing "Printing" forever. Completely separate from, and does not
+interact with, the Legacy Agent's own `lease_expires_at` mechanism
+(governs which **agent process** currently holds a claim to retry a
+**pending** job — a different concept for a different transport
+entirely) — the cron's own search is scoped to `transport='direct_network'`
+only and never touches an `'agent'`/`'iot'` job.
+
+### Ownership guard for the Public Kiosk's own `/print/result` route
+Checked directly against the job record, station/token authentication
+aside: `job.station_id == <this kiosk's own station>` AND
+`job.transport == 'direct_network'` AND `job.source == 'public_kiosk'`
+— **all three**, not just station+transport. A job created by Internal
+KDS at the exact same station, over the exact same transport, is still
+correctly rejected, because its own `source` is `'internal_kds'`, not
+`'public_kiosk'`.
+
+### What this round does NOT touch (any test asserting otherwise is WRONG)
+`create_reprint()` and its own `station.printer_ids` requirement;
+`action_mark_failed()`'s own retry/backup logic; any `status`
+value/label; the Legacy Agent's Claim/Ack/Result/lease mechanism;
+`kds.printer` itself.
+
+---
+
 ## Change Log for This Document
 
 - v1: initial authoritative contract, Sections 1–5 and the Helper
@@ -458,3 +602,33 @@ whole family.
   active) and the removed `kds.order.priority` (Order Priority /
   Urgent / VIP, Section 10). Sections 6–10 renumbered accordingly
   (previously 5–9); all internal cross-references updated to match.
+- v4: added Section 11, Direct Printing / `kds.print.job`
+  Transport-Neutral Contract — verified directly against
+  `models/kds_print_job.py`'s own `transport`/`printer_target`/
+  `source`/`error_code`/`failed_at`/`dispatch_deadline` fields and
+  `create_direct_print_job()`/`report_direct_print_result()`/
+  `action_mark_direct_failed()`/`_cron_timeout_stale_direct_jobs()`
+  methods, plus `controllers/kds_kiosk.py`'s own `/print/prepare` and
+  `/print/result` routes and `data/kds_data.xml`'s own new
+  `ir_cron_kds_timeout_stale_direct_jobs` record, during the "Direct
+  Printing ↔ kds.print.job Integration" round. Confirms `printer_id`
+  was never `required=True` at the field level, `create_reprint()`'s
+  own Agent-only `printer_ids` requirement is completely unchanged,
+  and `action_mark_failed()`'s own retry/backup-printer logic is
+  deliberately not reused for Direct Network failures. New test file:
+  `tests/test_phase2_direct_printing.py`.
+- v5: **correction to v4, above** — v4 added Section 11 but left two
+  real gaps: (a) Section 8's own pre-existing text still said "All
+  four public kiosk routes", now stale and directly contradicting
+  Section 11 (six routes exist as of v4). Fixed by updating Section 8
+  itself to name all six and confirm (by direct read) that the two new
+  routes call `_station_from_token()` exactly like the original four.
+  (b) `tests/test_phase2_direct_printing.py`'s own I/J/K tests only
+  verified ownership conditions at the model layer, with a note
+  explaining no real HTTP-level test existed — an explanation, not a
+  fix. Added `tests/test_phase2_direct_printing_http.py`, a genuine
+  `odoo.tests.HttpCase`-based suite issuing real JSON-RPC POST requests
+  (via `self.url_open()`) against `/flexsyskds/public/api/print/prepare`
+  and `.../print/result` themselves, covering the same ownership/
+  idempotency/conflict scenarios as actual HTTP round trips, not
+  model-method calls standing in for them.

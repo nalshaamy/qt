@@ -1,7 +1,7 @@
 /** @odoo-module */
 
 // ---------------------------------------------------------------------
-// FlexSys KDS - POC-1D ONLY (TEMPORARY, NOT COMMERCIAL CODE)
+// FlexSys KDS - Internal KDS Direct ePOS Adapter (Production)
 //
 // "Station -> Direct ePOS Adapter". Deliberately kept as its own,
 // separate module from the KDS card's own print-button interception
@@ -15,7 +15,7 @@
 // (point_of_sale/static/src/backend/test_epos/ and
 // point_of_sale/static/src/app/utils/init_lna.js) - both already
 // loaded in 'web.assets_backend' by point_of_sale's own manifest, per
-// direct confirmation - nothing added to this POC's own assets for
+// direct confirmation - nothing added to this module's own assets for
 // this. No EpsonPrinter/BasePrinter/render_service/html-to-image, and
 // no dependency on the point_of_sale.ePOSLayout QWeb template.
 //

@@ -173,4 +173,31 @@
         <field name="interval_type">minutes</field>
         <field name="active">True</field>
     </record>
+
+    <!-- PHASE 2 CLOSEOUT ("Direct Printing <-> kds.print.job
+         Integration"): a Direct Network job is created BEFORE the
+         browser attempts to print, in 'dispatched' status - if the
+         browser tab crashes, is closed, or loses its connection
+         before ever reporting a result via
+         kds.print.job::report_direct_print_result(), that job would
+         otherwise sit in 'dispatched' ("Printing") forever, with
+         nothing else in this system ever revisiting it (the Legacy
+         Agent's own lease_expires_at mechanism is a separate concept
+         entirely, and does not apply to this transport at all - see
+         _cron_timeout_stale_direct_jobs()'s own docstring). Same
+         1-minute interval as the crons above - frequent enough that a
+         genuinely abandoned Direct print self-corrects to Failed
+         within about a minute of its own dispatch_deadline passing,
+         without adding meaningful load (the search itself only
+         touches dispatched, not-yet-expired-checked direct_network
+         jobs). -->
+    <record id="ir_cron_kds_timeout_stale_direct_jobs" model="ir.cron">
+        <field name="name">FlexSys KDS: Timeout Stale Direct Print Jobs</field>
+        <field name="model_id" ref="model_kds_print_job"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_timeout_stale_direct_jobs()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">minutes</field>
+        <field name="active">True</field>
+    </record>
 </odoo>

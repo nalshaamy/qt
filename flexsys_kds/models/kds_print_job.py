@@ -1,8 +1,21 @@
 # -*- coding: utf-8 -*-
+from datetime import timedelta
+
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError, ValidationError
 
 MAX_AUTO_RETRY = 2
+
+# PHASE 2 CLOSEOUT: how long a 'direct_network' job waits for the
+# browser's own /print/result (or the Internal KDS equivalent ORM
+# call) before _cron_timeout_stale_direct_jobs() below considers the
+# attempt abandoned. Generous enough to cover a slow Local Network
+# Access permission prompt (a real, user-facing pause the Direct ePOS
+# Transport's own LNA flow can introduce) on top of the Adapter's own
+# 15-second fetch() timeout, without being so long that a genuinely
+# crashed/closed browser tab leaves its own job silently stuck in
+# "Printing" for an operationally confusing length of time.
+DIRECT_RESULT_TIMEOUT_SECONDS = 60
 
 
 class NoPrinterConfiguredError(UserError):
@@ -82,6 +95,58 @@ class KdsPrintJob(models.Model):
         help="Snapshot of the printer IP address used for a Direct "
              "Network job at the time it was created - kept even if "
              "the station's own configured IP changes later.")
+
+    # PHASE 2 CLOSEOUT: which screen actually originated a
+    # 'direct_network' job - only meaningful for that transport; left
+    # unset (False) for 'agent'/'iot' jobs, which have no equivalent
+    # concept today. Distinguishes an Internal KDS print (a real,
+    # logged-in user - see user_id above) from a Public Kiosk print (no
+    # logged-in user at all - user_id is explicitly False for these,
+    # never invented).
+    source = fields.Selection([
+        ('internal_kds', 'Internal KDS'),
+        ('public_kiosk', 'Public Kiosk'),
+    ], help="Which screen created this job - only set for "
+            "'direct_network' jobs.")
+
+    # PHASE 2 CLOSEOUT: a dedicated, separate timestamp for when a job
+    # reached its own final 'failed' status - deliberately NOT reusing
+    # printed_at (which specifically means success) and NOT added to
+    # action_mark_failed() (the Legacy Agent's own multi-attempt
+    # retry/backup method, which has no single clean "this is THE
+    # final failure moment" the same way a Direct attempt does, and is
+    # explicitly not to be changed this round). Only
+    # action_mark_direct_failed() below sets this - a Legacy Agent job
+    # correctly leaves it empty.
+    failed_at = fields.Datetime()
+
+    # PHASE 2 CLOSEOUT: the machine-readable error code, kept
+    # separate from `error` (the human-readable message below) so a
+    # caller/report can filter or branch on the code (e.g.
+    # 'RESULT_TIMEOUT') without parsing free text. Only meaningfully
+    # set for 'direct_network' jobs today.
+    error_code = fields.Char(
+        help="Machine-readable failure code (e.g. 'RESULT_TIMEOUT', "
+             "'LNA_DENIED', 'NETWORK_ERROR') - only set for Direct "
+             "Network jobs.")
+
+    # PHASE 2 CLOSEOUT: the deadline by which a browser-executed
+    # 'direct_network' job must report its own result
+    # (/print/result, or the Internal KDS equivalent ORM call) before
+    # a periodic cron considers it abandoned (browser/tab crashed,
+    # closed, or lost its connection before ever reporting back) and
+    # marks it 'failed' with error_code='RESULT_TIMEOUT' - see
+    # _cron_timeout_stale_direct_jobs() below. Deliberately a
+    # completely separate mechanism from the Legacy Agent's own
+    # lease_expires_at (a different concept: that one governs which
+    # AGENT PROCESS currently holds exclusive claim to re-attempt a
+    # PENDING job; this one simply detects a Direct job stuck waiting
+    # for a result that will now never arrive). Only set for
+    # 'direct_network' jobs.
+    dispatch_deadline = fields.Datetime(
+        help="Deadline for this Direct Network job's own browser-side "
+             "print attempt to report a result before it is "
+             "considered abandoned and automatically marked Failed.")
 
     job_type = fields.Selection([
         ('auto', 'Auto Print'),
@@ -555,19 +620,23 @@ class KdsPrintJob(models.Model):
         controller's own prepare-print route below), which can only
         ever pass plain ids, never a live Python recordset object.
 
-        CORRECTION ("Phase 2 - Final Corrections Before Regression
-        Test"), item 4: `source` distinguishes which screen requested
-        this print. For 'public_kiosk' specifically, user_id is set to
-        False EXPLICITLY in the create() call below, rather than left
-        to fall through to the field's own default=lambda:
-        self.env.user - that default exists for the normal, internal-
-        user call sites (Internal KDS, and every other job-creating
-        method in this model), and must not be allowed to silently
-        attribute a public, unauthenticated kiosk request to whichever
-        technical user happens to be running that request's own env
-        context (e.g. sudo()'s own caller identity) - a public request
+        `source` distinguishes which screen requested this print. For
+        'public_kiosk' specifically, user_id is set to False EXPLICITLY
+        in the create() call below, rather than left to fall through
+        to the field's own default=lambda: self.env.user - that
+        default exists for the normal, internal-user call sites
+        (Internal KDS, and every other job-creating method in this
+        model), and must not be allowed to silently attribute a
+        public, unauthenticated kiosk request to whichever technical
+        user happens to be running that request's own env context
+        (e.g. sudo()'s own caller identity) - a public request
         genuinely has no requesting internal user, and must record
         that honestly rather than inventing one.
+
+        dispatch_deadline is set here so
+        _cron_timeout_stale_direct_jobs() below can later detect and
+        fail a job whose own browser tab crashed/closed before ever
+        reporting a result - see that method's own docstring.
         """
         order = self.env['kds.order'].browse(order_id)
         station = self.env['kds.station'].browse(station_id)
@@ -586,6 +655,7 @@ class KdsPrintJob(models.Model):
             # situation: nothing to print to.
             raise NoPrinterConfiguredError(
                 _("No printer is configured for this station."))
+        now = fields.Datetime.now()
         job_vals = {
             'order_id': order.id,
             'station_id': station.id,
@@ -596,8 +666,9 @@ class KdsPrintJob(models.Model):
             'reason': reason,
             'reason_note': reason_note,
             'status': 'dispatched',
-            'dispatched_at': fields.Datetime.now(),
+            'dispatched_at': now,
             'source': source,
+            'dispatch_deadline': now + timedelta(seconds=DIRECT_RESULT_TIMEOUT_SECONDS),
         }
         if source == 'public_kiosk':
             job_vals['user_id'] = False
@@ -666,3 +737,80 @@ class KdsPrintJob(models.Model):
             'error_code': error_code or False,
             'failed_at': fields.Datetime.now(),
         })
+
+    # ---------------------------------------------------------------
+    # PHASE 2 CLOSEOUT: the ONE place idempotency/conflict handling
+    # for a Direct Network job's own terminal result lives - both
+    # callers (Internal KDS's own onPrintClick, the Public Kiosk's own
+    # /print/result route) call this instead of action_mark_printed()/
+    # action_mark_direct_failed() directly, so the exact same rules
+    # apply identically regardless of which screen is reporting.
+    # ---------------------------------------------------------------
+    def report_direct_print_result(self, successful, error_code=False, error_message=False):
+        """Records a Direct Network job's own browser-side print
+        result, with idempotency and conflict handling:
+          - a REPEATED report of the SAME outcome the job already has
+            (e.g. two 'successful' reports in a row, perhaps from a
+            retried network call on the reporting side itself) is a
+            silent no-op - not an error.
+          - a CONFLICTING report (e.g. the job is already 'printed',
+            and a 'failed' report now arrives) is explicitly rejected
+            - never silently overwrites an already-terminal outcome
+              with a different one.
+          - only a genuinely 'dispatched' (still-awaiting-result) job
+            actually transitions, via the existing
+            action_mark_printed()/action_mark_direct_failed() methods
+            above - unchanged, reused as-is.
+        """
+        self.ensure_one()
+        if self.transport != 'direct_network':
+            raise ValidationError(_("This job is not a Direct Network print job."))
+
+        if self.status == 'printed':
+            if successful:
+                return  # Idempotent: already printed, reported printed again.
+            raise ValidationError(_("This job is already marked Printed - cannot report Failed now."))
+
+        if self.status == 'failed':
+            if not successful:
+                return  # Idempotent: already failed, reported failed again.
+            raise ValidationError(_("This job is already marked Failed - cannot report Printed now."))
+
+        if self.status != 'dispatched':
+            raise ValidationError(_("This job is not currently awaiting a Direct Network print result."))
+
+        if successful:
+            self.action_mark_printed()
+        else:
+            self.action_mark_direct_failed(error_code=error_code, error_message=error_message)
+
+    @api.model
+    def _cron_timeout_stale_direct_jobs(self):
+        """PHASE 2 CLOSEOUT: finds every 'direct_network' job still
+        'dispatched' past its own dispatch_deadline - the browser tab
+        that was executing its own Direct ePOS attempt crashed, was
+        closed, or lost its connection before ever reporting a result
+        via report_direct_print_result() above - and marks each one
+        Failed with a stable, distinct error_code, so it does not
+        appear to still be actively printing forever.
+
+        No automatic retry, no backup printer - identical, honest
+        failure handling to any other Direct Network failure. Does
+        not touch 'agent'/'iot' jobs at all - the Legacy Agent's own
+        lease_expires_at mechanism (a different concept entirely -
+        which AGENT PROCESS currently holds a claim to retry a
+        PENDING job) is completely separate and unaffected.
+        """
+        now = fields.Datetime.now()
+        stale_jobs = self.search([
+            ('transport', '=', 'direct_network'),
+            ('status', '=', 'dispatched'),
+            ('dispatch_deadline', '!=', False),
+            ('dispatch_deadline', '<', now),
+        ])
+        for job in stale_jobs:
+            job.action_mark_direct_failed(
+                error_code='RESULT_TIMEOUT',
+                error_message=_("No print result was received before the deadline - "
+                                "the browser tab may have crashed, closed, or lost its "
+                                "connection."))

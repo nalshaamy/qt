@@ -7,3 +7,5 @@ from . import test_sla
 from . import test_station_kpi
 from . import test_expeditor
 from . import test_pos_config_settings
+from . import test_phase2_direct_printing
+from . import test_phase2_direct_printing_http

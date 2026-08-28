@@ -123,8 +123,7 @@
                         <page string="Users" invisible="operating_mode == 'printer_only'">
                             <field name="user_ids" widget="many2many_tags"/>
                         </page>
-                        <!-- MERGED FROM PROVEN POC (flexsys_kds_poc_1d)
-                             - the target Direct Network / future Odoo
+                        <!-- The target Direct Network / future Odoo
                              IoT architecture per "Printing
                              Architecture Baseline v1", deliberately a
                              SEPARATE, independent tab from the legacy

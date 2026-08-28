@@ -68,7 +68,7 @@ export class FlexSysKdsScreen extends Component {
         this.state = useState(this.store.state);
         this.action = useService("action");
         // ORM/notification services: needed for the Direct Network
-        // print path merged in from the proven POC below
+        // print path below
         // (flexsys_epos_direct_adapter.js's own initLNA(notificationService,
         // callback) call, and reading this station's own printing
         // config, which the backend controller does not otherwise
@@ -379,16 +379,14 @@ export class FlexSysKdsScreen extends Component {
         this.store.orderAction(orderId, action);
     };
 
-    // MERGED FROM PROVEN POC (flexsys_kds_poc_1d) - confirmed PASS on
-    // real hardware. Direct Network stations use the Direct ePOS
-    // Adapter (a fully separate file - flexsys_epos_direct_adapter.js
-    // - this component never performs the actual printer connection
-    // itself, only reads this station's own printing config and hands
-    // off to that Adapter).
+    // Direct Network stations use the Direct ePOS Adapter (a fully
+    // separate file - flexsys_epos_direct_adapter.js - this component
+    // never performs the actual printer connection itself, only reads
+    // this station's own printing config and hands off to that
+    // Adapter).
     //
-    // COMPATIBILITY FIX ("POC -> Core Merge - One Compatibility Fix
-    // Before Regression Test"): explicit Truth Table, matched exactly
-    // (and identically on the Public Kiosk side - see
+    // COMPATIBILITY GUARD: explicit Truth Table, matched exactly (and
+    // identically on the Public Kiosk side - see
     // controllers/kds_kiosk.py's own printOrder()), so Legacy Printing
     // genuinely keeps working during this transition period:
     //   direct_network + Printer IP set   -> Direct ePOS
@@ -493,12 +491,21 @@ export class FlexSysKdsScreen extends Component {
             });
 
             // RESULT CONTRACT: the Adapter's own {successful, errorCode,
-            // ...} shape is translated here into the job's own
-            // Printed/Failed status - never a raw, unfiltered browser
-            // exception saved server-side.
+            // ...} shape is normalized here into a clean {code, message}
+            // pair, then reported to the job's own single, unified
+            // report_direct_print_result() - never a raw, unfiltered
+            // browser exception saved server-side, and never a direct
+            // call to action_mark_printed()/action_mark_direct_failed()
+            // from here (that method is now the ONE place idempotency/
+            // conflict handling for a terminal result lives, shared
+            // identically with the Public Kiosk's own /print/result
+            // route).
             if (result && result.successful) {
                 try {
-                    await this.flexsysOrm.call("kds.print.job", "action_mark_printed", [jobId], {});
+                    await this.flexsysOrm.call(
+                        "kds.print.job", "report_direct_print_result", [jobId],
+                        { successful: true }
+                    );
                 } catch (e) {
                     console.error("FlexSys: print succeeded but failed to update the job's own status.", e);
                 }
@@ -507,10 +514,9 @@ export class FlexSysKdsScreen extends Component {
                 const normalizedError = normalizeDirectPrintError(result);
                 try {
                     await this.flexsysOrm.call(
-                        "kds.print.job",
-                        "action_mark_direct_failed",
-                        [jobId],
+                        "kds.print.job", "report_direct_print_result", [jobId],
                         {
+                            successful: false,
                             error_code: normalizedError.code,
                             error_message: normalizedError.message,
                         }

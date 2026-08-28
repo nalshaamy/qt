@@ -39,7 +39,7 @@ import logging
 from datetime import timedelta
 
 from odoo import fields, http
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 from odoo.http import request
 
 from .kds import _kds_error
@@ -196,9 +196,9 @@ class FlexSysKdsKioskController(http.Controller):
             'kiosk_dir': 'rtl' if station.kiosk_language == 'ar' else 'ltr',
             'branch_label': 'الفرع' if station.kiosk_language == 'ar' else 'Branch',
             'time_label': 'الوقت' if station.kiosk_language == 'ar' else 'Time',
-            # MERGED FROM PROVEN POC (flexsys_kds_poc_1d) - bootstrapped
-            # once into the page itself (see FLEXSYS_PRINTING_CONFIG in
-            # the template below), never a separate route/network call.
+            # Bootstrapped once into the page itself (see
+            # FLEXSYS_PRINTING_CONFIG in the template below), never a
+            # separate route/network call.
             'flexsys_printing_method': station.flexsys_printing_method or '',
             'flexsys_printer_ip': station.flexsys_printer_ip or '',
             # 'true'/'false' literals (not Python's own True/False,
@@ -616,28 +616,19 @@ class FlexSysKdsKioskController(http.Controller):
                 or job.source != 'public_kiosk'):
             return {'ok': False, 'error': 'Print job not found for this station'}
 
-        if job.status == 'dispatched':
-            # The normal, expected path - the job's own first result.
-            if successful:
-                job.action_mark_printed()
-            else:
-                job.action_mark_direct_failed(
-                    error_code=error_code or 'UNKNOWN',
-                    error_message=error_message or 'Unknown error')
-            return {'ok': True}
-
-        if (job.status == 'printed' and successful) or (job.status == 'failed' and not successful):
-            # Idempotent retry of the exact same, already-recorded
-            # outcome - accepted, no write, no error - a flaky network
-            # re-sending this same callback must never itself look
-            # like a failure to the caller.
-            return {'ok': True}
-
-        # Any other combination is a genuine conflict against an
-        # already-terminal status (printed<->failed disagreement, or
-        # any result at all for an already-cancelled job) - rejected,
-        # never silently overwritten.
-        return {'ok': False, 'error': 'Print job is already in a terminal state'}
+        # Ownership/security checks above are this route's own
+        # responsibility; the actual idempotency/conflict/lifecycle
+        # rules are delegated entirely to
+        # report_direct_print_result() - the ONE shared place those
+        # rules live, identical for both this Public Kiosk route and
+        # Internal KDS's own equivalent ORM call - never duplicated
+        # here.
+        try:
+            job.report_direct_print_result(
+                successful, error_code=error_code or False, error_message=error_message or False)
+        except ValidationError as e:
+            return {'ok': False, 'error': str(e)}
+        return {'ok': True}
 
 
 _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
@@ -646,12 +637,11 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>FlexSys KDS - %(station_name)s</title>
-<!-- MERGED FROM PROVEN POC (flexsys_kds_poc_1d) - loaded directly in
-     the page's own <head>, not injected after the fact. Classic
-     scripts (no ES module loader here at all - this is standalone
-     HTML) - the shared renderer must load before the public adapter
-     that calls it, which must load before the inline script below
-     that calls printOrder(). -->
+<!-- Loaded directly in the page's own <head>. Classic scripts (no
+     ES module loader here at all - this is standalone HTML) - the
+     shared renderer must load before the public adapter that calls
+     it, which must load before the inline script below that calls
+     printOrder(). -->
 <script src="/flexsys_kds/static/src/shared/flexsys_ticket_renderer.js"></script>
 <script src="/flexsys_kds/static/src/public/flexsys_epos_direct_public.js"></script>
 <style>
@@ -978,19 +968,16 @@ const KIOSK_LANG = %(kiosk_lang)r;
 const KIOSK_LABELS = KIOSK_LANG === 'ar' ? KIOSK_LABELS_AR : KIOSK_LABELS_EN;
 const STATION_CODE = %(station_code)r;
 const TOKEN = %(token)r;
-// MERGED FROM PROVEN POC (flexsys_kds_poc_1d): needed by
-// normalizeOrderForTicket() below (station name / branch name for the
-// printed ticket's own header) - reusing the exact same station_name/
-// company_name values already resolved server-side for this page's
-// own visible header, never a second/different lookup.
+// Needed by normalizeOrderForTicket() below (station name / branch
+// name for the printed ticket's own header) - reusing the exact same
+// station_name/company_name values already resolved server-side for
+// this page's own visible header, never a second/different lookup.
 const STATION_NAME = %(station_name)r;
 const COMPANY_NAME = %(company_name)r;
-// MERGED FROM PROVEN POC (flexsys_kds_poc_1d) - bootstrapped ONCE
-// directly into this page's own initial render (no separate route,
-// no extra network call, per the explicit "Public Kiosk Printing
-// Config Decision"), never re-sent by the existing orders polling
-// below. Only these three non-sensitive fields - no Agent Key, no
-// printer secrets.
+// Bootstrapped ONCE directly into this page's own initial render (no
+// separate route, no extra network call) - never re-sent by the
+// existing orders polling below. Only these three non-sensitive
+// fields - no Agent Key, no printer secrets.
 const FLEXSYS_PRINTING_CONFIG = {
   printingMethod: %(flexsys_printing_method)r,
   printerIp: %(flexsys_printer_ip)r,
@@ -1672,14 +1659,12 @@ async function advanceLine(orderId, lineId, action) {
 async function printOrder(orderId) {
   if (!PRINTING_ENABLED) return;
 
-  // MERGED FROM PROVEN POC (flexsys_kds_poc_1d) - confirmed PASS on
-  // real hardware. Direct Network stations use the Direct ePOS
-  // Adapter (flexsys_epos_direct_public.js, loaded above in <head> -
-  // this inline script never performs the actual printer connection
+  // Direct Network stations use the Direct ePOS Adapter
+  // (flexsys_epos_direct_public.js, loaded above in <head> - this
+  // inline script never performs the actual printer connection
   // itself).
   //
-  // COMPATIBILITY FIX ("POC -> Core Merge - One Compatibility Fix
-  // Before Regression Test"): explicit Truth Table, matched IDENTICALLY
+  // COMPATIBILITY GUARD: explicit Truth Table, matched IDENTICALLY
   // on the Internal KDS side (see static/src/js/kds_app.js's own
   // onPrintClick()), so Legacy Printing genuinely keeps working during
   // this transition period:

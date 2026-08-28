@@ -165,6 +165,16 @@ class FlexSysKdsTestCommon(TransactionCase):
             'station_code': 'TESTSTN', 'token': 'test-token-abc',
             'kiosk_lang': 'en', 'kiosk_dir': 'ltr',
             'branch_label': 'Branch', 'time_label': 'Time',
+            # PHASE 2 REGRESSION FIX: the template gained these three
+            # placeholders when Direct Network printing was merged in -
+            # every pre-existing call site of this helper across the
+            # whole test suite would otherwise now raise KeyError on
+            # render, confirmed by directly simulating the exact old
+            # dict this helper used to build against the template's
+            # own current, real placeholder set before adding these.
+            'flexsys_printing_method': 'direct_network',
+            'flexsys_printer_ip': '',
+            'flexsys_use_local_network_access': 'true',
         }
         vals.update(overrides)
         return _KIOSK_HTML_TEMPLATE % vals

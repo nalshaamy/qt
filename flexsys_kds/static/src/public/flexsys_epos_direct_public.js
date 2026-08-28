@@ -1,5 +1,5 @@
 /**
- * FlexSys KDS - POC-1D ONLY (TEMPORARY, NOT COMMERCIAL CODE)
+ * FlexSys KDS - Public Kiosk Direct ePOS Adapter (Production)
  *
  * "Public Kiosk Direct ePOS Adapter" - the standalone-page equivalent
  * of the Internal KDS's own Direct ePOS Adapter

@@ -1,5 +1,5 @@
 /**
- * FlexSys KDS - POC ONLY (TEMPORARY, NOT COMMERCIAL CODE)
+ * FlexSys KDS - Shared Kitchen Ticket Renderer (Production)
  *
  * "FlexSys Ticket Renderer" - the ONE shared file both the Internal
  * KDS adapter (loaded via 'web.assets_backend', a plain non-module
