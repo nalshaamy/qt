@@ -115,14 +115,62 @@ class KdsStation(models.Model):
     # Baseline v1". Both exist side by side for now; kds.printer is not
     # touched or deprecated by this.
     # ---------------------------------------------------------------
-    flexsys_printing_method = fields.Selection([
-        ('direct_network', 'Direct Network (Epson ePOS)'),
-        ('iot', 'Odoo IoT'),
-    ], string='Printing Method', default='direct_network',
+    # UI CLEANUP ("Station Printing Cleanup - Final Minor Closeout"):
+    # 'iot' is no longer a static option in the list below at all -
+    # confirmed by direct audit that it has zero runtime
+    # implementation anywhere (create_direct_print_job() itself
+    # refuses any job for an 'iot'-configured station, identically to
+    # "no printer configured"). A dynamic selection=<method> makes
+    # the widget itself (radio buttons in the Station form) genuinely
+    # NOT OFFER 'iot' as a choice for any station that isn't already
+    # set to it - not just relabeled as "unavailable" while still
+    # being fully selectable, which the prior round's own fix
+    # mistakenly left in place. The underlying field value 'iot'
+    # itself, and every existing station record's own stored value,
+    # is completely unaffected - this only changes what the SELECTION
+    # WIDGET offers going forward, per
+    # _selection_flexsys_printing_method() below.
+    flexsys_printing_method = fields.Selection(
+        selection='_selection_flexsys_printing_method',
+        string='Printing Method', default='direct_network',
         help="How this station's own Print button reaches a physical "
-             "printer. 'Direct Network' is the current, proven path - "
-             "'Odoo IoT' is reserved for a future, separate phase and "
-             "is not yet wired to any print logic.")
+             "printer. 'Direct Network' is the current, proven path. "
+             "'Odoo IoT' is reserved for a future, separate phase - "
+             "not yet wired to any print logic, and not offered as a "
+             "selectable option for that reason (see "
+             "_selection_flexsys_printing_method()).")
+
+    def _selection_flexsys_printing_method(self):
+        """Dynamic selection for flexsys_printing_method above - the
+        actual mechanism behind hiding 'iot' from the Station form's
+        own radio buttons while keeping the underlying field value and
+        every existing record's own stored data completely unaffected.
+
+        Always offers 'direct_network'. Offers 'iot' ONLY when the
+        record being edited already has that exact value stored (a
+        legacy/pre-existing station, if one exists) - so that record's
+        own current selection still displays correctly and doesn't
+        silently break, but it is never offered as a NEW choice to any
+        other station, new or existing. This is the standard Odoo
+        pattern for "hide a selection option going forward while
+        preserving backward compatibility for already-stored data" -
+        far safer than removing the value from the schema outright,
+        and correctly stronger than the prior round's own attempt
+        (relabeling the option's own text to say "Not Available Yet"
+        while leaving it just as selectable as before - confirmed
+        still an actual, clickable radio option, not a real fix).
+
+        `self` may be an empty recordset here (e.g. when Odoo resolves
+        this for a brand-new, unsaved record, or for schema
+        introspection with no specific record context) - `if self`
+        below is False for an empty recordset, so
+        `self.flexsys_printing_method` is never actually evaluated in
+        that case, avoiding any error.
+        """
+        options = [('direct_network', 'Direct Network (Epson ePOS)')]
+        if self and self.flexsys_printing_method == 'iot':
+            options.append(('iot', 'Odoo IoT — Coming Later'))
+        return options
 
     flexsys_printer_ip = fields.Char(
         string='Printer IP',

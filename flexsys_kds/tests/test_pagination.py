@@ -295,3 +295,44 @@ class TestPagination(TransactionCase):
         self.assertIn('width:95%%; justify-self:center;', card_rule.group(1))
         self.assertNotIn('width:100%%;', card_rule.group(1))
         self.assertNotIn('width:90%%;', card_rule.group(1))
+
+    def test_internal_kds_pagination_is_sticky_bottom(self):
+        """UI ADJUSTMENT ("Internal KDS Sticky Pagination"): confirmed
+        live - with two full rows of cards, Previous/Next/page
+        indicator sat below the fold, only reachable by scrolling
+        down. .fs-pagination must be position: sticky; bottom: 0 with
+        a solid background (so scrolling card content doesn't show
+        through underneath it) - Internal KDS ONLY, per explicit
+        direction that Public Kiosk's own pagination bar is visually
+        fine as-is and must not be touched."""
+        content = self._read_module_file('static', 'src', 'scss', 'kds_style.scss')
+        fs_pagination_rule = re.search(r'\.fs-pagination\s*\{(.*?)\n\}', content, re.DOTALL)
+        self.assertIsNotNone(fs_pagination_rule, ".fs-pagination rule not found.")
+        rule_body = fs_pagination_rule.group(1)
+
+        self.assertIn('position: sticky;', rule_body)
+        self.assertIn('bottom: 0;', rule_body)
+        self.assertRegex(
+            rule_body, r'background:\s*\$fs-bg\s*;',
+            ".fs-pagination needs a solid background so card content scrolling "
+            "underneath it doesn't visually show through."
+        )
+        self.assertIn('z-index: 20;', rule_body)
+
+    def test_fs_grid_has_bottom_padding_for_sticky_pagination_clearance(self):
+        """Reserves room below the last card row so it can never end
+        up hidden behind .fs-pagination's own now-sticky bar."""
+        content = self._read_module_file('static', 'src', 'scss', 'kds_style.scss')
+        fs_grid_rule = re.search(r'\.fs-grid\s*\{(.*?)\n\}', content, re.DOTALL)
+        self.assertIsNotNone(fs_grid_rule, ".fs-grid rule not found.")
+        self.assertRegex(fs_grid_rule.group(1), r'padding-bottom:\s*\d+px\s*;')
+
+    def test_public_kiosk_pagination_bar_is_unchanged(self):
+        """Explicit requirement: Public Kiosk's own pagination bar is
+        visually fine as confirmed live and must NOT be made sticky -
+        this test guards against that ever happening by mistake."""
+        content = self._read_module_file('controllers', 'kds_kiosk.py')
+        pagination_rule = re.search(r'\n  \.pagination\{(.*?)\n  \}', content, re.DOTALL)
+        self.assertIsNotNone(pagination_rule, ".pagination rule not found in controllers/kds_kiosk.py.")
+        self.assertNotIn('position:sticky', pagination_rule.group(1))
+        self.assertNotIn('position: sticky', pagination_rule.group(1))

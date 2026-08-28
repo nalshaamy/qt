@@ -123,26 +123,45 @@
                         <page string="Users" invisible="operating_mode == 'printer_only'">
                             <field name="user_ids" widget="many2many_tags"/>
                         </page>
-                        <!-- The target Direct Network / future Odoo
-                             IoT architecture per "Printing
-                             Architecture Baseline v1", deliberately a
-                             SEPARATE, independent tab from the legacy
-                             "Printers" (kds.printer/Agent) tab below -
-                             not merged into it - to keep the
-                             architectural distinction visually clear
-                             during this transition period. The legacy
-                             tab is left completely unchanged. -->
+                        <!-- UI CLEANUP ("Commercial Demo UI - Station
+                             Printing Configuration Cleanup"): the
+                             prior round's own two adjacent tabs
+                             ("Printing" for Direct Network config,
+                             "Printers" for the legacy Agent's own
+                             kds.printer records) merged into ONE
+                             "Printing" tab - confirmed live to be
+                             confusing to a commercial customer seeing
+                             two similarly-named tabs with no clear
+                             reason printing config was split across
+                             them. Information architecture only: no
+                             kds.printer records, fields, or management
+                             functionality removed - everything from
+                             both prior tabs is still here, now
+                             organized into three visually distinct
+                             sections (A/B/C below) within this single
+                             tab instead. -->
                         <page name="flexsys_printing" string="Printing" invisible="operating_mode == 'kds_only'">
-                            <group>
-                                <field name="flexsys_printing_method" widget="radio"/>
-                                <field name="flexsys_printer_ip"
-                                       invisible="flexsys_printing_method != 'direct_network'"
-                                       placeholder="e.g. 192.168.1.50"/>
-                                <field name="flexsys_use_local_network_access"
-                                       invisible="flexsys_printing_method != 'direct_network'"/>
+                            <!-- A. Printing Method -->
+                            <group string="Printing Method">
+                                <field name="flexsys_printing_method" widget="radio" nolabel="1"/>
                             </group>
-                        </page>
-                        <page string="Printers" invisible="operating_mode == 'kds_only'">
+                            <!-- B. Direct Network Settings - deliberately its
+                                 own compact, two-column group (not a single
+                                 full-page-width field) so a short value like
+                                 an IP address doesn't stretch edge-to-edge
+                                 for no visual reason. -->
+                            <group string="Direct Network Settings"
+                                   invisible="flexsys_printing_method != 'direct_network'">
+                                <group>
+                                    <field name="flexsys_printer_ip" placeholder="e.g. 192.168.1.50"/>
+                                    <field name="flexsys_use_local_network_access"/>
+                                </group>
+                            </group>
+                            <!-- C. Print Agent / Printer Management - the
+                                 legacy tab's own content, unchanged, now a
+                                 clearly-labeled section instead of a
+                                 separate tab. -->
+                            <separator string="Print Agent / Printer Management"/>
                             <field name="printer_ids">
                                 <list editable="bottom">
                                     <field name="name"/>

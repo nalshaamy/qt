@@ -361,6 +361,16 @@ body.o_flexsys_kiosk {
     justify-content: start;
     justify-items: stretch;
     align-items: start;
+    // UI ADJUSTMENT ("Internal KDS Sticky Pagination"): reserves room
+    // below the last card row so it can never end up hidden behind
+    // .fs-pagination's own now-sticky, solid-background bar (roughly
+    // its own total height: 64px buttons + 16px top/bottom padding
+    // each side, rounded up with a small safety margin) - without
+    // this, a card whose own content reaches close to the bottom of
+    // the scrollable area could have its own last few pixels sit
+    // directly behind the sticky bar instead of being scrollable
+    // fully into view above it.
+    padding-bottom: 100px;
 }
 
 .fs-empty {
@@ -373,14 +383,33 @@ body.o_flexsys_kiosk {
 // HIGH-DENSITY LAYOUT: fixed navigation bar under the card grid -
 // large, touch-friendly buttons and a clear "N / total" status, per
 // the explicit "not like small backend-table pagination" requirement.
-// Kept as a normal flow element (not position:fixed) so it never
-// overlaps cards/action buttons regardless of screen height.
+//
+// UI ADJUSTMENT ("Internal KDS Sticky Pagination"): confirmed live -
+// with two full rows of cards, Previous/Next/page indicator sat below
+// the fold and only appeared after scrolling down. position: sticky +
+// bottom: 0 (INTERNAL KDS ONLY - Public Kiosk's own pagination bar is
+// untouched, confirmed visually acceptable as-is) keeps it always
+// visible at the bottom of .fs-kds-app's own scrollable area (the
+// same scroll container Version 39's own overflow-y: auto lives on -
+// .fs-pagination is a direct child of it, exactly like .fs-grid, so
+// sticky resolves against it correctly with no extra wrapper needed).
+// Solid background (same $fs-bg as .fs-sticky-top above, and the same
+// z-index: 20 - the two never overlap spatially, one pinned to the
+// top edge and the other to the bottom, so sharing a z-index is safe)
+// prevents card content from visually showing through underneath as
+// it scrolls past. See .fs-grid's own padding-bottom below for the
+// matching fix that keeps a tall last card from ending up hidden
+// behind this now-fixed-in-place bar.
 .fs-pagination {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 24px;
-    padding: 16px 0 4px;
+    padding: 16px 0;
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    background: $fs-bg;
 }
 
 .fs-pagination-btn {
