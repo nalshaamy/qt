@@ -306,17 +306,78 @@ class TestStationKpi(FlexSysKdsTestCommon):
         self.assertIsNotNone(match)
         self.assertIn('invisible="operating_mode == \'printer_only\'"', match.group(0))
 
-    def test_final_cleanup_printers_tab_visibility_unaffected(self):
-        """Non-regression: confirms the Printers tab's own existing
-        visibility rule (shown for printer_only/kds_printer, hidden for
-        kds_only) is completely unaffected by this fix - it was already
-        correct before item 1 and needed no change."""
+    def test_final_cleanup_printing_tab_merged_contract(self):
+        """FINAL REGRESSION CLOSEOUT ("Station Printing Cleanup"):
+        replaces the now-stale test_final_cleanup_printers_tab_visibility_unaffected
+        above - that test protected the OLD, now-superseded behavior of
+        a separate "Printers" tab, which the approved "Station Printing
+        Configuration Cleanup" round deliberately merged into a single
+        "Printing" tab. Reintroducing the old separate tab to satisfy
+        that stale test would be a real regression, not a fix - this
+        replacement instead verifies the NEW approved contract, all 7
+        points required by the closeout report, against the real,
+        live Odoo view/model (not just a static file read) since this
+        test file already has that environment available."""
         form_view = self.env.ref('flexsys_kds.view_kds_station_form')
         arch = form_view.arch_db
         import re
-        match = re.search(r'<page string="Printers"[^>]*>', arch)
-        self.assertIsNotNone(match)
-        self.assertIn("invisible=\"operating_mode == 'kds_only'\"", match.group(0))
+
+        # 1. Exactly one user-facing "Printing" tab.
+        printing_matches = re.findall(r'<page\s+name="flexsys_printing"\s+string="Printing"[^>]*>', arch)
+        self.assertEqual(len(printing_matches), 1, "Exactly one merged 'Printing' tab must exist.")
+
+        # 2. No separate, adjacent "Printers" tab.
+        self.assertNotRegex(
+            arch, r'<page[^>]*\bstring="Printers"',
+            "No separate 'Printers' tab may exist - it must be merged into 'Printing'."
+        )
+
+        printing_tab_match = re.search(
+            r'<page\s+name="flexsys_printing"\s+string="Printing"[^>]*>(.*?)</page>', arch, re.DOTALL
+        )
+        self.assertIsNotNone(printing_tab_match)
+        printing_tab_body = printing_tab_match.group(0)
+
+        # 3. Legacy printer management remains accessible inside the
+        #    Printing tab itself.
+        self.assertIn('field name="printer_ids"', printing_tab_body)
+
+        # 4. printer_ids / existing printer records remain present and
+        #    genuinely usable - a real functional check, not just a
+        #    view-text check: create one and confirm it's readable
+        #    through the same relation the view itself uses.
+        printer = self.env['kds.printer'].create({
+            'name': 'Final Closeout Test Printer',
+            'station_id': self.station_kitchen.id,
+            'is_default': True,
+        })
+        self.assertIn(printer, self.station_kitchen.printer_ids)
+
+        # 5. Operating Mode visibility remains correct: hidden only for
+        #    kds_only, visible for printer_only and kds_printer (the
+        #    same single invisible= condition covers both "visible"
+        #    cases automatically - anything that isn't kds_only).
+        self.assertIn("invisible=\"operating_mode == 'kds_only'\"", printing_tab_body)
+
+        # 6. Direct Network settings remain accessible inside Printing.
+        self.assertIn('flexsys_printing_method', printing_tab_body)
+        self.assertIn('flexsys_printer_ip', printing_tab_body)
+        self.assertIn('flexsys_use_local_network_access', printing_tab_body)
+
+        # 7. Odoo IoT remains non-selectable in the normal Station UI -
+        #    verified against the REAL, live selection the model
+        #    actually returns via fields_get(), not just a source-text
+        #    pattern match - the strongest possible confirmation
+        #    available in this environment that a normal station
+        #    (self.station_kitchen, already 'direct_network') is never
+        #    offered 'iot' as a choice.
+        field_info = self.station_kitchen.fields_get(['flexsys_printing_method'])
+        selection_values = dict(field_info['flexsys_printing_method']['selection'])
+        self.assertNotIn(
+            'iot', selection_values,
+            "'iot' must not be offered as a selectable option for a normal station."
+        )
+        self.assertIn('direct_network', selection_values)
 
     # -----------------------------------------------------------------
     # REAL BUG FIX ("Final Cleanup Bug - Printer Only kiosk still opens
