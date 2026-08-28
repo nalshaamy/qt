@@ -795,6 +795,25 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
        only .card-body (the line items) scrolls internally. */
     max-height:640px;
   }
+  /* UI ADJUSTMENT ("KDS Card Width - Visual Adjustment Only"):
+     confirmed live - on Full HD (>= 1600px, the Wide/4-column density
+     tier), the card was still wider than it needed to be. Visual-only
+     change: column COUNT (4), row count (2), and the 8-card max are
+     all still computed exactly the same way by the shared
+     flexsys_pagination.js/this file's own render() - nothing about
+     that logic is touched here, only how WIDE each of those 4
+     columns/cards is allowed to become at this one tier.
+     grid-template-columns here needs !important specifically because
+     render() sets it directly as an inline style on the .grid
+     element itself (`grid.style.gridTemplateColumns = ...`), which
+     would otherwise always win over a plain stylesheet rule - the
+     standard, minimal way to override an inline style from CSS alone.
+     Below 1600px: completely untouched - still the existing
+     3-column / width:95%% behavior above, unaffected by this block. */
+  @media (min-width:1600px){
+    .grid{ grid-template-columns:repeat(4, minmax(0, 340px)) !important; }
+    .card{ width:100%%; max-width:340px; }
+  }
   .card.celebrate{ animation:cardCelebrate .7s ease-in-out; z-index:5; }
   @keyframes cardCelebrate{
     0%%{ transform:rotate(0deg) scale(1); }

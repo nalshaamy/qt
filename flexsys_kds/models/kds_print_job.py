@@ -103,11 +103,25 @@ class KdsPrintJob(models.Model):
     # logged-in user - see user_id above) from a Public Kiosk print (no
     # logged-in user at all - user_id is explicitly False for these,
     # never invented).
+    #
+    # PHASE 3 ("POS Direct Auto Print Worker"): 'pos_auto' added -
+    # confirmed by direct read before this change that 'source' was
+    # accidentally defined TWICE on this same model (a pre-existing
+    # duplicate field definition, unrelated to this phase - the second
+    # one below is removed as part of this same edit, since Odoo only
+    # ever honors the last one loaded anyway, and having two invites
+    # exactly the kind of silent-drift bug this note is now
+    # preventing). This is the one, single definition going forward.
     source = fields.Selection([
         ('internal_kds', 'Internal KDS'),
         ('public_kiosk', 'Public Kiosk'),
-    ], help="Which screen created this job - only set for "
-            "'direct_network' jobs.")
+        ('pos_auto', 'POS Auto Print'),
+    ], string='Source',
+        help="Which screen/process actually originated this job - only "
+             "set for 'direct_network' jobs. 'pos_auto' is the POS "
+             "Browser's own server-triggered Auto Print path (Phase 3) "
+             "- distinct from 'internal_kds' (a real, logged-in KDS "
+             "screen user manually pressing Print).")
 
     # PHASE 2 CLOSEOUT: a dedicated, separate timestamp for when a job
     # reached its own final 'failed' status - deliberately NOT reusing
@@ -147,6 +161,47 @@ class KdsPrintJob(models.Model):
         help="Deadline for this Direct Network job's own browser-side "
              "print attempt to report a result before it is "
              "considered abandoned and automatically marked Failed.")
+
+    # ---------------------------------------------------------------
+    # PHASE 3 ("POS Direct Auto Print Worker"): fields for the new
+    # 'pos_auto' source - a Direct Network job the SERVER creates
+    # proactively (not a browser requesting its own immediate print),
+    # left 'pending' until some eligible POS Browser's own worker
+    # claims it as the local executor. Deliberately NOT reusing
+    # claimed_by_agent/lease_expires_at (below) - those carry Legacy
+    # Agent-specific reclaim/lease semantics (a lease that EXPIRES and
+    # can be reclaimed by a different agent process) that must never
+    # apply here: once a Direct Auto job is claimed, it is claimed
+    # permanently for that attempt - no reclaim, no lease renewal, no
+    # second executor ever taking over the same job.
+    # ---------------------------------------------------------------
+    claim_deadline = fields.Datetime(
+        help="Deadline for a 'pending' Direct Auto (source='pos_auto') "
+             "job to be claimed by an eligible POS Browser before it is "
+             "considered abandoned (no active POS open) and "
+             "automatically marked Failed with error_code='NO_EXECUTOR'. "
+             "Only meaningful while the job is still 'pending' - cleared "
+             "once claimed (see direct_claimed_at below).")
+    direct_executor_id = fields.Char(
+        help="The claiming POS Browser's own stable device identifier "
+             "(this.device.identifier in POS JS - never a freshly "
+             "generated UUID) for a claimed Direct Auto job. Used to "
+             "verify that only the SAME device that claimed a job may "
+             "report its own result for it.")
+    direct_executor_pos_config_id = fields.Many2one(
+        'pos.config', string='Claiming POS Config',
+        help="The POS config whose session claimed this Direct Auto "
+             "job - used for the same result-reporting ownership check "
+             "as direct_executor_id, and to scope which POS sessions "
+             "may claim which stations' own jobs in the first place.")
+    direct_claimed_at = fields.Datetime(
+        help="When an eligible POS Browser's own worker successfully "
+             "claimed this Direct Auto job (pending -> dispatched). "
+             "Distinct from claimed_at below, which is the Legacy "
+             "Agent's own equivalent timestamp for the 'agent' "
+             "transport - kept separate rather than shared, since the "
+             "two claim mechanisms have different guarantees (Agent: "
+             "leased, reclaimable; Direct Auto: permanent, one-shot).")
 
     job_type = fields.Selection([
         ('auto', 'Auto Print'),
@@ -274,20 +329,11 @@ class KdsPrintJob(models.Model):
              "inferred from write_date, which changes on any update to "
              "this record, not specifically a failure.")
 
-    # CORRECTION, item 4: distinguishes which screen actually requested
-    # this print, independent of user_id (which is False for a Public
-    # Kiosk job - there is no logged-in internal user on that
-    # standalone page, and one must never be invented/defaulted to the
-    # calling context's own env.user, which would incorrectly attribute
-    # a public request to whichever user happens to run the request,
-    # e.g. an Administrator/Superuser context).
-    source = fields.Selection([
-        ('internal_kds', 'Internal KDS'),
-        ('public_kiosk', 'Public Kiosk'),
-    ], string='Source',
-        help="Which screen actually requested this print. Independent "
-             "of user_id, which is genuinely empty for a Public Kiosk "
-             "job rather than attributed to any internal user.")
+    # PHASE 3: the duplicate 'source' field definition previously here
+    # (an undetected pre-existing bug, unrelated to this phase) has
+    # been removed - see the single, consolidated definition earlier
+    # in this model, now the sole source of truth, including this
+    # phase's own new 'pos_auto' value.
 
     reason = fields.Selection([
         ('printer_error', 'Printer Error'),
@@ -429,6 +475,284 @@ class KdsPrintJob(models.Model):
         # stale pre-claim values.
         claimed.invalidate_recordset()
         return claimed
+
+    # ---------------------------------------------------------------
+    # PHASE 3 ("POS Direct Auto Print Worker"): three new methods for
+    # the Direct Network replacement of Legacy-Agent-based Auto Print.
+    # Deliberately kept fully separate from create_direct_print_job()
+    # (the proven Manual/Public-Kiosk creation path, untouched by this
+    # phase) - a Direct Auto job has a genuinely different lifecycle
+    # (starts 'pending', waits for a POS Browser to claim it, rather
+    # than starting 'dispatched' because the requesting browser is
+    # about to execute the print itself immediately).
+    # ---------------------------------------------------------------
+
+    DIRECT_AUTO_CLAIM_TIMEOUT_SECONDS = 120
+
+    @api.model
+    def create_direct_auto_print_job(self, order_id, station_id):
+        """Server-triggered Auto Print (item C): creates a 'pending'
+        Direct Network job for an eligible POS Browser to later claim
+        as the local executor - never requires station.printer_ids/
+        kds.printer at all, exactly like create_direct_print_job()
+        above, but starting 'pending' (waiting for an executor) rather
+        than 'dispatched' (a browser about to print immediately),
+        since nothing is executing this print yet at creation time.
+
+        Eligibility (item C's own explicit conditions) is checked
+        here, not left to the caller: operating_mode != 'kds_only',
+        effective auto_print True, flexsys_printing_method ==
+        'direct_network', and a configured Printer IP. If the IP is
+        missing specifically, this logs a clear configuration-error
+        audit event and creates NO job at all - never a broken,
+        permanently-unexecutable one, and never a silent fall back to
+        the Legacy Agent path (per explicit direction: no Agent
+        fallback anywhere in this new path).
+
+        Returns the created job record, or False if no job was
+        created (station not eligible, or a genuine configuration
+        error was logged instead).
+        """
+        order = self.env['kds.order'].browse(order_id)
+        station = self.env['kds.station'].browse(station_id)
+        if not order.exists() or not station.exists():
+            return False
+
+        if station.operating_mode == 'kds_only' or not station.auto_print:
+            return False
+
+        if station.flexsys_printing_method != 'direct_network':
+            # Not a configuration error worth an audit event on its
+            # own - a station simply not configured for Direct Network
+            # (e.g. still IoT-reserved, or mid-setup) is a normal,
+            # silent no-op here, not a broken/misconfigured state.
+            return False
+
+        if not station.flexsys_printer_ip:
+            self.env['kds.event'].log(
+                order, event_type='override', station=station,
+                note=_("CONFIGURATION ERROR: Auto Print is enabled for station "
+                       "'%s' (Direct Network) but no Printer IP is configured - "
+                       "no automatic print job was created. Set the Printer IP "
+                       "under this station's own Printing tab.") % station.name
+            )
+            return False
+
+        # PHASE 3, item Q: application-level idempotency guard - a
+        # normal order/station combination should get exactly one
+        # initial Auto Print job, never two, even if this method were
+        # ever accidentally called twice for the same order (e.g. a
+        # retried sync). Deliberately does NOT touch/block later
+        # explicit manual Reprints at all - those go through
+        # create_reprint()/create_direct_print_job() instead, a
+        # completely separate job_type ('reprint'/'manual'), which
+        # this domain never matches. No new database constraint/index
+        # added, per explicit direction to avoid a migration risk -
+        # a plain search() check is sufficient here since Auto Print's
+        # own trigger point (item R) already fires at most once per
+        # order/station under normal operation; this is a safety net,
+        # not the primary mechanism preventing duplicates.
+        existing = self.search([
+            ('order_id', '=', order.id),
+            ('station_id', '=', station.id),
+            ('job_type', '=', 'auto'),
+            ('source', '=', 'pos_auto'),
+        ], limit=1)
+        if existing:
+            return False
+
+        now = fields.Datetime.now()
+        job = self.create({
+            'order_id': order.id,
+            'station_id': station.id,
+            'transport': 'direct_network',
+            'printer_target': station.flexsys_printer_ip,
+            'job_type': 'auto',
+            'scope': 'station_items',
+            'source': 'pos_auto',
+            'status': 'pending',
+            'claim_deadline': now + timedelta(seconds=self.DIRECT_AUTO_CLAIM_TIMEOUT_SECONDS),
+        })
+        return job
+
+    def claim_direct_auto_jobs(self, pos_session_id, executor_id, limit=1):
+        """Atomic claim for an eligible POS Browser's own Direct Auto
+        Print worker (item J). Same FOR UPDATE SKIP LOCKED pattern as
+        _claim_pending_jobs() above (the proven Legacy Agent claim
+        mechanism) - but deliberately WITHOUT any reclaim/lease
+        concept: only genuinely 'pending' jobs are eligible here, a
+        'dispatched' job (already claimed by some other executor) is
+        NEVER reclaimed by this method, regardless of how much time
+        has passed - that is exactly what
+        _cron_timeout_stale_direct_jobs() below now separately handles
+        by failing it outright (item F), never by making it claimable
+        again.
+
+        Security (item J's own explicit requirements): this is called
+        by an authenticated POS session's own RPC - never public. The
+        session itself is validated and used to resolve station
+        eligibility (company isolation, pos_config linkage) rather
+        than trusting client-supplied values for anything except which
+        session/device is asking. sudo() is used deliberately below
+        for the actual claim/eligibility query, since a cashier POS
+        user commonly has none of the internal KDS administrative
+        groups this module's own action checks elsewhere require -
+        the real access boundary here is "does a genuine, currently
+        open pos.session for this exact id exist", checked explicitly
+        first, not a KDS permission group.
+        """
+        session = self.env['pos.session'].sudo().browse(pos_session_id)
+        if not session.exists() or session.state not in ('opening_control', 'opened'):
+            return self.browse()
+        config = session.config_id
+
+        # SAFER THAN RAW SQL FOR THIS PART: eligible station ids are
+        # computed via the ORM's own domain search first (correctly
+        # resolving the pos_config_ids Many2many through Odoo's own
+        # relation table, whatever its own auto-generated name
+        # actually is - not something this code can safely hardcode
+        # without live-database confirmation) - only the STATUS CLAIM
+        # itself, on kds_print_job's own table directly (the one table
+        # name already confirmed correct by _claim_pending_jobs()
+        # above), uses raw SQL for its atomic FOR UPDATE SKIP LOCKED
+        # guarantee. This keeps the exact same atomicity/concurrency
+        # guarantee for "which JOB gets claimed" while avoiding an
+        # unconfirmed assumption about internal M2M table naming.
+        eligible_stations = self.env['kds.station'].sudo().search([
+            ('active', '=', True),
+            ('company_id', '=', config.company_id.id),
+            '|', ('pos_config_ids', '=', False), ('pos_config_ids', '=', config.id),
+        ])
+        if not eligible_stations:
+            return self.browse()
+
+        self.env.flush_all()
+        self.env.cr.execute("""
+            UPDATE kds_print_job
+            SET status = 'dispatched',
+                dispatched_at = NOW() AT TIME ZONE 'UTC',
+                dispatch_deadline = (NOW() AT TIME ZONE 'UTC') + make_interval(secs => %(dispatch_timeout)s),
+                direct_executor_id = %(executor_id)s,
+                direct_executor_pos_config_id = %(config_id)s,
+                direct_claimed_at = NOW() AT TIME ZONE 'UTC',
+                claim_deadline = NULL
+            WHERE id IN (
+                SELECT id FROM kds_print_job
+                WHERE transport = 'direct_network'
+                  AND job_type = 'auto'
+                  AND source = 'pos_auto'
+                  AND status = 'pending'
+                  AND station_id = ANY(%(station_ids)s)
+                ORDER BY create_date
+                LIMIT %(limit)s
+                FOR UPDATE SKIP LOCKED
+            )
+            RETURNING id
+        """, {
+            'executor_id': executor_id,
+            'config_id': config.id,
+            'station_ids': eligible_stations.ids,
+            'dispatch_timeout': DIRECT_RESULT_TIMEOUT_SECONDS,
+            'limit': limit,
+        })
+        claimed_ids = [row[0] for row in self.env.cr.fetchall()]
+        claimed = self.browse(claimed_ids)
+        claimed.invalidate_recordset()
+        # item L: build the full, RPC-serializable payload here - a
+        # live job recordset itself is not JSON-serializable, and item
+        # L explicitly requires the claim response to already contain
+        # everything the worker needs (no second per-job RPC for
+        # order/station data).
+        return [job._build_pos_direct_auto_claim_payload() for job in claimed]
+
+    def _build_pos_direct_auto_claim_payload(self):
+        """item L: the exact payload shape the POS worker needs -
+        reuses the SAME table_label/pos_reference/employee_name
+        extraction already proven in controllers/kds.py's own order
+        listing (kept in sync deliberately, not duplicated blindly -
+        see that method for the original, with the same defensive
+        getattr() caveats about unverified restaurant.table field
+        names this build carries)."""
+        self.ensure_one()
+        order = self.order_id
+        station = self.station_id
+        pos_order = order.pos_order_id
+
+        table_label = ''
+        table = getattr(pos_order, 'table_id', False)
+        if table:
+            floor_name = getattr(getattr(table, 'floor_id', False), 'name', '') or ''
+            table_num = getattr(table, 'table_number', '') or getattr(table, 'name', '') or ''
+            table_label = ('%s / %s' % (floor_name, table_num)) if floor_name and table_num else (table_num or floor_name)
+
+        order_type_field = order._fields.get('order_type')
+        order_type_label = dict(order_type_field.selection).get(order.order_type, order.order_type) \
+            if order_type_field and order_type_field.type == 'selection' else order.order_type
+
+        # Only this job's own station's lines, excluding cancelled -
+        # exactly the same scoping the shared renderer's own
+        # normalizeOrderForTicket() default filter already applies,
+        # done here server-side so the payload itself never contains
+        # another station's own lines at all.
+        lines = order.line_ids.filtered(
+            lambda l: l.station_id == station and l.state != 'cancelled'
+        )
+        line_payload = [{
+            'product_name': line.product_name or '',
+            'qty': line.qty,
+            'variant_info': line.variant_info or '',
+            'note': line.note or '',
+            'line_change': line.line_change or 'none',
+            'state': line.state,
+        } for line in lines]
+
+        return {
+            'job_id': self.id,
+            'printer_ip': self.printer_target,
+            'use_local_network_access': bool(station.flexsys_use_local_network_access),
+            'station_name': station.name,
+            'branch_name': station.company_id.name or '',
+            'ticket_status': 'NEW',
+            'order': {
+                'id': order.id,
+                'name': order.name,
+                'pos_reference': getattr(pos_order, 'pos_reference', '') or '',
+                'order_type_label': order_type_label,
+                'table_label': table_label,
+                'created_time': order.created_time and order.created_time.isoformat() + 'Z',
+                'employee_name': getattr(pos_order.sudo().user_id, 'name', '') or '',
+                'lines': line_payload,
+            },
+        }
+
+    def report_pos_direct_auto_result(self, pos_session_id, executor_id, successful,
+                                       error_code=False, error_message=False):
+        """Narrow, validated result-reporting entry point for the POS
+        Direct Auto Print worker (item N) - deliberately not a generic
+        job write. Confirms the job genuinely IS a pos_auto Direct job,
+        that the reporting POS config matches the one that claimed it,
+        and that the reporting device is the SAME one that claimed it
+        (direct_executor_id) - a different device/session can never
+        report a result for a job it didn't claim. Once validated,
+        delegates to the existing report_direct_print_result() so
+        Phase 2's own idempotency/conflict rules remain the single
+        source of truth for Printed/Failed transitions - never
+        duplicated here.
+        """
+        self.ensure_one()
+        session = self.env['pos.session'].sudo().browse(pos_session_id)
+        if not session.exists():
+            raise ValidationError(_("Invalid POS session."))
+        if (self.transport != 'direct_network' or self.job_type != 'auto'
+                or self.source != 'pos_auto'):
+            raise ValidationError(_("This job is not a POS Direct Auto Print job."))
+        if self.direct_executor_pos_config_id != session.config_id:
+            raise ValidationError(_("This job was not claimed by this POS config."))
+        if self.direct_executor_id != executor_id:
+            raise ValidationError(_("This job was not claimed by this device."))
+
+        self.report_direct_print_result(
+            successful, error_code=error_code or False, error_message=error_message or False)
 
     def _print_payload(self):
         """Build the versioned JSON contract the print agent needs to
@@ -786,31 +1110,58 @@ class KdsPrintJob(models.Model):
 
     @api.model
     def _cron_timeout_stale_direct_jobs(self):
-        """PHASE 2 CLOSEOUT: finds every 'direct_network' job still
-        'dispatched' past its own dispatch_deadline - the browser tab
-        that was executing its own Direct ePOS attempt crashed, was
-        closed, or lost its connection before ever reporting a result
-        via report_direct_print_result() above - and marks each one
-        Failed with a stable, distinct error_code, so it does not
-        appear to still be actively printing forever.
+        """PHASE 2 CLOSEOUT (part A) + PHASE 3 (part B, "Direct Auto
+        Claim Deadline"): handles TWO separate, deliberately distinct
+        stale-Direct-job scenarios in one cron run:
 
-        No automatic retry, no backup printer - identical, honest
-        failure handling to any other Direct Network failure. Does
-        not touch 'agent'/'iot' jobs at all - the Legacy Agent's own
-        lease_expires_at mechanism (a different concept entirely -
-        which AGENT PROCESS currently holds a claim to retry a
-        PENDING job) is completely separate and unaffected.
+        A. 'dispatched' past dispatch_deadline - the browser tab that
+           was executing its own Direct ePOS attempt (Manual, Public
+           Kiosk, or an already-claimed POS Auto job) crashed, was
+           closed, or lost its connection before ever reporting a
+           result. Unchanged from Phase 2.
+
+        B. 'pending' Direct Auto (source='pos_auto') jobs past their
+           own claim_deadline (Phase 3, item F) - no eligible POS
+           Browser ever claimed this job as its local executor (no POS
+           open, or none eligible for this station) before the
+           deadline. Failed with error_code='NO_EXECUTOR' - explicitly
+           NOT retried, NOT sent to the Legacy Agent, NOT picked up by
+           a POS that reconnects hours later (that job is simply gone
+           by then, past its own claim_deadline, and stays Failed).
+
+        Both cases: no automatic retry, no backup printer - identical,
+        honest failure handling. Does not touch 'agent'/'iot' jobs at
+        all - the Legacy Agent's own lease_expires_at mechanism is a
+        completely separate, unaffected concept.
         """
         now = fields.Datetime.now()
-        stale_jobs = self.search([
+
+        # A. Already-claimed/dispatched jobs whose own executor never
+        # reported back.
+        stale_dispatched = self.search([
             ('transport', '=', 'direct_network'),
             ('status', '=', 'dispatched'),
             ('dispatch_deadline', '!=', False),
             ('dispatch_deadline', '<', now),
         ])
-        for job in stale_jobs:
+        for job in stale_dispatched:
             job.action_mark_direct_failed(
                 error_code='RESULT_TIMEOUT',
                 error_message=_("No print result was received before the deadline - "
                                 "the browser tab may have crashed, closed, or lost its "
                                 "connection."))
+
+        # B. Direct Auto jobs never claimed by any POS Browser at all.
+        stale_pending_auto = self.search([
+            ('transport', '=', 'direct_network'),
+            ('job_type', '=', 'auto'),
+            ('source', '=', 'pos_auto'),
+            ('status', '=', 'pending'),
+            ('claim_deadline', '!=', False),
+            ('claim_deadline', '<', now),
+        ])
+        for job in stale_pending_auto:
+            job.action_mark_direct_failed(
+                error_code='NO_EXECUTOR',
+                error_message=_("No active POS browser claimed this automatic print job "
+                                "before the deadline."))

@@ -118,6 +118,51 @@ Every job - Direct or Legacy Agent - is visible under **Printing →
 Print Jobs**, with a manual Reprint action (required reason,
 sequential print numbering) available on either path.
 
+### Phase 3 — POS Direct Auto Print Worker (code complete, hardware/Odoo.sh validation pending)
+
+Server-triggered Auto Print (Printer Only stations, and KDS+Printer
+stations with Auto Print switched on) now has a Direct Network
+execution path that needs zero `kds.printer`/Legacy Agent
+configuration - a POS Browser's own local worker claims and executes
+the print itself, over the same Direct ePOS transport and the same
+shared Canvas ticket renderer Internal KDS and Public Kiosk already
+use.
+
+- **Lifecycle**: `kds.print.job created (Pending, own claim_deadline)
+  → an eligible POS Browser's worker claims it (Dispatched,
+  direct_executor_id/direct_executor_pos_config_id/direct_claimed_at
+  recorded, own dispatch_deadline set) → the claiming browser executes
+  the print and reports a result (Printed / Failed)`.
+- **No automatic retry, no Agent fallback, no backup-printer
+  escalation** for this path - identical, honest failure handling to
+  every other Direct Network job. A `Pending` job nobody claims before
+  its own deadline fails with `error_code=NO_EXECUTOR`; a claimed job
+  whose executor never reports back fails with
+  `error_code=RESULT_TIMEOUT` - both handled by the same background
+  cron that already handles Manual/Public Kiosk Direct timeouts.
+- **Result-first local persistence**: the POS worker writes its own
+  print result to `localStorage` before reporting it to the server -
+  a dropped/failed report RPC is retried on the next cycle, but the
+  physical print itself is never re-attempted because of a reporting
+  failure.
+- **Ownership enforced server-side**: only the exact POS session/
+  device that claimed a job may report its own result for it -
+  verified against `direct_executor_id`/`direct_executor_pos_config_id`
+  on every report, not trusted from the client.
+- **Legacy Agent status - explicitly unchanged and RETAINED for now**:
+  `kds.printer`, every Agent route, Agent keys, and the Legacy Agent's
+  own retry/backup-printer escalation are completely untouched by this
+  phase and remain fully functional - this is a new, additional
+  execution path, not a replacement, until real Odoo.sh regression, a
+  genuine Epson hardware test, and an actual Printer Only / KDS+Printer
+  Auto Print run all confirm this new path end-to-end. The Legacy
+  Agent path is retained internally/temporarily for compatibility, not
+  scheduled for removal in this round.
+- **Not yet validated in this round**: a live Odoo.sh regression run
+  and a real POS Browser → Epson printer hardware test - both
+  explicitly reserved for the client's own environment. Nothing in
+  this document claims either has passed.
+
 ---
 
 ## KDS Lifecycle

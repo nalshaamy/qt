@@ -96,8 +96,24 @@ Technical module name: flexsys_kds
         # re-shows it on reconnect - no silent auto-retry, no false
         # success indication. See that file's own top-of-file comment
         # for the full behavior.
+        #
+        # PHASE 3 ("POS Direct Auto Print Worker"): three files added,
+        # in the explicit dependency order required - the shared
+        # ticket renderer and Direct ePOS adapter must both be
+        # available BEFORE the worker itself ever runs (the worker
+        # calls window.FlexSysTicketBuilder and imports
+        # flexsysPrintViaDirectEpos directly). Deliberately only these
+        # three - the Public Kiosk's own standalone files
+        # (flexsys_epos_direct_public.js and anything under
+        # static/src/public/) are NOT loaded here; POS uses the ES
+        # module adapter (flexsys_epos_direct_adapter.js), the same
+        # one Internal KDS already uses, not the Kiosk's own
+        # vanilla-JS equivalent.
         'point_of_sale._assets_pos': [
             'flexsys_kds/static/src/js/flexsys_kds_offline_send_warning.js',
+            'flexsys_kds/static/src/shared/flexsys_ticket_renderer.js',
+            'flexsys_kds/static/src/js/flexsys_epos_direct_adapter.js',
+            'flexsys_kds/static/src/js/flexsys_pos_direct_print_worker.js',
         ],
     },
     'installable': True,

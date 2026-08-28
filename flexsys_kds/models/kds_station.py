@@ -297,7 +297,68 @@ class KdsStation(models.Model):
         for vals in vals_list:
             vals.setdefault('kiosk_token', secrets.token_urlsafe(24))
             vals.setdefault('kiosk_token_regenerated_at', fields.Datetime.now())
+            # PHASE 3 ("POS Direct Auto Print Worker"), item A: the
+            # final Operating Mode / Auto Print contract - enforced
+            # here at the ORM layer, not left to onchange/UI alone, so
+            # it holds regardless of how a station is created (normal
+            # form, RPC, import, or a future integration this codebase
+            # doesn't control). 'printer_only' MUST always end up
+            # auto_print=True; 'kds_only' MUST always end up
+            # auto_print=False - even if the incoming vals explicitly
+            # said otherwise. 'kds_printer' is the only mode where the
+            # caller's own value (or the field's own default) is
+            # respected as-is.
+            mode = vals.get('operating_mode', self._fields['operating_mode'].default(self))
+            if mode == 'printer_only':
+                vals['auto_print'] = True
+            elif mode == 'kds_only':
+                vals['auto_print'] = False
         return super().create(vals_list)
+
+    def write(self, vals):
+        # PHASE 3, item A: the same enforcement as create() above,
+        # applied on write() too - required specifically for the
+        # explicit "switch operating_mode -> auto_print follows"
+        # contract (write({'operating_mode': 'printer_only'}) must
+        # itself flip auto_print to True in the SAME call, not require
+        # a second write), and for the "even a direct write({'auto_print':
+        # False}) on an already printer_only station must not stick"
+        # requirement.
+        #
+        # Handled per-record, not with one shared vals dict for the
+        # whole recordset: a mixed recordset (one station already
+        # 'printer_only', another already 'kds_only', both included in
+        # the same self.write(...) call) needs a DIFFERENT forced
+        # auto_print value for each - a single shared vals dict would
+        # incorrectly apply whichever value was computed last to every
+        # record in the batch. Only the two forced-mode branches get
+        # this per-record treatment; every other case (no
+        # operating_mode/auto_print key touched at all, or a
+        # 'kds_printer' station where the caller's own value must be
+        # respected as-is) is written in one normal batched
+        # super().write() call, exactly as before.
+        if ('operating_mode' in vals or 'auto_print' in vals) and len(self) > 1:
+            new_mode = vals.get('operating_mode')
+            for station in self:
+                effective_mode = new_mode if new_mode is not None else station.operating_mode
+                if effective_mode == 'printer_only':
+                    station_vals = dict(vals, auto_print=True)
+                elif effective_mode == 'kds_only':
+                    station_vals = dict(vals, auto_print=False)
+                else:
+                    station_vals = vals
+                super(KdsStation, station).write(station_vals)
+            return True
+
+        if 'operating_mode' in vals or 'auto_print' in vals:
+            new_mode = vals.get('operating_mode')
+            effective_mode = new_mode if new_mode is not None else (self.operating_mode if self else None)
+            if effective_mode == 'printer_only':
+                vals = dict(vals, auto_print=True)
+            elif effective_mode == 'kds_only':
+                vals = dict(vals, auto_print=False)
+
+        return super().write(vals)
 
     def action_regenerate_kiosk_token(self):
         for station in self:

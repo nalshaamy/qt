@@ -2853,35 +2853,19 @@ class PosOrder(models.Model):
         return old_station | new_line.station_id
 
     def _flexsys_kds_auto_print(self, kds_order):
+        # PHASE 3 ("POS Direct Auto Print Worker"), item B: this used
+        # to require station.printer_ids/kds.printer (the Legacy Agent
+        # path) - now creates a Direct Network job via
+        # create_direct_auto_print_job() instead, which never touches
+        # printer_ids at all. Trigger semantics themselves (WHEN this
+        # is called - on KDS order creation) are completely unchanged
+        # per explicit direction (item R); only HOW the print actually
+        # executes changed. Eligibility (operating_mode != kds_only,
+        # effective auto_print, Direct Network configured with an IP)
+        # and the "no broken job, log a configuration-error audit
+        # event instead" behavior for a missing Printer IP are now
+        # handled entirely inside that one method - kept here as a
+        # single, simple per-station loop rather than duplicating any
+        # of that logic in this caller.
         for station in kds_order.station_ids:
-            if not station.auto_print:
-                continue
-            # AUDIT FIX ("Auto Print Without a Valid Printer", MEDIUM):
-            # this used to build printer_id from
-            # `station.printer_ids.filtered('is_default')[:1] or
-            # station.printer_ids[:1]` and pass it straight into create()
-            # without checking whether either search actually found
-            # anything - a station with Auto Print enabled but zero
-            # printers configured got `printer_id: False` (an empty
-            # recordset's .id), silently creating a permanently
-            # unexecutable pending job that would sit in the queue
-            # forever with no alert to anyone. Now explicitly checks
-            # first and logs a clear configuration-error audit event
-            # instead of creating the broken job.
-            printer = station.printer_ids.filtered('is_default')[:1] or station.printer_ids[:1]
-            if not printer:
-                self.env['kds.event'].log(
-                    kds_order, event_type='override', station=station,
-                    note=_("CONFIGURATION ERROR: Auto Print is enabled for station "
-                           "'%s' but it has no printer configured - no print job "
-                           "was created. Add a printer to this station or disable "
-                           "Auto Print.") % station.name
-                )
-                continue
-            self.env['kds.print.job'].create({
-                'order_id': kds_order.id,
-                'station_id': station.id,
-                'printer_id': printer.id,
-                'job_type': 'auto',
-                'scope': 'station_items',
-            })
+            self.env['kds.print.job'].create_direct_auto_print_job(kds_order.id, station.id)

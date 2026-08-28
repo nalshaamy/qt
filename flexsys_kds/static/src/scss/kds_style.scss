@@ -502,6 +502,44 @@ body.o_flexsys_kiosk {
     100% { transform: rotate(360deg) scale(1); }
 }
 
+// UI ADJUSTMENT ("KDS Card Width - Visual Adjustment Only"): confirmed
+// live - on Full HD (>= 1600px, the Wide/4-column density tier), the
+// card was still wider than it needed to be - even a moderately long
+// product name stayed on one line with visible leftover horizontal
+// space instead of wrapping naturally at a more reasonable card width.
+// Visual-only change: column COUNT (4), row count (2), and the 8-card
+// max are all still computed exactly the same way by
+// flexsys_pagination.js/kds_app.js's own pagination.columns - nothing
+// about that logic is touched here. Only how WIDE each of those 4
+// columns/cards is allowed to become, at this one tier, changes.
+//
+// grid-template-columns here needs !important specifically because
+// kds_app.js's own inline style (t-attf-style="grid-template-columns:
+// repeat({{pagination.columns}}, minmax(0, 1fr))") is applied directly
+// on the element and would otherwise always win over a plain
+// stylesheet rule regardless of media query/specificity - this is the
+// standard, minimal way to override an inline style from CSS alone,
+// without needing to touch the pagination column-count logic itself
+// to also carry a width value.
+//
+// Placed deliberately AFTER both the .fs-grid and .fs-card base rules
+// above (not interleaved between .fs-grid and .fs-card, which would
+// let a naive "first .fs-card{ rule found" text-based check pick up
+// this override instead of the base rule) - a plain CSS specificity/
+// source-order override, not a restructuring of either base rule.
+//
+// Below 1600px: completely untouched - still the existing 3-column /
+// width: 95% behavior from .fs-card above, unaffected by this block.
+@media (min-width: 1600px) {
+    .fs-grid {
+        grid-template-columns: repeat(4, minmax(0, 340px)) !important;
+    }
+    .fs-card {
+        width: 100%;
+        max-width: 340px;
+    }
+}
+
 .fs-card-head {
     background: $fs-blue;
     color: #fff;

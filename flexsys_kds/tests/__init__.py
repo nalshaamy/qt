@@ -11,3 +11,4 @@ from . import test_phase2_direct_printing
 from . import test_phase2_direct_printing_http
 from . import test_pagination
 from . import test_station_printing_view_ui
+from . import test_phase3_pos_direct_auto_print
