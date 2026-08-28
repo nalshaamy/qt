@@ -27,12 +27,23 @@
             <form string="Station">
                 <sheet>
                     <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger" invisible="active"/>
-                    <div class="oe_button_box" name="button_box">
-                        <button class="oe_stat_button" type="object" name="action_view_printers" icon="fa-print"
-                                invisible="operating_mode == 'kds_only'">
-                            <field name="printer_count" widget="statinfo" string="Printers"/>
-                        </button>
-                    </div>
+                    <!-- UI CLEANUP ("Station Form Final Cleanup"), item 2:
+                         confirmed live - after Printing/Printers were
+                         merged into one "Printing" tab, this smart
+                         button (a shortcut to the same kds.printer
+                         records now already directly visible/editable
+                         inside that tab) duplicated the same
+                         functionality and reintroduced the exact
+                         confusion the merge itself was meant to
+                         resolve. Removed here - the button_box div
+                         itself removed too since this was its only
+                         button. action_view_printers (the underlying
+                         action/method on the model) is untouched and
+                         still callable from anywhere else it might be
+                         used - only this one visible entry point on
+                         the Station form is gone. Printer management
+                         itself remains fully available, now solely
+                         through the Printing tab's own embedded list. -->
                     <group>
                         <group>
                             <field name="name"/>
@@ -69,21 +80,6 @@
                             <field name="auto_accept_orders" invisible="operating_mode == 'printer_only'"/>
                             <field name="auto_print" invisible="operating_mode == 'kds_only'"/>
                         </group>
-                    </group>
-                    <!-- UI/DATA FIX ("Master Change Request", item 4,
-                         "Description Field Cleanup"): confirmed by
-                         usage check - description is a plain optional
-                         text field, not read or referenced by any other
-                         logic anywhere in this codebase (KDS Screen,
-                         kiosk, printing, routing, or otherwise). A
-                         dedicated, standalone notebook page for one
-                         optional free-text field overstated its own
-                         importance; folded into General instead, right
-                         below the two main field groups above - same
-                         field, same data, same behavior, just better
-                         organized. No separate page for it anymore. -->
-                    <group string="Description">
-                        <field name="description" nolabel="1"/>
                     </group>
                     <notebook>
                         <page string="SLA" invisible="operating_mode == 'printer_only'">
@@ -157,21 +153,28 @@
                                     <field name="flexsys_use_local_network_access"/>
                                 </group>
                             </group>
-                            <!-- C. Print Agent / Printer Management - the
-                                 legacy tab's own content, unchanged, now a
-                                 clearly-labeled section instead of a
-                                 separate tab. -->
-                            <separator string="Print Agent / Printer Management"/>
-                            <field name="printer_ids">
-                                <list editable="bottom">
-                                    <field name="name"/>
-                                    <field name="printer_type"/>
-                                    <field name="ip_address"/>
-                                    <field name="is_default"/>
-                                    <field name="is_backup"/>
-                                    <field name="status"/>
-                                </list>
-                            </field>
+                            <!-- COMMERCIAL UI CLEANUP ("Hide Legacy
+                                 Print Agent From Commercial UI"), item
+                                 2: confirmed live - the "Print Agent /
+                                 Printer Management" section (the
+                                 printer_ids list: default/backup roles,
+                                 Agent status, etc.) is removed from
+                                 this normal commercial Station form -
+                                 Direct Network / Epson ePOS is now
+                                 presented as the supported commercial
+                                 configuration here, with no Legacy
+                                 Agent controls alongside it to cause
+                                 the exact confusion this round exists
+                                 to remove. The printer_ids field itself
+                                 (and every kds.printer record it
+                                 relates to) is completely untouched at
+                                 the model/data level - only removed
+                                 from THIS view. Still directly editable
+                                 via the standalone kds.printer form/
+                                 list (see kds_printer_views.xml) for
+                                 backward-compatibility/admin
+                                 maintenance, per explicit direction not
+                                 to delete any of this. -->
                         </page>
                         <!-- UI/DATA FIX ("Master Change Request", item
                              4, "Description Field Cleanup"): the
@@ -227,6 +230,25 @@
                             <button name="action_regenerate_kiosk_token" type="object"
                                     string="Regenerate Kiosk Token" class="btn-secondary"
                                     confirm="This invalidates the current public kiosk URL for this station - any device already using it will stop working until you update it with the new URL. Continue?"/>
+                        </page>
+                        <!-- UI CLEANUP ("Station Form Final Cleanup"),
+                             item 1: confirmed live - the old standalone
+                             "Description" group sitting right above the
+                             notebook (added by an earlier round's own
+                             "Description Field Cleanup") reserved a
+                             large, mostly-empty block of vertical space
+                             at the very top of the form even when no
+                             notes were actually present, for every
+                             single station regardless of whether it
+                             ever uses this field. Moved into its own
+                             tab instead - last in the tab order, per
+                             explicit direction - so the space is only
+                             ever used when actually opened, not
+                             reserved by default on every station. Same
+                             field, same data, same behavior - only
+                             where it's displayed changed. -->
+                        <page name="flexsys_notes" string="Notes">
+                            <field name="description" nolabel="1"/>
                         </page>
                     </notebook>
                 </sheet>

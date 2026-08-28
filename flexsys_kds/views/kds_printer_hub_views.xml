@@ -18,8 +18,16 @@
                              12, "Printing Landing"): shortened - the
                              card descriptions below already say what
                              each destination is for; this line doesn't
-                             need to repeat it. -->
-                        <p class="text-muted mb-0">Printers and print job history.</p>
+                             need to repeat it.
+                             COMMERCIAL AGENT UI CLEANUP ("Final Visible
+                             Text Closeout"), item 1: confirmed live -
+                             the prior subtitle still named "Printers"
+                             first, as if it were a primary commercial
+                             destination, contradicting the prior
+                             round's own removal of that card. Updated
+                             below to describe what the two current
+                             cards actually are. -->
+                        <p class="text-muted mb-0">Direct Network settings and print job history.</p>
                     </div>
                     <!-- UI/DATA FIX ("Printing UI & Job History - Final
                          Cleanup Before Testing"), items 1 & 2: the
@@ -30,28 +38,25 @@
                          Two even columns (col-md-6) replace the
                          original three (col-md-4) now that only two
                          cards remain. -->
+                    <!-- COMMERCIAL UI CLEANUP ("Hide Legacy Print
+                         Agent From Commercial UI"), item 1: confirmed
+                         live - the "Printers" card (kds.printer/Legacy
+                         Agent management) is no longer a primary
+                         entry point in the commercial Printing UI, now
+                         that Direct Network configuration lives per-
+                         station instead (Station -> Printing tab).
+                         action_kds_printer/action_kds_printer_hub
+                         themselves and every kds.printer record are
+                         completely unchanged and untouched - only this
+                         one card, on this one landing page, is
+                         replaced. Print Jobs remains the primary
+                         operational card for BOTH transports (Direct
+                         Network and Legacy Agent) - unchanged, still
+                         the same first card position. The new second
+                         card replaces "Printers" with a direct link to
+                         Station configuration, where Direct Network
+                         printing is actually set up now. -->
                     <div class="row g-3">
-                        <div class="col-12 col-md-6">
-                            <div class="card o_kds_hub_block h-100">
-                                <div class="card-body d-flex flex-column">
-                                    <div class="o_kds_hub_icon mb-3"><i class="fa fa-print" role="img" aria-label="Printers"/></div>
-                                    <h5 class="card-title">Printers</h5>
-                                    <!-- UI/DATA FIX ("Master Change
-                                         Request", item 12): shortened,
-                                         and "connection status" ->
-                                         "agent status" - matching item
-                                         13's own naming fix (this
-                                         reflects the Print Agent's own
-                                         heartbeat, never a verified
-                                         physical connection). -->
-                                    <p class="card-text text-muted flex-grow-1">
-                                        Printer setup per station - default/backup roles, agent status.
-                                    </p>
-                                    <button name="%(action_kds_printer)d" type="action"
-                                            string="Open Printers" class="btn btn-primary o_kds_hub_btn"/>
-                                </div>
-                            </div>
-                        </div>
                         <div class="col-12 col-md-6">
                             <div class="card o_kds_hub_block h-100">
                                 <div class="card-body d-flex flex-column">
@@ -67,6 +72,19 @@
                                     </p>
                                     <button name="%(action_kds_print_job)d" type="action"
                                             string="Open Print Jobs" class="btn btn-primary o_kds_hub_btn"/>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="card o_kds_hub_block h-100">
+                                <div class="card-body d-flex flex-column">
+                                    <div class="o_kds_hub_icon mb-3"><i class="fa fa-desktop" role="img" aria-label="Station Printing Settings"/></div>
+                                    <h5 class="card-title">Station Printing Settings</h5>
+                                    <p class="card-text text-muted flex-grow-1">
+                                        Configure Direct Network printing (Epson ePOS) per station - Printer IP and Local Network Access, under each station's own Printing tab.
+                                    </p>
+                                    <button name="%(action_kds_station)d" type="action"
+                                            string="Open Stations" class="btn btn-primary o_kds_hub_btn"/>
                                 </div>
                             </div>
                         </div>

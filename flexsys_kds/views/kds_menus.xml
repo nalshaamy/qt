@@ -18,19 +18,22 @@
     <menuitem id="menu_kds_station" name="Stations" parent="menu_kds_configuration" action="action_kds_station" sequence="10"/>
     <menuitem id="menu_kds_routing" name="Routing" parent="menu_kds_configuration" action="action_kds_routing_rule" sequence="20"/>
 
-    <!-- Consolidated per explicit request: one "Printers" menu entry
-         opening a landing page with two cards (Printers / Print Jobs -
-         see kds_printer_hub.py), replacing the flat menu items that
-         used to sit here. UI/DATA FIX ("Printing UI & Job History -
-         Final Cleanup Before Testing"): the earlier three-card version
-         (Printers / Print Jobs / Reprints) had a separate Reprints
-         destination; that card and its own action_kds_reprint_log are
-         both removed - Print Jobs now covers both print and reprint
-         history in one screen. The two remaining actions
-         (action_kds_printer, action_kds_print_job) are untouched -
-         action_kds_printer specifically is still used directly by
-         kds.station's own "Printers" smart button. -->
-    <menuitem id="menu_kds_printer_hub" name="Printers" parent="menu_kds_configuration" action="action_kds_printer_hub" sequence="30"/>
+    <!-- COMMERCIAL UI CLEANUP ("Hide Legacy Print Agent From
+         Commercial UI"): menu label changed from "Printers" to
+         "Printing" - the landing page it opens no longer leads with
+         Printer/Agent management as its own primary card (see
+         kds_printer_hub_views.xml's own current two cards: Print Jobs
+         + Station Printing Settings), so keeping "Printers" as this
+         menu's own label would reintroduce the same misleading
+         mismatch this whole round exists to remove. action_kds_printer
+         itself (and every kds.printer record) is completely untouched
+         - it has no menu entry of its own any more (its own former
+         "Printers" smart button on the Station form was already
+         removed in an earlier round too), but remains fully callable
+         for backward-compatibility/admin maintenance, per explicit
+         direction not to delete it. action_kds_printer_hub/
+         action_kds_print_job are both untouched. -->
+    <menuitem id="menu_kds_printer_hub" name="Printing" parent="menu_kds_configuration" action="action_kds_printer_hub" sequence="30"/>
 
     <menuitem id="menu_kds_audit_log" name="Audit Log" parent="menu_kds_configuration" action="action_kds_event" sequence="60"/>
 

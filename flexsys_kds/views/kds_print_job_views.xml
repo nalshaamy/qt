@@ -87,7 +87,20 @@
                 <field name="transport" widget="badge"
                        decoration-info="transport == 'direct_network'"
                        decoration-muted="transport == 'agent'"/>
-                <field name="printer_id"/>
+                <!-- COMMERCIAL UI CLEANUP ("Hide Legacy Print Agent
+                     From Commercial UI"), item 4: printer_id is a
+                     Legacy Agent-only concept (a Direct Network job's
+                     own printer_id is empty by design - it has no
+                     kds.printer record at all, see printer_target
+                     just below instead, already always visible for
+                     that transport). optional="hide" - not deleted
+                     from this view, not removed from the model - just
+                     no longer shown by default so it doesn't compete
+                     for space in the normal commercial list; a user
+                     who genuinely needs it can still switch it on
+                     from this list's own Optional Fields (⚙) menu at
+                     any time. -->
+                <field name="printer_id" optional="hide"/>
                 <field name="printer_target" string="Target (Direct)"
                        invisible="transport != 'direct_network'"/>
                 <field name="display_job_type" string="Job Type" widget="badge"
@@ -97,7 +110,16 @@
                 <field name="scope"/>
                 <field name="reason" string="Reprint Reason"/>
                 <field name="status" decoration-success="status == 'printed'" decoration-danger="status == 'failed'" decoration-warning="status in ('pending','dispatched')" widget="badge"/>
-                <field name="retry_count"/>
+                <!-- COMMERCIAL UI CLEANUP, item 4: retry_count/escalated
+                     are both exclusively Legacy Agent concepts (Direct
+                     Network has neither automatic retry nor
+                     backup-printer escalation at all - see
+                     action_mark_direct_failed()'s own docstring in
+                     models/kds_print_job.py). optional="hide" for the
+                     same reason as printer_id above - present, not
+                     deleted, just not competing for space by default
+                     in the normal commercial view. -->
+                <field name="retry_count" optional="hide"/>
                 <!-- UI/DATA FIX ("Master Change Request", item 18,
                      "Failover Visibility"): a widget/help addition
                      only - when a job escalates to a backup printer
@@ -115,14 +137,36 @@
                      the underlying error/lease/agent details this list
                      deliberately doesn't try to cram in. -->
                 <field name="escalated" widget="boolean_toggle"
+                       optional="hide"
                        help="True on the original job when it was escalated to a backup printer after repeated failures - see the backup printer's own separate job row, right next to this one once grouped by Order."/>
                 <field name="user_id"/>
+                <!-- COMMERCIAL UI CLEANUP ("Hide Legacy Print Agent
+                     From Commercial UI"), item 4: source (Internal
+                     KDS / Public Kiosk) was previously only visible
+                     inside each job's own form - now shown directly
+                     in the list, next to user_id (a Public Kiosk job
+                     has no user_id at all - source explains where the
+                     request came from either way), matching the
+                     explicit list of fields the commercial view
+                     should prioritize. -->
+                <field name="source"/>
                 <field name="create_date" string="Created On"/>
                 <!-- CORRECTION, item 1: Printed/Failed time and Error
                      now visible directly in the list, not only inside
                      each job's own form. -->
+                <!-- COMMERCIAL UI CLEANUP, item 4: dispatched_at added
+                     alongside printed_at/failed_at for the same reason
+                     as source above - was form-only before this, now
+                     completes the requested Dispatched -> Printed/
+                     Failed timeline directly in the list. -->
+                <field name="dispatched_at"/>
                 <field name="printed_at"/>
                 <field name="failed_at"/>
+                <!-- COMMERCIAL UI CLEANUP, item 4: error_code was
+                     previously form-only - added here alongside
+                     error, matching the explicit "Error Code / Error"
+                     pairing requested for the commercial list. -->
+                <field name="error_code" invisible="not error_code"/>
                 <field name="error" string="Error"/>
             </list>
         </field>

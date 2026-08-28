@@ -110,10 +110,29 @@
                          picture for whoever actually needs it (usually
                          once, while building the external agent
                          itself, not on every visit to this form). -->
+                    <!-- COMMERCIAL UI CLEANUP ("Hide Legacy Print
+                         Agent From Commercial UI"), item 3: confirmed
+                         live - the prior banner text ("this module
+                         does not talk to a physical printer directly")
+                         is no longer accurate now that Direct Network
+                         (Epson ePOS) is the primary supported
+                         commercial path - Odoo's own browser DOES talk
+                         directly to the printer for that transport.
+                         This form itself is Legacy Agent-specific
+                         (kds.printer only exists for that path -
+                         Direct Network needs no printer record at all,
+                         configured instead per-station under Station
+                         -> Printing), so the banner now says so
+                         explicitly rather than making a claim about
+                         the product's own printing architecture as a
+                         whole. -->
                     <div class="alert alert-info" role="alert">
-                        This module manages the print queue - it does not talk to a physical printer
-                        directly. A separate Print Agent process handles that; see
-                        <code>docs/PRINT_AGENT.md</code> for the full protocol.
+                        This record configures a Legacy Print Agent printer specifically - a
+                        separate Print Agent process handles the actual printing for it; see
+                        <code>docs/PRINT_AGENT.md</code> for the full protocol. Direct Network
+                        (Epson ePOS) printing, FlexSys's own primary supported path, needs no
+                        printer record here at all - it's configured per-station instead, under
+                        that station's own Printing tab.
                     </div>
                     <group>
                         <group>

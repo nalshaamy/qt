@@ -1361,8 +1361,27 @@ msgstr "الطابعات"
 
 #. module: flexsys_kds
 #: views/kds_printer_hub_views.xml
-msgid "Printers and print job history."
-msgstr "الطابعات وسجل مهام الطباعة."
+msgid "Direct Network settings and print job history."
+msgstr "إعدادات الشبكة المباشرة وسجل مهام الطباعة."
+
+#. module: flexsys_kds
+#: views/kds_printer_hub_views.xml
+msgid "Station Printing Settings"
+msgstr "إعدادات طباعة المحطة"
+
+#. module: flexsys_kds
+#: views/kds_printer_hub_views.xml
+msgid "Open Stations"
+msgstr "فتح المحطات"
+
+#. module: flexsys_kds
+#: views/kds_printer_hub_views.xml
+msgid ""
+"Configure Direct Network printing (Epson ePOS) per station - Printer IP "
+"and Local Network Access, under each station's own Printing tab."
+msgstr ""
+"إعداد الطباعة عبر الشبكة المباشرة (Epson ePOS) لكل محطة - عنوان IP "
+"الطابعة والوصول للشبكة المحلية، ضمن تبويب الطباعة الخاص بكل محطة."
 
 #. module: flexsys_kds
 #: views/kds_printer_hub_views.xml
@@ -1903,3 +1922,8 @@ msgid ""
 msgstr ""
 "لم تصل نتيجة الطباعة قبل الموعد النهائي - قد يكون تبويب المتصفح قد تعطَّل "
 "أو أُغلق أو فقد الاتصال."
+
+#. module: flexsys_kds
+#: model:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
+msgid "Notes"
+msgstr "ملاحظات"
