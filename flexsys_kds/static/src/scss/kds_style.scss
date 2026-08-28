@@ -274,27 +274,21 @@ body.o_flexsys_kiosk {
 }
 
 .fs-grid {
-    // Card width tightened to the requested preferred range (was capped
-    // at 420px, now 380px - still comfortably above the 320px minimum,
-    // fits more columns on a Full HD screen). justify-content:start
-    // still packs used tracks together (see the detailed comment kept
-    // on the public kiosk's own .grid rule in controllers/kds_kiosk.py
-    // for the full excessive-spacing explanation this traces back to).
+    // HIGH-DENSITY LAYOUT ("Restore the approved pagination design"):
+    // grid-template-columns is now set inline per-render from
+    // JS (kds_app.js's own pagination.columns, computed by the
+    // shared static/src/shared/flexsys_pagination.js) - 3 columns at
+    // Normal density, 4 at Compact/Fullscreen density - REPLACING the
+    // previous auto-fit/minmax approach, which let the browser pack an
+    // unbounded number of columns/rows and grow the whole order area
+    // vertically with no fixed page size at all. This base rule is
+    // now only a fallback for the brief instant before the first
+    // inline style is applied.
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 380px));
+    grid-template-columns: repeat(3, 1fr);
     gap: 12px;
     justify-content: start;
-    justify-items: start;
-    // HIGH-DENSITY LAYOUT (dev request, point 2: "card height should
-    // primarily follow its actual content... should NOT be forced to
-    // occupy a large fixed height"): CSS Grid items default to
-    // align-items:stretch, meaning every card in a row is silently
-    // force-stretched to match the TALLEST card in that same row - a
-    // 1-item order sitting next to a 10-item order would get pulled
-    // tall to match it, pushing its own action button far below its
-    // actual content with a large empty gap in between. align-items:
-    // start overrides that default so each card sizes to its own
-    // natural content height instead, independent of its row-mates.
+    justify-items: stretch;
     align-items: start;
 }
 
@@ -303,6 +297,52 @@ body.o_flexsys_kiosk {
     text-align: center;
     padding: 40px;
     color: #7a8598;
+}
+
+// HIGH-DENSITY LAYOUT: fixed navigation bar under the card grid -
+// large, touch-friendly buttons and a clear "N / total" status, per
+// the explicit "not like small backend-table pagination" requirement.
+// Kept as a normal flow element (not position:fixed) so it never
+// overlaps cards/action buttons regardless of screen height.
+.fs-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 16px 0 4px;
+}
+
+.fs-pagination-btn {
+    min-width: 64px;
+    min-height: 64px;
+    border-radius: 14px;
+    border: none;
+    background: #1e88e5;
+    color: #fff;
+    font-size: 28px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:disabled {
+        background: #2a3340;
+        color: #5a6578;
+        cursor: default;
+    }
+
+    &:not(:disabled):active {
+        background: #1565c0;
+    }
+}
+
+.fs-pagination-status {
+    min-width: 96px;
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    color: #eef2f7;
 }
 
 .fs-card {

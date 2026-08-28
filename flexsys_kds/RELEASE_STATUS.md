@@ -13,9 +13,10 @@ models that no longer exist).
 
 ## Current Version
 
-`19.0.7.29.12` (development baseline). Final renumbering to the first
-commercial baseline, `19.0.1.0.0`, happens after all release gates
-below pass and the client gives explicit approval - not automatic.
+`19.0.1.0.0` — the first Commercial Demo Candidate baseline. A real,
+clean Odoo 19 regression has been confirmed on Odoo.sh:
+**0 failed, 0 error(s) of 588 post-tests** (see "Commercial Readiness
+Status" below for exactly what that gate does and does not cover).
 
 ---
 
@@ -30,9 +31,13 @@ below pass and the client gives explicit approval - not automatic.
 - Live SLA tracking per station, with a periodic freshness refresh.
 - Optional Expeditor / Packing final-assembly stage - a real tracked
   task (own state machine, timestamps, separate SLA), not just a flag.
-- Printing: job queue with an atomic claim/lease mechanism and a
-  versioned payload contract for an external Print Agent (not
-  included - see [docs/PRINT_AGENT.md](docs/PRINT_AGENT.md)).
+- Printing: two dispatch paths side by side, both managed through the
+  same `kds.print.job` record for every production print - Direct
+  Network (browser-executed Epson ePOS, no external software) and the
+  original external Print Agent path (job queue with an atomic
+  claim/lease mechanism and a versioned payload contract; not included
+  - see [docs/PRINT_AGENT.md](docs/PRINT_AGENT.md)). Odoo IoT is
+  reserved, not yet implemented.
 - Role-based security (Operator / Supervisor / Branch Manager /
   Administrator), station-scoped record rules, protected-field write
   guards.
@@ -61,22 +66,50 @@ invalidation, a live check of the station's own current
 
 ## Printing
 
-- One immutable `kds.print.job` record per actual print/reprint
-  request.
+Two dispatch paths, both managed through the same central
+`kds.print.job` record for every production print - no print ever
+happens outside that record's own history, regardless of which path
+executes it (`transport`: `direct_network` / `agent` / `iot`
+[reserved]).
+
+**Direct Network (Epson ePOS)**:
+
+- Configured per-station (Station → Printing tab: Printer IP, Local
+  Network Access).
+- Lifecycle: `Print requested → kds.print.job created (Dispatched) →
+  browser executes the print over Direct ePOS → result reported back
+  (Printed / Failed)`.
+- A Direct job left "Dispatched" past its own short deadline (browser
+  tab crashed/closed/lost connection before reporting back) is
+  automatically marked Failed by a background check - it never sits
+  showing "Printing" indefinitely.
+- No automatic retry and no backup-printer escalation for this path -
+  a failed Direct attempt is simply Failed; the operator presses Print
+  again, which creates a fresh job.
+- Ticket rendering: FlexSys's own Canvas-based renderer (shared
+  identically between the Internal Screen and the Public Kiosk) draws
+  the ticket with real browser font shaping (Arabic/English/mixed),
+  then converts it to a monochrome raster (Floyd-Steinberg dithering)
+  before sending it to the printer - not printer-resident fonts.
+
+**Legacy Print Agent** (the original path, still fully supported for
+a station not yet configured for Direct Network):
+
 - Atomic claim/lease: `_claim_pending_jobs()` uses a single
   `UPDATE ... WHERE ... RETURNING` with PostgreSQL's
   `FOR UPDATE SKIP LOCKED`, so two concurrent agent calls for the same
-  printer can never claim the same job. This is the only supported
-  dispatch path - the legacy `action_dispatch()` method has been
-  removed.
+  printer can never claim the same job.
 - Automatic retry with backup-printer fallback after repeated
   failures, each escalation independently audited.
 - Printer metadata (`port`, `usb_identifier`, `serial_number`) is kept
   as reference documentation for whoever configures the external Print
-  Agent - not read by any Odoo-side logic, by design (Odoo manages the
-  queue; a separate process talks to the physical printer).
+  Agent - not read by any Odoo-side logic, by design.
 - No external Print Agent is included - building and deploying one is
   a separate project, against the documented protocol.
+
+Every job - Direct or Legacy Agent - is visible under **Printing →
+Print Jobs**, with a manual Reprint action (required reason,
+sequential print numbering) available on either path.
 
 ---
 
@@ -228,20 +261,21 @@ below for the schema-removal decision this is pending.
 
 ## Automated Test Count
 
-**563 tests** as of this document, covering `py_compile`, XML
-well-formedness, and JS syntax on every file on every change, plus
-functional/behavioral coverage for every area above. Internally
-consistent and known to pass these static checks; **actually running
-the full suite against a live Odoo 19 instance is a separate,
-required gate** - this environment has no live Odoo instance to run
-it against (see "Commercial Readiness Status" below).
+**588 tests** as of this document (`py_compile`, XML well-formedness,
+and JS syntax checked on every file on every change, plus
+functional/behavioral coverage for every area above, including the
+Direct Printing / `kds.print.job` lifecycle). Confirmed passing a real
+run against a live Odoo 19 instance - see "Commercial Readiness
+Status" below.
 
 ---
 
 ## Known Limitations
 
 - **No external Print Agent is included.** Building and deploying one
-  is a separate project against the documented protocol.
+  is a separate project against the documented protocol - only
+  required for a station configured for the Legacy Agent path; Direct
+  Network printing needs no external software at all.
 - **The `priority` field and its Selection values remain in the
   schema, inactive.** Priority/Urgent/VIP has been fully removed as a
   product feature (no UI, no filter, no action, no operational
@@ -273,8 +307,8 @@ it against (see "Commercial Readiness Status" below).
 | Manifest parses, no orphaned data-file references | ✅ Pass |
 | ACL entries all reference an existing model | ✅ Pass (verified programmatically) |
 | Menu items all reference an existing action | ✅ Pass (verified programmatically) |
-| Automated test suite (563 tests) internally consistent | ✅ Pass |
-| Automated test suite actually run against live Odoo 19 | ⚠️ **Not verified in this environment - no live instance available** |
+| Automated test suite (588 tests) internally consistent | ✅ Pass |
+| Automated test suite actually run against live Odoo 19 | ✅ **Confirmed on Odoo.sh: 0 failed, 0 error(s) of 588 post-tests** |
 | Live two-screen realtime check (backend + kiosk simultaneously) | ⚠️ **Requires a live instance** |
 | Module upgrade test on an existing development database | ⚠️ **Requires a live instance** |
 | Live regression pass: POS → Routing → KDS → Preparing → Ready → Completed, quantity increase/decrease/to-zero, cancellation, refund, multi-station, all three Operating Modes, Public Kiosk token enforcement, printing claim/lease | ⚠️ **Requires a live instance - the client's own environment is the only one available for this** |
@@ -282,8 +316,10 @@ it against (see "Commercial Readiness Status" below).
 | Priority field schema-removal decision | ⏳ Deferred to first commercial baseline build |
 | Development migrations excluded from commercial package | ⏳ Classified, not yet executed - pending approval |
 | Arabic backend/Internal KDS/Public Kiosk translation coverage (current code) | ✅ Pass - AST-verified against current Python; both screens' own operational labels confirmed complete |
-| Arabic thermal/Print Agent output | ⚠️ **Not tested - requires a live Print Agent and physical printer** |
+| Arabic thermal output (Direct Network raster + Legacy Print Agent) | ⚠️ **Not yet performed by the client - actual 80mm printer output review remains pending** |
 | Live visual RTL rendering (all required screens) | ⚠️ **Requires a live instance** |
+| Live visual review (general commercial polish, both KDS screens) | ⚠️ **Not yet performed by the client - pending** |
+| End-to-end commercial demo rehearsal | ⚠️ **Not yet performed by the client - pending** |
 | Full translation completeness audit (XML views/selection labels) | ⏳ Python coverage confirmed; XML requires Odoo's own export tool on a live instance |
 | Arabic runtime scenario pass (POS → Send → KDS → ... → Completed, in Arabic) | ⚠️ **Requires a live instance** |
 

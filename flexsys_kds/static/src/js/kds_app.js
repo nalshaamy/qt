@@ -88,6 +88,16 @@ export class FlexSysKdsScreen extends Component {
         // loadOrders()/loadStations() manage.
         this.fsState = useState({ isFullscreen: false });
 
+        // HIGH-DENSITY LAYOUT ("Restore the approved pagination
+        // design"): a separate local reactive object, same reasoning
+        // as fsState above - page number and viewport width are pure
+        // browser/DOM-derived presentation state for this one screen
+        // instance, never server-synced KDS data, so they don't belong
+        // in this.store.state either. viewportWidth starts from the
+        // real window size immediately (not a guessed default) so the
+        // very first render already uses the correct density.
+        this.pagState = useState({ page: 1, viewportWidth: window.innerWidth });
+
         // Multi-language: the user's language drives both which translated
         // strings render (handled transparently by _t()/backend *_label
         // fields once i18n/*.po is imported) and whether this screen
@@ -161,6 +171,20 @@ export class FlexSysKdsScreen extends Component {
                 this.fsState.isFullscreen = Boolean(document.fullscreenElement);
             };
             document.addEventListener("fullscreenchange", this._onFullscreenChange);
+            // HIGH-DENSITY LAYOUT: viewport width drives Normal (3x2)
+            // vs Compact (4x2) density directly - not the Fullscreen
+            // API/fsState alone (per the explicit "don't rely only on
+            // the word Fullscreen; use viewport width too"
+            // requirement) - so this listens for resize independently
+            // of the fullscreenchange listener above. Does not reset
+            // the current page itself; a resize that doesn't change
+            // the resulting page count leaves the operator on the same
+            // page (paginate()'s own clamping in
+            // flexsys_pagination.js handles the case where it does).
+            this._onResize = () => {
+                this.pagState.viewportWidth = window.innerWidth;
+            };
+            window.addEventListener("resize", this._onResize);
         });
         onWillUnmount(() => {
             document.body.classList.remove(KIOSK_BODY_CLASS);
@@ -169,6 +193,7 @@ export class FlexSysKdsScreen extends Component {
             this._unsubscribeBus();
             clearInterval(this._clockHandle);
             document.removeEventListener("fullscreenchange", this._onFullscreenChange);
+            window.removeEventListener("resize", this._onResize);
         });
     }
 
@@ -262,6 +287,36 @@ export class FlexSysKdsScreen extends Component {
         return orders;
     }
 
+    // HIGH-DENSITY LAYOUT: the shared, deterministic pagination pass
+    // (static/src/shared/flexsys_pagination.js, the same file Public
+    // Kiosk also loads and calls) runs on top of filteredOrders above
+    // - never re-sorting/re-filtering, only slicing the already-stable
+    // array into pages. Workflow/state/filter semantics themselves are
+    // completely untouched by this getter.
+    get pagination() {
+        return window.FlexSysPagination.paginate(
+            this.filteredOrders,
+            this.pagState.viewportWidth,
+            this.pagState.page
+        );
+    }
+
+    get paginatedOrders() {
+        return this.pagination.currentPageOrders;
+    }
+
+    onPrevPage() {
+        if (this.pagState.page > 1) {
+            this.pagState.page -= 1;
+        }
+    }
+
+    onNextPage() {
+        if (this.pagState.page < this.pagination.totalPages) {
+            this.pagState.page += 1;
+        }
+    }
+
     get orderTypeOptions() {
         // Static, not derived from loaded orders - order types are a
         // fixed set (kds.order.order_type Selection), so every option is
@@ -353,22 +408,31 @@ export class FlexSysKdsScreen extends Component {
 
     onSetFilter(filter) {
         this.store.setFilter(filter);
+        // HIGH-DENSITY LAYOUT: "Filtering must reset/clamp the current
+        // page correctly" - a fresh, narrower/wider result set may no
+        // longer have as many pages as the position the operator was
+        // previously on.
+        this.pagState.page = 1;
     }
 
     onSelectOrderTypeFilter(ev) {
         this.store.setOrderTypeFilter(ev.target.value);
+        this.pagState.page = 1;
     }
 
     onSelectEmployeeFilter(ev) {
         this.store.setEmployeeFilter(ev.target.value);
+        this.pagState.page = 1;
     }
 
     onSelectCompanyFilter(ev) {
         this.store.setCompanyFilter(ev.target.value);
+        this.pagState.page = 1;
     }
 
     onSelectPosConfigFilter(ev) {
         this.store.setPosConfigFilter(ev.target.value);
+        this.pagState.page = 1;
     }
 
     onLineAction = (lineId, action, reason) => {

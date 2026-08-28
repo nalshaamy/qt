@@ -46,7 +46,7 @@ the moment an order requires it, with no manual re-entry.
 - Automatic POS quantity reconciliation
 - Live SLA monitoring per station
 - Optional Expeditor / Packing final-assembly stage
-- Kitchen printing with external Print Agent integration
+- Kitchen printing: Direct Network (Epson ePOS) or external Print Agent
 - Role- and station-based security
 - Multi-company support
 - Arabic / English localization with RTL support
@@ -152,19 +152,44 @@ extra step.
 
 ## 10. Printing
 
-FlexSys KDS manages a print job queue with an atomic claim mechanism,
-so a job can never be picked up by two agents at once. It does not
-talk to a physical printer directly — an external **Print Agent**
-process polls the queue, prints, and reports back (see
-[docs/PRINT_AGENT.md](docs/PRINT_AGENT.md) for the full protocol; the
-agent itself is deployed separately and is not included with this
-module).
+FlexSys KDS supports two dispatch paths side by side, both managed
+through the same central `kds.print.job` record for every production
+print — no print ever happens outside that record's own history.
 
-Includes automatic retry on failure, escalation to a configured backup
-printer after repeated failures, and a manual Reprint action with a
-required reason and sequential print numbering — so the original
-ticket and every reprint stay clearly distinguishable in the job
-history.
+**Direct Network (Epson ePOS)** — the primary, browser-executed path.
+Configured per-station (Station → Printing tab: Printer IP, Local
+Network Access). The KDS screen's own browser talks directly to the
+Epson printer over the local network — no external software required
+on the client machine. Lifecycle:
+
+```
+Print requested → kds.print.job created (Dispatched)
+→ browser executes the print over Direct ePOS
+→ result reported back (Printed / Failed)
+```
+
+A Direct job left "Dispatched" past its own short deadline (the
+browser tab crashed, was closed, or lost its connection before
+reporting back) is automatically marked Failed by a background check
+— it never sits showing "Printing" indefinitely.
+
+**Legacy Print Agent** — the original, still-fully-supported path for
+a station not yet configured for Direct Network. An external **Print
+Agent** process polls the same `kds.print.job` queue with an atomic
+claim mechanism (a job can never be picked up by two agents at once),
+prints, and reports back (see [docs/PRINT_AGENT.md](docs/PRINT_AGENT.md)
+for the full protocol; the agent itself is deployed separately and is
+not included with this module). Includes automatic retry on failure,
+escalation to a configured backup printer after repeated failures, and
+a manual Reprint action with a required reason and sequential print
+numbering.
+
+**Odoo IoT** — reserved for a future release; not implemented in this
+version. A station cannot be configured for it yet.
+
+Every job — Direct or Legacy Agent — is visible under **Printing →
+Print Jobs**, showing its own transport, target, status, and
+timestamps.
 
 ## 11. SLA
 
@@ -222,8 +247,11 @@ remains under full administrator control.
 Arabic and English localization with RTL support. Arabic localization
 is provided for the Odoo backend, the Internal KDS screen, and the
 Public Kiosk, with RTL-aware layouts. Printed tickets support Arabic
-product names and notes; actual output quality depends on the
-configured Print Agent and printer's own font/encoding support.
+product names and notes; for Direct Network printing, FlexSys's own
+Canvas-based renderer draws the ticket using the browser's own font
+shaping before rasterizing it — for the Legacy Print Agent path,
+actual output quality depends on the configured Agent and printer's
+own font/encoding support instead.
 
 ## 16. Installation
 
@@ -241,9 +269,13 @@ configured Print Agent and printer's own font/encoding support.
    this scopes what they can see and act on.
 2. **Routing**: configure explicit Routing Rules, or rely on the
    simpler per-product/per-category default station fields.
-3. **Printing** (optional): create Printers under a station, then
-   deploy an external Print Agent process against the documented
-   protocol — see [docs/PRINT_AGENT.md](docs/PRINT_AGENT.md).
+3. **Printing** (optional): under each station's own **Printing** tab,
+   choose **Direct Network** (enter the printer's IP address — the
+   station's own browser talks to the Epson printer directly, no extra
+   software needed) or continue using the **Legacy Print Agent** path
+   (create Printers under the station, then deploy an external Print
+   Agent process against the documented protocol — see
+   [docs/PRINT_AGENT.md](docs/PRINT_AGENT.md)).
 4. **POS Send-to-KDS Settings**: per point of sale, choose when an
    order reaches the kitchen (see Section 5).
 5. **Expeditor/Packing** (optional): mark one station as the
@@ -259,12 +291,17 @@ verifying a deployment.
 
 ## 19. Known Limitations
 
-- **External Print Agent is deployed separately** from the Odoo addon
-  — it is not included, and must be set up against the documented
-  protocol before physical printing will work.
+- **Direct Network printing** requires the station's browser to reach
+  the Epson printer's IP over the local network — no external software
+  needed for this path.
+- **Legacy Print Agent is deployed separately** from the Odoo addon
+  — it is not included, and only needs to be set up if a station is
+  configured for that path instead of Direct Network.
+- **Odoo IoT** is reserved for a future release — not selectable yet.
 - **Printer hardware/encoding compatibility** (including for Arabic
-  text) depends on the configured Print Agent and the physical
-  printer itself, not on this module alone.
+  text) is handled by FlexSys's own Canvas-based renderer for Direct
+  Network printing; for the Legacy Print Agent path, it still depends
+  on the configured Agent and the physical printer itself.
 - **Station, order-type, and source names** entered as operational
   business data (e.g. a station's own display name) are user-maintained
   data, not static translated UI labels — they display exactly as

@@ -78,6 +78,11 @@ Technical module name: flexsys_kds
             # window.FlexSysTicketBuilder, not an import, so its own
             # position here is what guarantees load order for it).
             'flexsys_kds/static/src/shared/flexsys_ticket_renderer.js',
+            # HIGH-DENSITY LAYOUT: window.FlexSysPagination must be
+            # defined before kds_app.js's own pagination getter could
+            # ever call it - same load-order reasoning as the ticket
+            # renderer immediately above.
+            'flexsys_kds/static/src/shared/flexsys_pagination.js',
             'flexsys_kds/static/src/js/flexsys_epos_direct_adapter.js',
             'flexsys_kds/static/src/js/kds_app.js',
             'flexsys_kds/static/src/xml/kds_templates.xml',

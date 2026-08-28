@@ -115,13 +115,29 @@
         </div>
         </div>
 
-        <div class="fs-grid">
-            <t t-foreach="filteredOrders" t-as="order" t-key="order.id">
+        <div class="fs-grid" t-attf-style="grid-template-columns: repeat({{pagination.columns}}, 1fr);">
+            <t t-foreach="paginatedOrders" t-as="order" t-key="order.id">
                 <KdsOrderCard order="order" onLineAction="onLineAction" onOrderAction="onOrderAction"
                               onPrintClick="onPrintClick" printingEnabled="printingEnabled"
                               celebrate="state.celebrateOrderIds.includes(order.id)"/>
             </t>
             <div class="fs-empty" t-if="!filteredOrders.length" t-esc="labels.noOrders"/>
+        </div>
+
+        <!-- HIGH-DENSITY LAYOUT: fixed page navigation, always visible
+             in a bottom bar rather than requiring scroll to reach -
+             even a single-page result set shows it, both to stay in a
+             consistent position and to make "1 / 1" itself a clear,
+             at-a-glance confirmation that everything currently
+             matching the filter fits on one screen. -->
+        <div class="fs-pagination" t-if="filteredOrders.length">
+            <button class="fs-pagination-btn" t-on-click="onPrevPage" disabled="pagState.page &lt;= 1">
+                <t t-esc="isRtl ? '▶' : '◀'"/>
+            </button>
+            <span class="fs-pagination-status" t-esc="pagState.page + ' / ' + pagination.totalPages"/>
+            <button class="fs-pagination-btn" t-on-click="onNextPage" disabled="pagState.page &gt;= pagination.totalPages">
+                <t t-esc="isRtl ? '◀' : '▶'"/>
+            </button>
         </div>
     </div>
 </t>

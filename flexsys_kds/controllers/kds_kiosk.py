@@ -643,6 +643,7 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
      it, which must load before the inline script below that calls
      printOrder(). -->
 <script src="/flexsys_kds/static/src/shared/flexsys_ticket_renderer.js"></script>
+<script src="/flexsys_kds/static/src/shared/flexsys_pagination.js"></script>
 <script src="/flexsys_kds/static/src/public/flexsys_epos_direct_public.js"></script>
 <style>
   :root{
@@ -727,25 +728,27 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
   body.light-theme .fbtn{ background:#fff; color:#3a4a58; border-color:#c7d6e0; }
   body.light-theme .fbtn .fcount{ background:rgba(0,0,0,.06); }
   .grid{
-    /* Card width tightened to the requested preferred range (was capped
-       at 420px, now 380px - still comfortably above the 320px minimum,
-       fits more columns on a Full HD screen). justify-content:start
-       still packs used tracks together (see the detailed comment kept
-       below from the previous round's fix). */
-    height:calc(100vh - 180px); overflow-y:auto; display:grid;
-    grid-template-columns:repeat(auto-fit, minmax(320px,380px)); gap:14px; padding:14px 18px;
-    /* HIGH-DENSITY LAYOUT (dev request, point 2: "card height should
-       primarily follow its actual content... should NOT be forced to
-       occupy a large fixed height"): CSS Grid items default to
-       align-items:stretch, meaning every card in a row is silently
-       force-stretched to match the TALLEST card in that same row - a
-       1-item order sitting next to a 10-item order would get pulled
-       tall to match it, pushing its own action button far below its
-       actual content with a large empty gap in between. align-items:
-       start overrides that default so each card sizes to its own
-       natural content height instead, independent of its row-mates. */
-    align-content:start; justify-content:start; justify-items:start; align-items:start;
+    /* HIGH-DENSITY LAYOUT ("Restore the approved pagination design"):
+       fixed-height scrolling grid REPLACED with a fixed page size -
+       grid-template-columns is now set inline from JS per render()
+       (see updateGridColumns()), matching the same Normal (3)/Compact
+       (4) column count Internal KDS's own shared
+       flexsys_pagination.js computes - no independent copy of that
+       density logic here. No more height/overflow-y - the page bar
+       below replaces scrolling as the way to reach more orders. */
+    display:grid; gap:14px; padding:14px 18px;
+    align-content:start; justify-content:start; justify-items:stretch; align-items:start;
   }
+  .pagination{
+    display:flex; align-items:center; justify-content:center; gap:24px; padding:10px 0 4px;
+  }
+  .pagination button{
+    min-width:64px; min-height:64px; border-radius:14px; border:none;
+    background:var(--fs-blue); color:#fff; font-size:28px; font-weight:700; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .pagination button:disabled{ background:#2a3340; color:#5a6578; cursor:default; }
+  .pagination-status{ min-width:96px; text-align:center; font-size:22px; font-weight:700; color:#eef2f7; }
   .card{
     background:#fff; border-radius:14px; overflow:hidden;
     display:flex; flex-direction:column; position:relative;
@@ -926,13 +929,14 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
   <div class="header-right">
     <button class="theme-toggle" id="fullscreenToggle" onclick="toggleFullscreen()" aria-label="Toggle fullscreen"></button>
     <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle light/dark mode"></button>
-    <div class="conn"><span class="dot dot-on" id="dot"></span><span id="connLabel">Online</span></div>
+    <div class="conn"><span class="dot dot-on" id="dot"></span><span id="connLabel"></span></div>
   </div>
 </div>
 <div class="filters" id="filters"></div>
 <div class="grid" id="grid"></div>
+<div class="pagination" id="pagination"></div>
 <div class="statbar">
-  <span>Orders <b id="statOrders">0</b> &nbsp; Avg. Prep <b id="statAvg">--</b> min &nbsp; Late <b id="statLate">0</b></span>
+  <span><span id="lblStatsOrders"></span> <b id="statOrders">0</b> &nbsp; <span id="lblStatsAvgPrep"></span> <b id="statAvg">--</b> <span id="lblStatsMinAbbrev"></span> &nbsp; <span id="lblStatsLate"></span> <b id="statLate">0</b></span>
   <span>KIOSK-%(station_code)s</span>
 </div>
 
@@ -955,6 +959,8 @@ const KIOSK_LABELS_EN = {
   noOrders: 'No orders for this filter.',
   branchLabel: 'Branch', timeLabel: 'Time', wasStage: 'was',
   enterFullscreen: 'Enter fullscreen', exitFullscreen: 'Exit fullscreen',
+  online: 'Online', offline: 'Offline',
+  statsOrders: 'Orders', statsAvgPrep: 'Avg. Prep', statsMinAbbrev: 'min', statsLate: 'Late',
 };
 const KIOSK_LABELS_AR = {
   filterAll: 'الكل', filterNew: 'جديد', filterPreparing: 'قيد التحضير',
@@ -963,6 +969,8 @@ const KIOSK_LABELS_AR = {
   noOrders: 'لا توجد طلبات لهذا الفلتر.',
   branchLabel: 'الفرع', timeLabel: 'الوقت', wasStage: 'كان',
   enterFullscreen: 'فتح ملء الشاشة', exitFullscreen: 'الخروج من ملء الشاشة',
+  online: 'متصل', offline: 'غير متصل',
+  statsOrders: 'الطلبات', statsAvgPrep: 'متوسط التحضير', statsMinAbbrev: 'د', statsLate: 'متأخر',
 };
 const KIOSK_LANG = %(kiosk_lang)r;
 const KIOSK_LABELS = KIOSK_LANG === 'ar' ? KIOSK_LABELS_AR : KIOSK_LABELS_EN;
@@ -1018,6 +1026,10 @@ function normalizeDirectPrintError(result) {
 
 let ORDERS = [];
 let FILTER = 'all';
+// HIGH-DENSITY LAYOUT: 1-based, same convention as Internal KDS's own
+// pagState.page - reset to 1 by setFilter() below whenever the
+// filtered result set changes shape.
+let KIOSK_PAGE = 1;
 let PRINTING_ENABLED = false;
 let WAS_READY = new Set(); // order ids that were fully-Ready as of the last poll
 let CELEBRATE_IDS = new Set(); // order ids that just NOW became fully-Ready this poll
@@ -1255,13 +1267,13 @@ async function loadOrders() {
 
     ORDERS = res.orders;
     PRINTING_ENABLED = res.printing_enabled;
-    dot.className = 'dot dot-on'; label.textContent = 'Online';
+    dot.className = 'dot dot-on'; label.textContent = KIOSK_LABELS.online;
     document.getElementById('statOrders').textContent = res.stats.orders_count;
     document.getElementById('statAvg').textContent = res.stats.avg_prep_time || '--';
     document.getElementById('statLate').textContent = res.stats.late_count;
     render();
   } else {
-    dot.className = 'dot dot-off'; label.textContent = 'Offline';
+    dot.className = 'dot dot-off'; label.textContent = KIOSK_LABELS.offline;
   }
 }
 
@@ -1291,7 +1303,7 @@ function renderFilters() {
   `).join('');
 }
 
-function setFilter(f) { FILTER = f; render(); }
+function setFilter(f) { FILTER = f; KIOSK_PAGE = 1; render(); }
 
 // Small inline SVGs (no external icon font - keeps the kiosk page fully
 // self-contained). Kept intentionally simple per the reference design.
@@ -1473,8 +1485,24 @@ function render() {
     orders = orders.filter(o => o.effective_stage === FILTER);
   }
 
+  // HIGH-DENSITY LAYOUT: the SAME shared, deterministic pagination
+  // pass Internal KDS uses (static/src/shared/flexsys_pagination.js,
+  // loaded above in <head>) - never re-sorted/shuffled here, only
+  // sliced. KIOSK_PAGE itself is clamped by paginate() below, so a
+  // realtime refresh (loadOrders() -> render(), on the existing
+  // polling interval) that doesn't change the page count leaves the
+  // operator on the same page.
+  const pageResult = window.FlexSysPagination.paginate(orders, window.innerWidth, KIOSK_PAGE);
+  KIOSK_PAGE = pageResult.currentPage;
+
   const grid = document.getElementById('grid');
-  if (!orders.length) { grid.innerHTML = `<div class="empty">${KIOSK_LABELS.noOrders}</div>`; return; }
+  grid.style.gridTemplateColumns = `repeat(${pageResult.columns}, 1fr)`;
+  if (!orders.length) {
+    grid.innerHTML = `<div class="empty">${KIOSK_LABELS.noOrders}</div>`;
+    document.getElementById('pagination').innerHTML = '';
+    return;
+  }
+  orders = pageResult.currentPageOrders;
 
   grid.innerHTML = orders.map(order => {
     // Card frame color: blue = normal/active, red = late (even if it did
@@ -1557,7 +1585,7 @@ function render() {
         <div class="line-main">
           <div class="line-title-row">
             <span class="line-title">${l.qty} × ${l.product_name}</span>
-            <span class="line-badge line-badge-cancelled">CANCELLED</span>
+            <span class="line-badge line-badge-cancelled">${KIOSK_LABELS.filterCancelled}</span>
           </div>
         </div>
       </div>`;
@@ -1617,6 +1645,40 @@ function render() {
       </div>
     `;
   }).join('');
+
+  // HIGH-DENSITY LAYOUT: bottom navigation bar, always rendered
+  // (even for a single page) - same reasoning as Internal KDS's own
+  // fs-pagination: a consistent, always-visible position, and "1 / 1"
+  // itself is a clear confirmation everything fits on one screen.
+  const pag = document.getElementById('pagination');
+  const isRtl = document.documentElement.dir === 'rtl';
+  const prevIcon = isRtl ? '▶' : '◀';
+  const nextIcon = isRtl ? '◀' : '▶';
+  pag.innerHTML = `
+    <button ${pageResult.currentPage <= 1 ? 'disabled' : ''} onclick="prevPage()">${prevIcon}</button>
+    <span class="pagination-status">${pageResult.currentPage} / ${pageResult.totalPages}</span>
+    <button ${pageResult.currentPage >= pageResult.totalPages ? 'disabled' : ''} onclick="nextPage()">${nextIcon}</button>
+  `;
+}
+
+function prevPage() {
+  if (KIOSK_PAGE > 1) {
+    KIOSK_PAGE -= 1;
+    render();
+  }
+}
+
+function nextPage() {
+  // No pre-check needed here (unlike prevPage's own simple lower-bound
+  // check): render()'s own call to paginate() below already clamps
+  // KIOSK_PAGE back down to the real, FILTER-aware totalPages on every
+  // call - computing that same bound independently here would risk
+  // exactly the kind of drift a shared, single source of truth exists
+  // to prevent (this button is also visually disabled at the true
+  // last page already, via render()'s own pageResult.currentPage >=
+  // pageResult.totalPages check above).
+  KIOSK_PAGE += 1;
+  render();
 }
 
 async function advance(orderId) {
@@ -1775,6 +1837,24 @@ async function printOrder(orderId) {
 
 loadOrders();
 setInterval(loadOrders, 4000);
+// PUBLIC KIOSK ARABIC UI COMPLETION: static label text (never changes
+// after load, unlike the dynamic stat VALUES already updated inside
+// loadOrders() above) filled in once here from the selected
+// KIOSK_LABELS dictionary - connLabel also gets its own initial value
+// here so it never flashes hardcoded English before the first
+// loadOrders() response arrives and updates it again.
+document.getElementById('connLabel').textContent = KIOSK_LABELS.online;
+document.getElementById('lblStatsOrders').textContent = KIOSK_LABELS.statsOrders;
+document.getElementById('lblStatsAvgPrep').textContent = KIOSK_LABELS.statsAvgPrep;
+document.getElementById('lblStatsMinAbbrev').textContent = KIOSK_LABELS.statsMinAbbrev;
+document.getElementById('lblStatsLate').textContent = KIOSK_LABELS.statsLate;
+// HIGH-DENSITY LAYOUT: render() itself now derives column count from
+// window.innerWidth on every call - a resize alone (no new order
+// data at all) must still re-render so density/pagination stay
+// correct for the new viewport size. Does not touch KIOSK_PAGE
+// itself; paginate()'s own clamping inside render() handles a resize
+// that changes the resulting page count.
+window.addEventListener('resize', render);
 </script>
 </body>
 </html>
