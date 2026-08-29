@@ -141,9 +141,36 @@ class FlexSysKdsTestCommon(TransactionCase):
     # -----------------------------------------------------------------
     @classmethod
     def _make_test_pos_config(cls, name, **overrides):
+        """AUDIT FIX ("Phase 3 Focused Odoo.sh Result"): confirmed
+        live - passing company_id inside vals does NOT change which
+        company Odoo evaluates company-dependent DEFAULTS under
+        (warehouse, picking_type_id, journal_id, invoice_journal_id,
+        etc. on pos.config all default based on self.env.company, not
+        on any value inside vals). A bare
+        cls.env['pos.config'].create({'company_id': company_b.id, ...})
+        therefore still computes those defaults under whichever
+        company env.company currently is (typically the suite's own
+        default company) - producing a pos.config whose own
+        company_id is genuinely company_b, but whose own journals/
+        warehouse still belong to the WRONG company, which Odoo's own
+        _check_company then correctly rejects with a UserError. Fixed
+        by switching the acting company via with_company(company)
+        specifically when a company_id override is supplied, so
+        env.company during default evaluation actually IS that same
+        company - the standard, correct Odoo way to create a record
+        "as" a specific company, rather than duplicating Odoo's own
+        default-resolution logic by hand (e.g. manually attaching a
+        Company B journal here) for fields Odoo already knows how to
+        default correctly once env.company itself is set right.
+        """
         vals = {'name': name, 'payment_method_ids': [(6, 0, [])]}
         vals.update(overrides)
-        return cls.env['pos.config'].create(vals)
+        config_model = cls.env['pos.config']
+        company_id = vals.get('company_id')
+        if company_id:
+            company = cls.env['res.company'].browse(company_id)
+            config_model = config_model.with_company(company)
+        return config_model.create(vals)
 
     @classmethod
     def _route_line_to_station(cls, line, station):

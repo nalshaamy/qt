@@ -1700,3 +1700,28 @@ class TestPhase3PosDirectAutoPrint(FlexSysKdsTestCommon):
         self.assertIn('safe_limit = 1', claim_method)
         self.assertIn("'limit': safe_limit,", claim_method)
         self.assertNotIn("'limit': limit,", claim_method)
+
+    def test_v50_make_test_pos_config_helper_respects_company_override(self):
+        """AUDIT FIX ("Phase 3 Focused Odoo.sh Result"): confirmed
+        live on Odoo.sh - the shared _make_test_pos_config() helper
+        used to create the record under whatever env.company already
+        was, regardless of a company_id override in vals - Odoo's own
+        company-dependent DEFAULTS for pos.config (journal_id,
+        invoice_journal_id, picking_type_id, warehouse, etc. all
+        default based on self.env.company, not on any vals content)
+        then silently picked up the WRONG company's own journals/
+        warehouse, which Odoo's own _check_company correctly rejected
+        with a UserError - exactly the two live ERRORs reported. This
+        regression test creates a genuine Company B pos.config through
+        the fixed helper and confirms every company-dependent field
+        Odoo actually populated is genuinely Company B's own - not
+        merely that config_b.company_id itself says so."""
+        config_b = self._make_test_pos_config('V50 Helper Company Check', company_id=self.company_b.id)
+        self.assertEqual(config_b.company_id, self.company_b)
+        for field_name in ('journal_id', 'invoice_journal_id', 'picking_type_id'):
+            related_record = getattr(config_b, field_name, False)
+            if related_record:
+                self.assertEqual(
+                    related_record.company_id, self.company_b,
+                    "%s must belong to Company B, not leak a default from another company." % field_name
+                )

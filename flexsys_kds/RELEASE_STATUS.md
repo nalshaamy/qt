@@ -29,7 +29,7 @@ stale hardcoded test-count assertion, a comment-triggered false
 positive, a pre-Phase-3 Auto Print test never rewritten, and missing
 Arabic translations for new Phase 3 `_()` strings) have since been
 identified and corrected in the current package - see the Change Log
-below. This corrected package (724 static test methods as of this
+below. This corrected package (725 static test methods as of this
 document) has **not yet** been re-run against a live Odoo 19 instance
 - see "Commercial Readiness Status" below for the exact, current gate
 status; no PASS is claimed for this package until that re-run happens
@@ -78,6 +78,26 @@ that session/config as any authority at all - a valid token alone
 never bypasses Odoo's own multi-company boundary. (4) An empty/falsy
 `executor_id` is now rejected outright on both claim and report,
 rather than being silently accepted as "no device identity."
+
+**Phase 3 Focused Odoo.sh Result - shared test helper fix (test-only,
+no production changes)**: a live focused run of
+`TestPhase3PosDirectAutoPrint` (88 post-tests, 90 tests, 0 failed, 2
+errors) surfaced two ERRORs, both in Company-B `pos.config` test
+fixture setup, not in Phase 3 production code. Root cause: the shared
+`tests/common.py::_make_test_pos_config()` helper passed `company_id`
+inside the `vals` dict, but still executed `create(vals)` under
+whichever company `self.env.company` already was - Odoo's own
+company-dependent DEFAULTS on `pos.config` (`journal_id`,
+`invoice_journal_id`, `picking_type_id`, warehouse, etc.) are all
+resolved from `self.env.company`, not from any value inside `vals`,
+so the Company B config's own defaults silently came from the wrong
+company, which Odoo's own `_check_company` correctly rejected as a
+`UserError`. Fixed by switching to `with_company(company)` before
+`create()` specifically when a `company_id` override is supplied -
+the standard, Odoo-documented way to create a record "as" a given
+company (see Odoo's own Multi-company Guidelines) - rather than
+manually re-implementing Odoo's own default-resolution logic for
+individual fields.
 
 ---
 
@@ -370,7 +390,7 @@ below for the schema-removal decision this is pending.
 
 ## Automated Test Count
 
-**724 static test methods** as of this document (`py_compile`, XML
+**725 static test methods** as of this document (`py_compile`, XML
 well-formedness, and JS syntax checked on every file on every change,
 plus functional/behavioral coverage for every area above, including
 the Direct Printing / `kds.print.job` lifecycle, the Pagination
@@ -390,7 +410,7 @@ has been verified by direct static execution in this environment
 (real, standalone `unittest` runs, or direct source-contract checks
 against the actual files - see each suite's own HONEST SCOPE NOTE for
 what that does and does not prove) but **not yet** re-run as part of a
-live Odoo 19 regression. No claim is made here that all 724 have
+live Odoo 19 regression. No claim is made here that all 725 have
 passed together against a live
 instance - that run is still pending (see "Commercial Readiness
 Status" below).
@@ -434,7 +454,7 @@ Status" below).
 | Manifest parses, no orphaned data-file references | ✅ Pass |
 | ACL entries all reference an existing model | ✅ Pass (verified programmatically) |
 | Menu items all reference an existing action | ✅ Pass (verified programmatically) |
-| Automated test suite (724 static test methods) internally consistent | ✅ Pass |
+| Automated test suite (725 static test methods) internally consistent | ✅ Pass |
 | Last confirmed live Odoo.sh regression baseline (0 failed, 0 errors) | ✅ **636 post-tests (662 tests total)** (pre-Phase-3 package) |
 | Version 45 live Odoo.sh Phase-3 validation run | ❌ **5 failed, 2 errors of 692 post-tests (720 tests total)** — all 7 root causes since identified and fixed in the current package; kept as an honest historical record, not removed on a later successful run |
 | Corrected package (this document's own current test count) re-run against live Odoo 19 | ⚠️ **Not yet run - awaiting a fresh Odoo.sh regression** |
