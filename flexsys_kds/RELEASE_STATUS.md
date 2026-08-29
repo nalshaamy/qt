@@ -17,14 +17,67 @@ models that no longer exist).
 
 **Last confirmed live Odoo.sh regression baseline (pre-Phase-3): 0
 failed, 0 error(s) of 636 post-tests (662 tests total).** That result
-is real and stands - but it was run against the package *before*
-Phase 3's own new POS Direct Auto Print Worker tests (and this
-round's own audit-correction tests) were added. This current package
-includes those additional tests (692 static test methods total) and
-has **not yet** been run against a live Odoo 19 instance - see
-"Commercial Readiness Status" below for the exact, current gate
-status; no runtime result is claimed for this package until that run
-happens.
+is real and stands - it was run against the package *before* Phase
+3's own new POS Direct Auto Print Worker tests were added.
+
+**Version 45 live Odoo.sh Phase-3 validation run: 5 failed, 2 errors
+of 692 post-tests (720 tests total).** This is a real, honest result
+from an actual Odoo.sh regression run of the Phase-3 package, NOT a
+"not yet run" placeholder - all 7 root causes (an unsafe Legacy Agent
+atomic claim LIMIT query, two test-fixture group-field-name bugs, a
+stale hardcoded test-count assertion, a comment-triggered false
+positive, a pre-Phase-3 Auto Print test never rewritten, and missing
+Arabic translations for new Phase 3 `_()` strings) have since been
+identified and corrected in the current package - see the Change Log
+below. This corrected package (724 static test methods as of this
+document) has **not yet** been re-run against a live Odoo 19 instance
+- see "Commercial Readiness Status" below for the exact, current gate
+status; no PASS is claimed for this package until that re-run happens
+and actually confirms it.
+
+**Version 47 - POS session identity security correction**: confirmed
+against Odoo 19's own real source
+(`pos_session.py::_load_pos_data_fields()` explicitly loads
+`access_token` into `pos.session` data sent to the POS frontend) that
+Odoo 19 genuinely allows the SAME `pos.session` to be used by a
+DIFFERENT authenticated user than whoever originally opened it -
+`session.user_id == env.user` was therefore not a valid session-
+ownership proof and has been removed from `claim_direct_auto_jobs()`
+and `report_pos_direct_auto_result()`. Session identity is now proven
+with the session's own standard `access_token`, compared with
+`odoo.tools.consteq()` (constant-time, never a plain `==`), plus a
+check that the calling user is a genuine `point_of_sale.group_pos_user`
+account. A new `direct_executor_pos_session_id` field records the
+exact claiming session so a result report must come from that same
+session again. The POS worker never persists this token to
+`localStorage` - only `pos_session_id` (an identifier) is stored for
+result-retry purposes; the live in-memory
+`this.pos.session.access_token` is read fresh at retry time. A stale
+result marker belonging to a different, older session is discarded
+locally rather than reported or allowed to block the current
+session's own claims indefinitely - the server-side timeout lifecycle
+(`RESULT_TIMEOUT`) remains the authoritative resolution for that old
+job.
+
+**Version 48 - final claim/security corrections**: (1) the atomic
+Direct Auto claim SQL now always uses a hardcoded `safe_limit = 1`
+regardless of the caller-supplied `limit` argument - the POS worker
+only ever consumes `claimed[0]`, so a caller requesting more than one
+could have dispatched jobs the worker never physically prints,
+eventually timing out unprinted; the server, not the client, enforces
+exactly one claim per call. (2) A rescue/recovery `pos.session` (Odoo
+19's own concept, explicitly excluded from normal interactive session
+selection by Odoo's own POS controller) is rejected on both claim and
+result-report, independent of session state. (3) Explicit caller ->
+session company isolation restored on both `claim_direct_auto_jobs()`
+and `report_pos_direct_auto_result()`: since `sudo()` on the
+session/station lookups deliberately bypasses ordinary record rules,
+the RPC itself now re-checks that the authenticated caller is allowed
+in the session's own company (`self.env.companies`) before trusting
+that session/config as any authority at all - a valid token alone
+never bypasses Odoo's own multi-company boundary. (4) An empty/falsy
+`executor_id` is now rejected outright on both claim and report,
+rather than being silently accepted as "no device identity."
 
 ---
 
@@ -317,7 +370,7 @@ below for the schema-removal decision this is pending.
 
 ## Automated Test Count
 
-**692 static test methods** as of this document (`py_compile`, XML
+**724 static test methods** as of this document (`py_compile`, XML
 well-formedness, and JS syntax checked on every file on every change,
 plus functional/behavioral coverage for every area above, including
 the Direct Printing / `kds.print.job` lifecycle, the Pagination
@@ -326,15 +379,19 @@ suite - operating-mode enforcement, job creation/idempotency, atomic
 claim/eligibility revalidation, session ownership, timeouts, payload
 content, and the audit-correction tests from this round).
 
-The **last confirmed live Odoo.sh run (0 failed, 0 error(s))** covered
-**636 post-tests (662 tests total)** - the package as it stood
-*before* Phase 3. Every test added since (Phase 3's own suite, plus
-this round's own audit-correction tests) has been verified by direct
-static execution in this environment (real, standalone `unittest`
-runs, or direct source-contract checks against the actual files - see
-each suite's own HONEST SCOPE NOTE for what that does and does not
-prove) but **not yet** as part of a live Odoo 19 regression run. No
-claim is made here that all 692 have passed together against a live
+The **last confirmed live Odoo.sh run with 0 failed, 0 error(s)**
+covered **636 post-tests (662 tests total)** - the package as it
+stood *before* Phase 3. The Phase-3 package was subsequently run live
+on Odoo.sh (Version 45): **5 failed, 2 errors of 692 post-tests (720
+tests total)** - a real result, not a placeholder. Every one of the 7
+root causes behind those failures has since been identified and fixed
+in this current package (see the Change Log). This corrected package
+has been verified by direct static execution in this environment
+(real, standalone `unittest` runs, or direct source-contract checks
+against the actual files - see each suite's own HONEST SCOPE NOTE for
+what that does and does not prove) but **not yet** re-run as part of a
+live Odoo 19 regression. No claim is made here that all 724 have
+passed together against a live
 instance - that run is still pending (see "Commercial Readiness
 Status" below).
 
@@ -377,9 +434,10 @@ Status" below).
 | Manifest parses, no orphaned data-file references | ✅ Pass |
 | ACL entries all reference an existing model | ✅ Pass (verified programmatically) |
 | Menu items all reference an existing action | ✅ Pass (verified programmatically) |
-| Automated test suite (692 static test methods) internally consistent | ✅ Pass |
-| Last confirmed live Odoo.sh regression baseline | ✅ **0 failed, 0 error(s) of 636 post-tests (662 tests total)** (pre-Phase-3 package) |
-| Current 692-test package (incl. Phase 3 + this round's audit corrections) run against live Odoo 19 | ⚠️ **Not yet run - awaiting a fresh Odoo.sh regression** |
+| Automated test suite (724 static test methods) internally consistent | ✅ Pass |
+| Last confirmed live Odoo.sh regression baseline (0 failed, 0 errors) | ✅ **636 post-tests (662 tests total)** (pre-Phase-3 package) |
+| Version 45 live Odoo.sh Phase-3 validation run | ❌ **5 failed, 2 errors of 692 post-tests (720 tests total)** — all 7 root causes since identified and fixed in the current package; kept as an honest historical record, not removed on a later successful run |
+| Corrected package (this document's own current test count) re-run against live Odoo 19 | ⚠️ **Not yet run - awaiting a fresh Odoo.sh regression** |
 | Live two-screen realtime check (backend + kiosk simultaneously) | ⚠️ **Requires a live instance** |
 | Module upgrade test on an existing development database | ⚠️ **Requires a live instance** |
 | Live regression pass: POS → Routing → KDS → Preparing → Ready → Completed, quantity increase/decrease/to-zero, cancellation, refund, multi-station, all three Operating Modes, Public Kiosk token enforcement, printing claim/lease | ⚠️ **Requires a live instance - the client's own environment is the only one available for this** |

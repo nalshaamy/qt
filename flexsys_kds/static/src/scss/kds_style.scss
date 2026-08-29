@@ -530,13 +530,19 @@ body.o_flexsys_kiosk {
 //
 // Below 1600px: completely untouched - still the existing 3-column /
 // width: 95% behavior from .fs-card above, unaffected by this block.
+//
+// UI ADJUSTMENT ("KDS Card Width - 360px experiment"): the trial
+// max-width raised from 340px to 360px at this same >= 1600px tier -
+// visual width only, nothing else in this block's own rules changed
+// (still 4 columns x 2 rows, still max 8 cards/page, still no
+// !important override below 1600px).
 @media (min-width: 1600px) {
     .fs-grid {
-        grid-template-columns: repeat(4, minmax(0, 340px)) !important;
+        grid-template-columns: repeat(4, minmax(0, 360px)) !important;
     }
     .fs-card {
         width: 100%;
-        max-width: 340px;
+        max-width: 360px;
     }
 }
 

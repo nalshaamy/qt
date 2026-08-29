@@ -416,16 +416,32 @@ class TestPosSync(FlexSysKdsTestCommon):
         self.assertTrue(alert_events, "A configuration-error audit event should be logged instead.")
 
     def test_auto_print_with_a_valid_printer_still_works(self):
-        printer = self.env['kds.printer'].create({
-            'name': 'Test Kitchen Printer (auto-print regression)',
-            'station_id': self.station_kitchen.id,
-            'is_default': True,
+        """AUDIT FIX ("Version 45 - Odoo.sh Regression Corrections"),
+        item 5: confirmed live - this test belonged to the
+        PRE-Phase-3 Auto Print contract (a station's own auto_print
+        creating a Legacy Agent job linked through printer_id/
+        kds.printer). Rewritten to the current, approved contract: a
+        Direct Network-configured station's own KDS order creation now
+        produces exactly one Direct Auto job (transport=direct_network,
+        job_type=auto, source=pos_auto, status=pending, printer_id
+        False, printer_target the station's own configured IP) -
+        never a kds.printer/Agent job. Legacy Agent's own Auto Print
+        behavior is NOT restored here; it remains covered separately
+        by this suite's own dedicated Legacy Agent tests."""
+        self.station_kitchen.write({
+            'operating_mode': 'printer_only',
+            'flexsys_printing_method': 'direct_network',
+            'flexsys_printer_ip': '192.168.1.55',
         })
-        self.station_kitchen.auto_print = True
         order = self._create_pos_order([(self.product_burger, 1)])
         jobs = self.env['kds.print.job'].search([('order_id', '=', order.kds_order_id.id)])
         self.assertEqual(len(jobs), 1)
-        self.assertEqual(jobs.printer_id, printer)
+        self.assertEqual(jobs.transport, 'direct_network')
+        self.assertEqual(jobs.job_type, 'auto')
+        self.assertEqual(jobs.source, 'pos_auto')
+        self.assertEqual(jobs.status, 'pending')
+        self.assertFalse(jobs.printer_id)
+        self.assertEqual(jobs.printer_target, '192.168.1.55')
 
     # -----------------------------------------------------------------
     # Audit finding "POS Cancellation Propagation" (IMPORTANT/NEW): a POS

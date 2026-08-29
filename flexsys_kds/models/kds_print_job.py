@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError, ValidationError
+from odoo.tools import consteq
 
 MAX_AUTO_RETRY = 2
 
@@ -194,6 +195,31 @@ class KdsPrintJob(models.Model):
              "job - used for the same result-reporting ownership check "
              "as direct_executor_id, and to scope which POS sessions "
              "may claim which stations' own jobs in the first place.")
+    # AUDIT FIX ("Version 47 - Odoo 19 POS Session Identity
+    # Correction"): confirmed against Odoo 19's own real source
+    # (pos_session.py's own _load_pos_data_fields() explicitly loads
+    # 'access_token' as part of the pos.session data sent to the POS
+    # frontend) that Odoo 19 genuinely allows the SAME pos.session to
+    # be opened/used by a DIFFERENT user than the one who originally
+    # created it ("Session opened by User A, User B later opens the
+    # same POS Config, Odoo gives User B the same existing session -
+    # session.user_id stays User A"). session.user_id == env.user is
+    # therefore NOT a valid proof of "this POS Browser genuinely owns
+    # this session" under Odoo 19's own real behavior - the standard
+    # pos.session.access_token (verified with a constant-time compare,
+    # never session.user_id) is the actual session-identity proof now,
+    # exactly like direct_executor_id already proves DEVICE identity.
+    # This field records the EXACT session that claimed a job -
+    # required so a later result report can be checked against the
+    # SAME session capability that performed the claim, not merely
+    # "some session with a matching config".
+    direct_executor_pos_session_id = fields.Many2one(
+        'pos.session', string='Claiming POS Session',
+        readonly=True, copy=False, index=True,
+        help="The exact pos.session (proven via its own access_token, "
+             "not session.user_id) whose worker claimed this Direct "
+             "Auto job. A result report must come from this exact "
+             "session again, re-proven with the same token check.")
     direct_claimed_at = fields.Datetime(
         help="When an eligible POS Browser's own worker successfully "
              "claimed this Direct Auto job (pending -> dispatched). "
@@ -418,6 +444,27 @@ class KdsPrintJob(models.Model):
         database, but this is a well-known, widely-used SQL pattern
         rather than something version-specific to Odoo itself.
 
+        REAL BUG FIX, confirmed live on Odoo.sh ("Version 45 - Odoo.sh
+        Regression Corrections"): the original `UPDATE ... WHERE id IN
+        (SELECT ... LIMIT ... FOR UPDATE SKIP LOCKED)` shape - a
+        correlated subquery targeting the SAME table the outer UPDATE
+        writes to - is unsafe: PostgreSQL's own planner may execute
+        that subquery more than once via a nested-loop-style plan,
+        rather than materializing it exactly once before the UPDATE
+        runs. Live-proven failure: 5 eligible jobs, limit=2, produced
+        5 claimed/updated rows instead of 2 - the LIMIT was
+        effectively not honored. Rewritten as an explicit `WITH
+        claimable AS MATERIALIZED (...) UPDATE ... FROM claimable
+        WHERE job.id = claimable.id` - the MATERIALIZED hint forces
+        Postgres to compute the claimable set exactly once, as its own
+        fixed, static result, before the UPDATE ... FROM ever touches
+        a row - eliminating any possibility of the subquery
+        re-executing per matched row. `FOR UPDATE SKIP LOCKED` is
+        still applied inside that CTE's own SELECT, so the atomicity/
+        concurrency guarantee (two concurrent calls never claim the
+        same job) is completely unchanged - only the LIMIT-safety
+        issue is fixed, not the locking semantics.
+
         REAL BUG FIX, confirmed live on Odoo.sh ("job.status remains
         pending" / "claimed_by_agent remains unset after re-claim"):
         this raw SQL UPDATE was missing the two things any raw-SQL
@@ -437,14 +484,9 @@ class KdsPrintJob(models.Model):
         """
         self.env.flush_all()
         self.env.cr.execute("""
-            UPDATE kds_print_job
-            SET status = 'dispatched',
-                dispatched_at = NOW() AT TIME ZONE 'UTC',
-                claimed_by_agent = %(agent_id)s,
-                claimed_at = NOW() AT TIME ZONE 'UTC',
-                lease_expires_at = (NOW() AT TIME ZONE 'UTC') + make_interval(secs => %(lease_seconds)s)
-            WHERE id IN (
-                SELECT id FROM kds_print_job
+            WITH claimable AS MATERIALIZED (
+                SELECT id
+                FROM kds_print_job
                 WHERE printer_id = %(printer_id)s
                   AND (
                       status = 'pending'
@@ -452,11 +494,19 @@ class KdsPrintJob(models.Model):
                           lease_expires_at IS NULL OR lease_expires_at < (NOW() AT TIME ZONE 'UTC')
                       ))
                   )
-                ORDER BY create_date
+                ORDER BY create_date, id
                 LIMIT %(limit)s
                 FOR UPDATE SKIP LOCKED
             )
-            RETURNING id
+            UPDATE kds_print_job AS job
+            SET status = 'dispatched',
+                dispatched_at = NOW() AT TIME ZONE 'UTC',
+                claimed_by_agent = %(agent_id)s,
+                claimed_at = NOW() AT TIME ZONE 'UTC',
+                lease_expires_at = (NOW() AT TIME ZONE 'UTC') + make_interval(secs => %(lease_seconds)s)
+            FROM claimable
+            WHERE job.id = claimable.id
+            RETURNING job.id
         """, {
             'printer_id': printer.id,
             'agent_id': agent_id,
@@ -576,7 +626,7 @@ class KdsPrintJob(models.Model):
         return job
 
     @api.model
-    def claim_direct_auto_jobs(self, pos_session_id, executor_id, limit=1):
+    def claim_direct_auto_jobs(self, pos_session_id, session_access_token, executor_id, limit=1):
         """Atomic claim for an eligible POS Browser's own Direct Auto
         Print worker (item J). Same FOR UPDATE SKIP LOCKED pattern as
         _claim_pending_jobs() above (the proven Legacy Agent claim
@@ -604,33 +654,67 @@ class KdsPrintJob(models.Model):
         this check only ensures such a job can never be claimed in
         the meantime, before the cron gets to it.
 
-        Security (item J's own explicit requirements): this is called
-        by an authenticated POS session's own RPC - never public. The
-        session itself is validated and used to resolve station
-        eligibility (company isolation, pos_config linkage) rather
-        than trusting client-supplied values for anything except which
-        session/device is asking. sudo() is used deliberately below
-        for the actual claim/eligibility query, since a cashier POS
-        user commonly has none of the internal KDS administrative
-        groups this module's own action checks elsewhere require -
-        the real access boundary here is "does a genuine, currently
-        open pos.session for this exact id exist", checked explicitly
-        first, not a KDS permission group.
+        AUDIT FIX ("Version 46 - Two Final Phase 3 Runtime
+        Blockers"), blocker 1: this method's own claim SQL used the
+        SAME unsafe `UPDATE ... WHERE id IN (SELECT ... LIMIT ...
+        FOR UPDATE SKIP LOCKED)` shape that live Odoo.sh proved
+        broken for _claim_pending_jobs() above (a correlated subquery
+        against the same table the UPDATE writes to, which Postgres's
+        planner may re-execute per matched row rather than
+        materializing once - live-proven there to ignore its own
+        LIMIT). Rewritten with the identical `WITH claimable AS
+        MATERIALIZED (...) UPDATE ... FROM claimable WHERE job.id =
+        claimable.id` fix - same reasoning, same guarantee, applied
+        here for the exact same reason it was needed there.
+
+        AUDIT FIX ("Version 47 - Odoo 19 POS Session Identity
+        Correction"): session.user_id == env.user REMOVED - confirmed
+        against Odoo 19's own real source that the SAME pos.session
+        AUDIT FIX ("Version 48 - Final Security/Claim Corrections
+        Before Odoo.sh"): four additional corrections applied here.
+        (1) The client-supplied `limit` argument is no longer trusted
+        for the actual SQL claim - the POS worker only ever consumes
+        claimed[0], so allowing a caller to request/claim more than
+        one job per call would dispatch jobs the worker never
+        physically prints, eventually timing out unprinted. A
+        hardcoded safe_limit=1 is used for the SQL itself regardless
+        of what `limit` was passed - the parameter is kept in the
+        signature only for compatibility, deliberately unused for the
+        query. (2) A rescue/recovery pos.session (Odoo 19's own
+        concept for an abandoned-session recovery flow, explicitly
+        excluded from normal interactive session selection by Odoo's
+        own POS controller) is not a real browser print executor and
+        is now explicitly rejected. (3) Explicit caller->session
+        company isolation restored: sudo() on session/station
+        deliberately bypasses ordinary record rules for this narrow
+        RPC, so the RPC itself must re-establish that the
+        AUTHENTICATED CALLER is actually allowed in the session's own
+        company (self.env.companies) BEFORE trusting that session/
+        config as any kind of authority - a valid token alone must
+        never bypass Odoo's own multi-company boundary. (4) An empty/
+        falsy executor_id is rejected outright - it is part of the
+        exact ownership contract a later result report is checked
+        against, so it must never be accepted as "no device identity
+        at all" in the first place.
         """
         session = self.env['pos.session'].sudo().browse(pos_session_id)
         if not session.exists() or session.state not in ('opening_control', 'opened'):
             return self.browse()
-        # AUDIT FIX ("Phase 3 - Audit Corrections Before Odoo.sh"),
-        # item 4: existence + state alone only proves SOME open
-        # session with this id exists - not that the authenticated
-        # caller actually owns it. Without this check, any
-        # authenticated user could pass an arbitrary open
-        # pos_session_id belonging to someone else and claim jobs
-        # through it. session.user_id (the cashier who opened this
-        # session) must match the RPC's own authenticated user.
-        if session.user_id != self.env.user:
+        if session.rescue:
+            return self.browse()
+        if not self.env.user.has_group('point_of_sale.group_pos_user'):
+            return self.browse()
+        supplied_token = session_access_token or ''
+        real_token = session.sudo().access_token or ''
+        if not supplied_token or not real_token or not consteq(supplied_token, real_token):
+            return self.browse()
+        if not executor_id:
             return self.browse()
         config = session.config_id
+        if not config.active:
+            return self.browse()
+        if config.company_id not in self.env.companies:
+            return self.browse()
 
         # SAFER THAN RAW SQL FOR THIS PART: eligible station ids are
         # computed via the ORM's own domain search first (correctly
@@ -668,18 +752,15 @@ class KdsPrintJob(models.Model):
         if not eligible_stations:
             return self.browse()
 
+        # Version 48, item 1: hardcoded, never the caller-supplied
+        # `limit` - see this method's own docstring above.
+        safe_limit = 1
+
         self.env.flush_all()
         self.env.cr.execute("""
-            UPDATE kds_print_job
-            SET status = 'dispatched',
-                dispatched_at = NOW() AT TIME ZONE 'UTC',
-                dispatch_deadline = (NOW() AT TIME ZONE 'UTC') + make_interval(secs => %(dispatch_timeout)s),
-                direct_executor_id = %(executor_id)s,
-                direct_executor_pos_config_id = %(config_id)s,
-                direct_claimed_at = NOW() AT TIME ZONE 'UTC',
-                claim_deadline = NULL
-            WHERE id IN (
-                SELECT id FROM kds_print_job
+            WITH claimable AS MATERIALIZED (
+                SELECT id
+                FROM kds_print_job
                 WHERE transport = 'direct_network'
                   AND job_type = 'auto'
                   AND source = 'pos_auto'
@@ -687,20 +768,51 @@ class KdsPrintJob(models.Model):
                   AND station_id = ANY(%(station_ids)s)
                   AND claim_deadline IS NOT NULL
                   AND claim_deadline > (NOW() AT TIME ZONE 'UTC')
-                ORDER BY create_date
+                ORDER BY create_date, id
                 LIMIT %(limit)s
                 FOR UPDATE SKIP LOCKED
             )
-            RETURNING id
+            UPDATE kds_print_job AS job
+            SET status = 'dispatched',
+                dispatched_at = NOW() AT TIME ZONE 'UTC',
+                dispatch_deadline = (NOW() AT TIME ZONE 'UTC') + make_interval(secs => %(dispatch_timeout)s),
+                direct_executor_id = %(executor_id)s,
+                direct_executor_pos_config_id = %(config_id)s,
+                direct_executor_pos_session_id = %(session_id)s,
+                direct_claimed_at = NOW() AT TIME ZONE 'UTC',
+                claim_deadline = NULL
+            FROM claimable
+            WHERE job.id = claimable.id
+            RETURNING job.id
         """, {
             'executor_id': executor_id,
             'config_id': config.id,
+            'session_id': session.id,
             'station_ids': eligible_stations.ids,
             'dispatch_timeout': DIRECT_RESULT_TIMEOUT_SECONDS,
-            'limit': limit,
+            'limit': safe_limit,
         })
         claimed_ids = [row[0] for row in self.env.cr.fetchall()]
-        claimed = self.browse(claimed_ids)
+        # AUDIT FIX ("Version 46 - Two Final Phase 3 Runtime
+        # Blockers"), blocker 2: sudo() here is deliberate and safe -
+        # NOT a general access grant to the calling POS user. By this
+        # exact point, every explicit authorization check has already
+        # succeeded (session ownership verified above, company/config/
+        # station eligibility computed above, and the atomic SQL claim
+        # itself has already decided the EXACT set of ids that may be
+        # claimed) - claimed_ids is not client-supplied data, it is
+        # this method's own authorized result. An ordinary POS cashier
+        # has no direct ir.model.access.csv grant on kds.print.job (by
+        # design - see ir.model.access.csv's own comments), so reading
+        # order/station/line details to build the payload under the
+        # calling user's own ACL would raise AccessError here - the
+        # atomic claim would have already succeeded and dispatched the
+        # job, but the browser would receive no ticket, eventually
+        # timing out as RESULT_TIMEOUT. sudo() is scoped to exactly
+        # these already-authorized ids, for exactly this one
+        # read-and-serialize operation - the narrow RPC method itself
+        # remains the real security boundary, not a broadened ACL.
+        claimed = self.sudo().browse(claimed_ids)
         claimed.invalidate_recordset()
         # item L: build the full, RPC-serializable payload here - a
         # live job recordset itself is not JSON-serializable, and item
@@ -769,8 +881,8 @@ class KdsPrintJob(models.Model):
             },
         }
 
-    def report_pos_direct_auto_result(self, pos_session_id, executor_id, successful,
-                                       error_code=False, error_message=False):
+    def report_pos_direct_auto_result(self, pos_session_id, session_access_token, executor_id,
+                                       successful, error_code=False, error_message=False):
         """Narrow, validated result-reporting entry point for the POS
         Direct Auto Print worker (item N) - deliberately not a generic
         job write. Confirms the job genuinely IS a pos_auto Direct job,
@@ -782,26 +894,85 @@ class KdsPrintJob(models.Model):
         Phase 2's own idempotency/conflict rules remain the single
         source of truth for Printed/Failed transitions - never
         duplicated here.
+
+        AUDIT FIX ("Version 46 - Two Final Phase 3 Runtime
+        Blockers"), blocker 2: an ordinary POS cashier has no direct
+        ir.model.access.csv grant on kds.print.job at all (by design -
+        broad KDS access must never be granted to
+        point_of_sale.group_pos_user just to make this RPC work). Every
+        read/write on the job record AFTER the session/token/group
+        boundary below (transport, job_type, ..., and the final
+        report_direct_print_result() call) happens through a `job`
+        variable deliberately re-bound to self.sudo() - obtained only
+        once that boundary has already been proven, never before it.
+        This is not a broadened access grant to POS users in general:
+        the narrow shape of this RPC method itself (fixed parameters,
+        fixed validation order, fixed delegation target) remains the
+        actual security boundary - sudo() here only lets an
+        already-authorized caller finish reading/writing the one
+        specific job their own already-validated session claimed.
+
+        AUDIT FIX ("Version 47 - Odoo 19 POS Session Identity
+        Correction"): session.user_id == env.user REMOVED for the
+        same reason documented in claim_direct_auto_jobs() above -
+        Odoo 19 genuinely allows a session to be used by a different
+        authenticated user than whoever originally opened it. Session
+        identity is proven with pos.session's own standard
+        access_token (consteq() compare, never plain ==) plus a check
+        that the reporting session is the EXACT SAME session
+        (direct_executor_pos_session_id) that performed the original
+        claim - not merely "any session with a matching config".
+
+        AUDIT FIX ("Version 48 - Final Security/Claim Corrections
+        Before Odoo.sh"): three additional checks applied here, all
+        BEFORE `job = self.sudo()` - a rescue/recovery session is
+        rejected (it never legitimately claims a job in the first
+        place, so it can never legitimately report one either, but
+        this is checked independently rather than only relying on
+        that); the AUTHENTICATED CALLER must be allowed in the
+        session's own company (self.env.companies) - a valid token
+        alone must never bypass Odoo's own multi-company boundary,
+        exactly like claim_direct_auto_jobs() above; and an empty/
+        falsy executor_id is rejected outright, before it could ever
+        be compared against direct_executor_id below. Deliberately
+        does NOT require session.state to still be
+        opening_control/opened here (unlike the claim path) - a
+        legitimate pending result may need to be reported after the
+        session's own state has since changed; only rescue is checked
+        unconditionally, independent of state.
         """
         self.ensure_one()
         session = self.env['pos.session'].sudo().browse(pos_session_id)
         if not session.exists():
             raise ValidationError(_("Invalid POS session."))
-        # AUDIT FIX ("Phase 3 - Audit Corrections Before Odoo.sh"),
-        # item 4: same ownership check as claim_direct_auto_jobs()
-        # above - existence alone does not prove the authenticated
-        # caller owns this exact session.
-        if session.user_id != self.env.user:
-            raise ValidationError(_("This POS session does not belong to the current user."))
-        if (self.transport != 'direct_network' or self.job_type != 'auto'
-                or self.source != 'pos_auto'):
+        if session.rescue:
+            raise ValidationError(_("A rescue POS session cannot report a Direct Auto Print result."))
+        if not self.env.user.has_group('point_of_sale.group_pos_user'):
+            raise ValidationError(_("This user is not authorized to use the Direct Auto Print system."))
+        supplied_token = session_access_token or ''
+        real_token = session.sudo().access_token or ''
+        if not supplied_token or not real_token or not consteq(supplied_token, real_token):
+            raise ValidationError(_("Invalid or expired POS session token."))
+        if not executor_id:
+            raise ValidationError(_("This job was not claimed by this device."))
+        if session.config_id.company_id not in self.env.companies:
+            raise ValidationError(_("This POS session's company is not accessible to the current user."))
+
+        # Only past this point - session/token/group/company boundary
+        # already proven - is it safe to read/write the job record
+        # under sudo().
+        job = self.sudo()
+        if (job.transport != 'direct_network' or job.job_type != 'auto'
+                or job.source != 'pos_auto'):
             raise ValidationError(_("This job is not a POS Direct Auto Print job."))
-        if self.direct_executor_pos_config_id != session.config_id:
+        if job.direct_executor_pos_session_id != session:
+            raise ValidationError(_("This job was not claimed by this POS session."))
+        if job.direct_executor_pos_config_id != session.config_id:
             raise ValidationError(_("This job was not claimed by this POS config."))
-        if self.direct_executor_id != executor_id:
+        if job.direct_executor_id != executor_id:
             raise ValidationError(_("This job was not claimed by this device."))
 
-        self.report_direct_print_result(
+        job.report_direct_print_result(
             successful, error_code=error_code or False, error_message=error_message or False)
 
     def _print_payload(self):

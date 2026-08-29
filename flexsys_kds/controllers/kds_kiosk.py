@@ -809,10 +809,13 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
      would otherwise always win over a plain stylesheet rule - the
      standard, minimal way to override an inline style from CSS alone.
      Below 1600px: completely untouched - still the existing
-     3-column / width:95%% behavior above, unaffected by this block. */
+     3-column / width:95%% behavior above, unaffected by this block.
+     UI ADJUSTMENT ("KDS Card Width - 360px experiment"): trial
+     max-width raised from 340px to 360px at this same tier - visual
+     width only, everything else in this block unchanged. */
   @media (min-width:1600px){
-    .grid{ grid-template-columns:repeat(4, minmax(0, 340px)) !important; }
-    .card{ width:100%%; max-width:340px; }
+    .grid{ grid-template-columns:repeat(4, minmax(0, 360px)) !important; }
+    .card{ width:100%%; max-width:360px; }
   }
   .card.celebrate{ animation:cardCelebrate .7s ease-in-out; z-index:5; }
   @keyframes cardCelebrate{

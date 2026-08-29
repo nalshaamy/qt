@@ -1927,3 +1927,73 @@ msgstr ""
 #: model:ir.ui.view,arch_db:flexsys_kds.view_kds_station_form
 msgid "Notes"
 msgstr "ملاحظات"
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Invalid POS session."
+msgstr "جلسة نقطة بيع غير صالحة."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "This POS session does not belong to the current user."
+msgstr "جلسة نقطة البيع هذه لا تخص المستخدم الحالي."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "This job is not a POS Direct Auto Print job."
+msgstr "هذه المهمة ليست مهمة طباعة تلقائية مباشرة من نقطة البيع."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "This job was not claimed by this POS config."
+msgstr "هذه المهمة لم تُطالَب بها من نقطة البيع هذه."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "This job was not claimed by this device."
+msgstr "هذه المهمة لم تُطالَب بها من هذا الجهاز."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid ""
+"No active POS browser claimed this automatic print job before the "
+"deadline."
+msgstr ""
+"لم يُطالِب أي متصفح نقطة بيع نشط بمهمة الطباعة التلقائية هذه قبل الموعد "
+"النهائي."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid ""
+"CONFIGURATION ERROR: Auto Print is enabled for station '%s' (Direct "
+"Network) but no Printer IP is configured - no automatic print job was "
+"created. Set the Printer IP under this station's own Printing tab."
+msgstr ""
+"خطأ في الإعداد: الطباعة التلقائية مفعّلة للمحطة '%s' (شبكة مباشرة) لكن لا "
+"يوجد عنوان IP للطابعة مُعدَّاً - لم تُنشأ مهمة طباعة تلقائية. عيّن عنوان IP "
+"الطابعة ضمن تبويب الطباعة الخاص بهذه المحطة."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "This user is not authorized to use the Direct Auto Print system."
+msgstr "هذا المستخدم غير مخوَّل لاستخدام نظام الطباعة التلقائية المباشرة."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "Invalid or expired POS session token."
+msgstr "رمز جلسة نقطة البيع غير صالح أو منتهي الصلاحية."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "This job was not claimed by this POS session."
+msgstr "هذه المهمة لم تُطالَب بها من جلسة نقطة البيع هذه."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "A rescue POS session cannot report a Direct Auto Print result."
+msgstr "لا يمكن لجلسة إنقاذ نقطة البيع الإبلاغ عن نتيجة طباعة تلقائية مباشرة."
+
+#. module: flexsys_kds
+#: models/kds_print_job.py
+msgid "This POS session's company is not accessible to the current user."
+msgstr "شركة جلسة نقطة البيع هذه غير متاحة للمستخدم الحالي."

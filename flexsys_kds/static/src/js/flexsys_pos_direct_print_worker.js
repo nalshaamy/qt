@@ -216,20 +216,73 @@ class FlexSysPosDirectPrintWorker {
 
     /**
      * @returns {Promise<boolean>} true only if every locally-persisted
-     * pending result was successfully reported to and acknowledged by
-     * the server this cycle (or there were none to begin with) -
-     * false if at least one marker still remains (report RPC failed/
-     * dropped), in which case the caller must not proceed to claim a
-     * new job this cycle.
+     * pending result BELONGING TO THE CURRENT SESSION was successfully
+     * reported to and acknowledged by the server this cycle (or there
+     * were none to begin with) - false if at least one CURRENT-session
+     * report RPC failed/dropped, in which case the caller must not
+     * proceed to claim a new job this cycle. A stale marker belonging
+     * to a DIFFERENT (older) POS session never affects this return
+     * value either way - see the AUDIT FIX comment below for why.
      */
     async _flushPendingResults() {
         const pending = readPendingResults();
         let allFlushed = true;
+        const currentSessionId = this.pos.session && this.pos.session.id;
+        const currentSessionAccessToken = this.pos.session && this.pos.session.access_token;
         for (const entry of pending) {
+            // AUDIT FIX ("Version 47 continuation - do not persist
+            // access_token; result retry behavior"): the pending
+            // marker itself never stores a session token (see
+            // persistPendingResult()'s own call site below) - only
+            // pos_session_id, which identifies WHICH session the
+            // result belongs to. If that matches the CURRENT session
+            // (covers: plain polling retry, a page reload within the
+            // same session, or a different authenticated user opening
+            // the SAME Odoo POS session later - Odoo 19's own session
+            // identity/token are still exactly the same in all three
+            // cases), the current in-memory access_token is used to
+            // retry the report - never a token read from storage.
+            //
+            // If the marker belongs to a DIFFERENT, older session
+            // (e.g. the POS was closed and reopened as a new session
+            // since that job was printed), this worker must NOT use
+            // the CURRENT session's own token to report a result for
+            // a job that session never claimed - report_pos_direct_
+            // auto_result() would reject it anyway
+            // (direct_executor_pos_session_id mismatch), but more
+            // importantly, retrying it here would eventually
+            // (wrongly) resolve into a report attempt with the wrong
+            // credentials. Such a stale marker is safely discarded
+            // here instead: the server-side lifecycle (claim_deadline/
+            // dispatch_deadline crons) is the actual, authoritative
+            // mechanism that resolves that OLD job's own state
+            // (typically RESULT_TIMEOUT, since no executor for the
+            // new session will ever claim/report it again) - this is
+            // purely a local cleanup so a stale marker can never block
+            // the CURRENT session's own claims indefinitely. Discarding
+            // it here counts as neither success nor failure for the
+            // CURRENT session's own allFlushed result.
+            if (entry.pos_session_id !== currentSessionId) {
+                console.error(
+                    "FlexSys KDS: discarding a stale Direct Auto Print result marker "
+                        + "from a different POS session (job_id=" + entry.job_id + ") - "
+                        + "the server-side timeout lifecycle will resolve that job instead."
+                );
+                clearPendingResult(entry.job_id);
+                continue;
+            }
+            if (!currentSessionAccessToken) {
+                // Server data not ready yet for the current session -
+                // cannot safely retry now; leave the marker in place
+                // and try again next cycle.
+                allFlushed = false;
+                continue;
+            }
             try {
                 await this.pos.data.call("kds.print.job", "report_pos_direct_auto_result", [
                     entry.job_id,
                     entry.pos_session_id,
+                    currentSessionAccessToken,
                     entry.executor_id,
                     entry.successful,
                     entry.error_code || false,
@@ -241,6 +294,12 @@ class FlexSysPosDirectPrintWorker {
                 // retry, exactly as required.
                 clearPendingResult(entry.job_id);
             } catch (error) {
+                // Deliberately logs only the error object itself,
+                // never `entry` as a whole and never the session
+                // token (which is never stored in `entry` at all, nor
+                // read from anywhere but the live this.pos.session
+                // getter above) - the session token must never appear
+                // in console/audit text.
                 console.error(
                     "FlexSys KDS: failed to report a pending Direct Auto Print result "
                         + "(will retry next cycle)",
@@ -277,11 +336,28 @@ class FlexSysPosDirectPrintWorker {
         if (!sessionId) {
             return false;
         }
+        // AUDIT FIX ("Version 47 - Odoo 19 POS Session Identity
+        // Correction"): confirmed against Odoo 19's own real
+        // pos_session.py (_load_pos_data_fields() explicitly loads
+        // 'access_token' into pos.session data sent to the frontend)
+        // and PosStore's own `get session()` getter
+        // (this.data.models["pos.session"].get(...)) - by this point
+        // (after `await super.setup()` already completed, per the
+        // Version 43 fix), this.pos.session.access_token is genuinely
+        // available. session.user_id is NOT used anywhere in this
+        // file - Odoo 19 itself allows the same session to be used by
+        // a different authenticated user than whoever opened it, so
+        // the token (not user_id) is the real session-identity proof.
+        const sessionAccessToken = this.pos.session && this.pos.session.access_token;
+        if (!sessionAccessToken) {
+            return false;
+        }
 
         let claimed;
         try {
             claimed = await this.pos.data.call("kds.print.job", "claim_direct_auto_jobs", [
                 sessionId,
+                sessionAccessToken,
                 executorId,
                 1,
             ]);
@@ -310,6 +386,20 @@ class FlexSysPosDirectPrintWorker {
 
         const successful = Boolean(result && result.successful);
         const normalizedError = successful ? null : normalizeWorkerPrintError(result);
+        // item 4 (Version 47): the pending-result marker must carry
+        // SECURITY FIX ("Version 47 continuation - Do NOT persist
+        // pos.session.access_token in localStorage"): the marker
+        // stored here deliberately does NOT include the session
+        // token - access_token is a live session capability/
+        // credential, and creating a second, persistent copy of it in
+        // FlexSys's own localStorage (outside Odoo's own session
+        // management) serves no real purpose here: this.pos.session
+        // itself already has both the id and the current
+        // access_token in memory for as long as the worker is running,
+        // and _flushPendingResults() above reads the token fresh from
+        // there at retry time - keyed only by pos_session_id, which
+        // identifies WHICH session a stored result belongs to without
+        // ever needing to store the credential itself.
         const resultEntry = {
             job_id: payload.job_id,
             executor_id: executorId,
@@ -344,6 +434,7 @@ class FlexSysPosDirectPrintWorker {
             await this.pos.data.call("kds.print.job", "report_pos_direct_auto_result", [
                 resultEntry.job_id,
                 resultEntry.pos_session_id,
+                sessionAccessToken,
                 resultEntry.executor_id,
                 resultEntry.successful,
                 resultEntry.error_code,
