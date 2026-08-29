@@ -712,7 +712,7 @@ class TestPhase3PosDirectAutoPrint(FlexSysKdsTestCommon):
         self.assertEqual(job.status, 'failed')
         self.assertTrue(job.failed_at)
         self.assertEqual(job.error_code, 'LNA_DENIED')
-        self.assertEqual(job.error_message, 'Denied')
+        self.assertEqual(job.error, 'Denied')
 
     def test_wrong_executor_cannot_report_direct_auto_result(self):
         """A device different from the one that actually claimed the
