@@ -29,11 +29,37 @@ stale hardcoded test-count assertion, a comment-triggered false
 positive, a pre-Phase-3 Auto Print test never rewritten, and missing
 Arabic translations for new Phase 3 `_()` strings) have since been
 identified and corrected in the current package - see the Change Log
-below. This corrected package (725 static test methods as of this
-document) has **not yet** been re-run against a live Odoo 19 instance
-- see "Commercial Readiness Status" below for the exact, current gate
-status; no PASS is claimed for this package until that re-run happens
-and actually confirms it.
+below.
+
+**Version 52 - last confirmed REAL, PASSING Full Regression on live
+Odoo.sh: 0 failed, 0 error(s) of 725 post-tests (753 tests total).**
+This is the current authoritative "the whole package actually passed
+on a live Odoo 19 instance" baseline - it supersedes the Version 45
+result above for that purpose (Version 45 remains as an honest
+historical record of what failed and was fixed, not deleted). A
+focused run of `TestPhase3PosDirectAutoPrint` alone at that same point
+also passed clean: 0 failed, 0 error(s) of 89 post-tests (91 tests).
+
+**Commercial Test Cleanup, Batch 1 (Phase 3 test suite only,
+test-only change, zero production code touched)**: `tests/
+test_phase3_pos_direct_auto_print.py` had accumulated one test per
+historical audit round (v43/v44/v46/v47/v48/v50) covering the same
+current behavior multiple times over. Overlapping tests were merged
+into single authoritative tests (or deleted where a stronger runtime
+test already existed, or the check was documentation/implementation-
+history text rather than product behavior - see
+[docs/TEST_HISTORY.md](docs/TEST_HISTORY.md) for a short map of which
+historical risk each remaining authoritative test now covers).
+Version-prefixed test names were renamed to describe the current
+product contract instead. This changed that one file's own test count
+from 89 down to 64, and the project-wide total from 725 down to
+**700 static test methods** as of this document. This is a STATIC,
+cleaned-suite count, not yet re-run against a live Odoo 19 instance -
+it is a different number from, and must not be confused with, the
+Version 52 baseline above (725 post-tests / 753 tests total), which
+remains the last REAL, confirmed-passing Odoo.sh regression result on
+record. No PASS is claimed for the cleaned 700-test package until it
+is actually re-run and confirmed.
 
 **Version 47 - POS session identity security correction**: confirmed
 against Odoo 19's own real source
@@ -390,7 +416,7 @@ below for the schema-removal decision this is pending.
 
 ## Automated Test Count
 
-**725 static test methods** as of this document (`py_compile`, XML
+**700 static test methods** as of this document (`py_compile`, XML
 well-formedness, and JS syntax checked on every file on every change,
 plus functional/behavioral coverage for every area above, including
 the Direct Printing / `kds.print.job` lifecycle, the Pagination
@@ -410,7 +436,7 @@ has been verified by direct static execution in this environment
 (real, standalone `unittest` runs, or direct source-contract checks
 against the actual files - see each suite's own HONEST SCOPE NOTE for
 what that does and does not prove) but **not yet** re-run as part of a
-live Odoo 19 regression. No claim is made here that all 725 have
+live Odoo 19 regression. No claim is made here that all 700 have
 passed together against a live
 instance - that run is still pending (see "Commercial Readiness
 Status" below).
@@ -454,10 +480,11 @@ Status" below).
 | Manifest parses, no orphaned data-file references | ✅ Pass |
 | ACL entries all reference an existing model | ✅ Pass (verified programmatically) |
 | Menu items all reference an existing action | ✅ Pass (verified programmatically) |
-| Automated test suite (725 static test methods) internally consistent | ✅ Pass |
-| Last confirmed live Odoo.sh regression baseline (0 failed, 0 errors) | ✅ **636 post-tests (662 tests total)** (pre-Phase-3 package) |
+| Automated test suite (700 static test methods) internally consistent | ✅ Pass |
+| Pre-Phase-3 live regression baseline (0 failed, 0 errors) | ✅ **636 post-tests (662 tests total)** (pre-Phase-3 package) |
 | Version 45 live Odoo.sh Phase-3 validation run | ❌ **5 failed, 2 errors of 692 post-tests (720 tests total)** — all 7 root causes since identified and fixed in the current package; kept as an honest historical record, not removed on a later successful run |
-| Corrected package (this document's own current test count) re-run against live Odoo 19 | ⚠️ **Not yet run - awaiting a fresh Odoo.sh regression** |
+| Last confirmed live Odoo.sh Full Regression (Version 52) | ✅ **0 failed, 0 errors of 725 post-tests (753 tests total)** — the current authoritative "whole package passed live" baseline |
+| Commercial Test Cleanup Batch 1 (Phase 3 suite: 89→64 tests, test-only) re-run against live Odoo 19 | ⚠️ **Not yet run - awaiting a fresh focused + Full Regression on Odoo.sh** |
 | Live two-screen realtime check (backend + kiosk simultaneously) | ⚠️ **Requires a live instance** |
 | Module upgrade test on an existing development database | ⚠️ **Requires a live instance** |
 | Live regression pass: POS → Routing → KDS → Preparing → Ready → Completed, quantity increase/decrease/to-zero, cancellation, refund, multi-station, all three Operating Modes, Public Kiosk token enforcement, printing claim/lease | ⚠️ **Requires a live instance - the client's own environment is the only one available for this** |
