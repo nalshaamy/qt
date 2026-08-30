@@ -115,7 +115,8 @@
         </div>
         </div>
 
-        <div class="fs-grid" t-attf-style="grid-template-columns: repeat({{pagination.columns}}, minmax(0, 1fr));">
+        <div class="fs-grid" t-ref="fsGrid"
+             t-attf-style="grid-template-columns: repeat({{pagination.columns}}, minmax(0, 1fr)); grid-template-rows: {{gridTemplateRows}};">
             <t t-foreach="paginatedOrders" t-as="order" t-key="order.id">
                 <KdsOrderCard order="order" onLineAction="onLineAction" onOrderAction="onOrderAction"
                               onPrintClick="onPrintClick" printingEnabled="printingEnabled"

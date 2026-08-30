@@ -555,7 +555,35 @@ body.o_flexsys_kiosk {
     // .fs-card-footer (below) stay outside the scrollable region
     // (flex-shrink: 0 on both) so they're always visible and reachable,
     // even for a 10+ item order - only .fs-card-body scrolls internally.
-    max-height: 640px;
+    //
+    // ADAPTIVE PAGINATION REVIEW ("Adaptive Pagination Review -
+    // Correct Readable Row Height + Card Safety"), CARD MUST NEVER
+    // OVERFLOW ITS GRID ROW: explicit grid-template-rows (now set
+    // per-page in both kds_app.js/kds_kiosk.py) constrains the ROW
+    // TRACK's own height, but does nothing on its own to stop a card
+    // taller than that track from visually overflowing into the next
+    // row - align-items: start (.fs-grid's own default, never
+    // overridden) aligns a card to the TOP of its row without ever
+    // clipping it to the row's own actual height. min-height: 0 is
+    // the standard flex/grid override needed for max-height below to
+    // actually take effect (a flex/grid item's own default
+    // min-height: auto would otherwise refuse to shrink below its
+    // content's natural size). max-height: min(640px, 100%) keeps
+    // BOTH ceilings at once - the existing fixed 640px cap for a
+    // genuinely oversized order (100% alone would let it grow
+    // unbounded on a very tall screen with only 1 explicit row), AND
+    // the card's own real grid row height as the ultimate upper bound
+    // on any screen where that row is shorter than 640px - never just
+    // one or the other. Deliberately NOT height: 100% (would force
+    // even a short, 1-2-line card to stretch to fill its entire row)
+    // and .fs-grid's own align-items deliberately stays at its
+    // default `start`, never `stretch` - a short card keeps its own
+    // natural height exactly as before; only a card that would
+    // otherwise exceed its row is now actually capped by it, with
+    // .fs-card-body's own existing overflow-y: auto (unchanged,
+    // already correct) absorbing genuine overflow internally.
+    min-height: 0;
+    max-height: min(640px, 100%);
 
     &.fs-celebrate {
         animation: fs-card-celebrate 0.7s ease-in-out;
@@ -601,8 +629,11 @@ body.o_flexsys_kiosk {
 // UI ADJUSTMENT ("KDS Card Width - 360px experiment"): the trial
 // max-width raised from 340px to 360px at this same >= 1600px tier -
 // visual width only, nothing else in this block's own rules changed
-// (still 4 columns x 2 rows, still max 8 cards/page, still no
-// !important override below 1600px).
+// (still 4 columns, still max 8 cards/page at 2 rows - row count
+// itself is now height-aware, see static/src/shared/
+// flexsys_pagination.js - completely independent of this block's own
+// column-width override, which only ever touches
+// grid-template-columns, never grid-template-rows).
 @media (min-width: 1600px) {
     .fs-grid {
         grid-template-columns: repeat(4, minmax(0, 360px)) !important;
@@ -1026,43 +1057,39 @@ body.o_flexsys_kiosk {
         padding: 8px 16px;
     }
 
-    // V66 ("Root Cause Fix for Card Height at Browser Zoom 100%"):
-    // the actual root cause, confirmed by inspecting .fs-grid's own
-    // align-items rule - it is (and, above this media query, remains)
-    // `start`, meaning every card grows to its OWN natural content
-    // height with NO relationship at all to how much vertical space
-    // its own grid row actually has available on a short screen. A
-    // perfectly normal, short order's card - even after every
-    // padding/margin reduction already applied above - could still
-    // end up taller than the row's own real available height,
-    // pushing its footer out of view; no amount of further padding
-    // reduction alone can fix that, since the card was never
-    // constrained BY the row's own available height to begin with.
-    // .fs-card's own existing max-height: 640px (unchanged above this
-    // media query) is a fixed pixel ceiling for genuinely large
-    // orders - it does nothing to relate a SHORT order's own card to
-    // a SHORT screen's own smaller row height.
-    //
-    // Fixed, at this short-screen tier only (the taller-screen
-    // default above this media query is completely unchanged - this
-    // is not a general design change): align-items: stretch makes
-    // every card in a row genuinely fill that row's own real
-    // available height, and .fs-card's own height: 100%/
-    // min-height: 0/max-height: 100% (overriding the 640px ceiling
-    // only at this tier) let it actually claim that height instead of
-    // just its own natural content size. .fs-card-body's own EXISTING
-    // flex: 1 1 auto; min-height: 0; overflow-y: auto (completely
-    // unchanged - already correct) is what then absorbs any genuine
-    // overflow internally, scrolling only the card's own body, rather
-    // than the row forcing the footer below the visible grid area.
-    .fs-grid {
-        align-items: stretch;
-    }
-    .fs-card {
-        height: 100%;
-        min-height: 0;
-        max-height: 100%;
-    }
+    // V70 REVIEW ("Adaptive Height-Aware Pagination - Internal KDS +
+    // Public Kiosk"): the V66/V67 short-screen workaround previously
+    // here (`.fs-grid { align-items: stretch; }` + `.fs-card { height:
+    // 100%; min-height: 0; max-height: 100%; }`) is REMOVED, per
+    // explicit direction ("Do not retain them blindly if they
+    // conflict with explicit row sizing"). That workaround was added
+    // BEFORE pagination became height-aware, to force every card to
+    // fill its own row's full height so a normal card's footer would
+    // never be pushed below a too-short row. The new, height-aware
+    // pagination engine (static/src/shared/flexsys_pagination.js)
+    // fixes that same root cause differently and more precisely: when
+    // the real .fs-grid height can't fit two genuinely readable rows,
+    // it reduces the page to 1 row instead of 2 - so a normal card
+    // already has the WHOLE available row height to itself, without
+    // ever needing to be force-stretched to fill it. Keeping
+    // align-items: stretch on top of that would now actively
+    // conflict with the explicit CARD CONTRACT ("Do NOT blindly force
+    // height: 100% if it causes short cards to stretch unnecessarily
+    // - Prefer: natural card height up to the row's available
+    // maximum") - a short, 1-line order's own card would be forced to
+    // stretch to fill an entire single-row height that its own real
+    // content doesn't need, purely because a taller sibling order
+    // elsewhere on the same page needed the room. .fs-grid's own
+    // align-items: start (the file-wide default, never overridden at
+    // this tier now) already gives exactly the desired behavior: a
+    // card takes its own natural height up to the row's real maximum,
+    // and .fs-card-body's own existing flex: 1 1 auto; min-height: 0;
+    // overflow-y: auto (untouched, already correct) absorbs any
+    // genuine overflow internally for an unusually large order. The
+    // new source of truth for this is the shared height-aware
+    // pagination engine plus the explicit grid-template-rows now set
+    // per-page (see static/src/js/kds_app.js's own gridTemplateRows
+    // getter) - not a card-level CSS override.
 }
 
 // Configuration > Printers hub - three blocks, each linking to its own

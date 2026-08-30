@@ -329,6 +329,88 @@ from `body` itself) only when genuinely needed. Card width (360px at
 completely unchanged - confirmed via checksum, this change is scoped
 entirely to `controllers/kds_kiosk.py`.
 
+**Adaptive height-aware pagination - Internal KDS + Public Kiosk
+(V71)**:
+
+- Height-aware pagination: row count is no longer purely width-driven.
+- Internal KDS measures the actual `.fs-grid` `clientHeight` (via a
+  `ResizeObserver`), not `window.innerHeight`.
+- Public Kiosk measures the actual `#grid` `clientHeight` on every
+  render, not `window.innerHeight`.
+- `rows` = 1 or 2, chosen by whichever real height is actually
+  available, never a fixed assumption.
+- `columns` remain exactly as before: 3 below 1600px, 4 at/above -
+  driven by viewport width only, untouched by this change.
+- Never more than 4 columns at any width.
+- The existing large-order reduced-capacity protection
+  (`LARGE_ORDER_LINE_THRESHOLD`) is fully preserved, applied on top of
+  height-aware density as an additional constraint, not a replacement.
+
+Root cause, confirmed by direct inspection of the shared
+`static/src/shared/flexsys_pagination.js` - `computeDensity()` only
+ever considered viewport WIDTH, so a wide-but-vertically-short screen
+still forced 2 rows (8/page at 4 columns) even when the real
+available grid height couldn't fit two genuinely readable rows,
+clipping/overlapping the second row. Fixed by extending the shared
+engine's own `computeDensity()`/`paginate()` to also take the real,
+measured `.fs-grid`/`.grid` `clientHeight` (never
+`window.innerHeight`, which would also count the header/filters/
+pagination framing the grid doesn't itself occupy) - rows is now 2
+only when that real height meets `MIN_TWO_ROW_HEIGHT`, a figure
+derived transparently from this project's own already-approved card
+dimensions (header + one body line + footer + grid gap), never an
+arbitrary guess. Column rules (3 below 1600px, 4 at/above, never more
+than 4) are completely unchanged. Internal KDS measures `.fs-grid` via
+a `ResizeObserver` (`kds_app.js`, wired through a new `useRef`) that
+also transparently covers fullscreen enter/exit with no separate code
+path; Public Kiosk re-measures `#grid.clientHeight` on every
+`render()` call and now also re-renders on `fullscreenchange` (only
+`resize` triggered it before). `grid-template-rows` is now set
+explicitly per-page in both screens (`Math.ceil(currentPageOrders /
+columns)`, never an implicit auto-sized empty row) instead of being
+left to CSS Grid's own implicit row sizing. The V66/V67 short-screen
+workaround (`.fs-grid { align-items: stretch; }` + `.fs-card { height:
+100%; ... }`) is REMOVED - it predates height-aware pagination and
+would now conflict with the explicit card contract ("natural card
+height up to the row's available maximum, never force-stretched"):
+the new engine already gives a normal card the row's own full height
+by reducing to 1 row when needed, so force-stretching is no longer
+necessary and would only add unwanted stretching for short cards
+sharing a page with a taller one. The existing large-order reduced-
+capacity protection is unchanged and continues to apply on top of
+height-aware density. Card width (360px at `>=1600px`), workflow,
+filtering, routing, printing, backend, and SLA are all completely
+unchanged.
+
+**Adaptive Pagination Review - corrected readable row height + card
+safety (V72)**: static review, before Odoo.sh validation, confirmed
+V71's own `MIN_TWO_ROW_HEIGHT` (372px) was too low - it only counted
+a bare order-number/one-line/footer skeleton, omitting several
+elements a normal card's own header actually renders (order
+reference, status row, chips row, employee row) and the variant/note
+rows a normal commercial order's own line item typically has. A full,
+itemized accounting of every one of those real elements' own current
+CSS metrics comes to ~299px per card - corrected to the reviewed,
+CSS-justified `MIN_READABLE_ROW_HEIGHT` of 300px
+(`MIN_TWO_ROW_HEIGHT` = 624px), replacing the earlier three
+sub-constants with one transparently-derived figure. Separately, a
+row safety constraint is now explicit on `.fs-card`/`.card`:
+`min-height: 0; max-height: min(640px, 100%);` - keeps BOTH the
+existing fixed 640px ceiling for a genuinely oversized order AND the
+card's own real grid row height as the ultimate upper bound, so a
+card can never visually overflow into the next row even though
+explicit `grid-template-rows` alone doesn't guarantee that on its
+own. Deliberately NOT `height: 100%` and `.fs-grid`/`.grid`'s own
+`align-items` deliberately stays at its default `start`, never
+`stretch` - a short card keeps its own natural height exactly as
+before; only a card that would otherwise exceed its row is now
+capped, with `.fs-card-body`/`.card-body`'s own existing
+`overflow-y: auto` (unchanged) absorbing genuine overflow internally.
+Column rules (3/4, never >4), the actual grid-height measurement,
+adaptive rows, explicit `currentPageRows`, `ResizeObserver`,
+fullscreen recalculation, and large-order protection are all
+completely unchanged.
+
 ---
 
 ## Core Features
@@ -620,7 +702,7 @@ below for the schema-removal decision this is pending.
 
 ## Automated Test Count
 
-**729 static test methods** as of this document (`py_compile`, XML
+**742 static test methods** as of this document (`py_compile`, XML
 well-formedness, and JS syntax checked on every file on every change,
 plus functional/behavioral coverage for every area above, including
 the Direct Printing / `kds.print.job` lifecycle, the Pagination
@@ -685,7 +767,7 @@ until that run happens and confirms it.
 | Manifest parses, no orphaned data-file references | ✅ Pass |
 | ACL entries all reference an existing model | ✅ Pass (verified programmatically) |
 | Menu items all reference an existing action | ✅ Pass (verified programmatically) |
-| Automated test suite (729 static test methods) internally consistent | ✅ Pass |
+| Automated test suite (742 static test methods) internally consistent | ✅ Pass |
 | Pre-Phase-3 live regression baseline (0 failed, 0 errors) | ✅ **636 post-tests (662 tests total)** (pre-Phase-3 package) |
 | Version 45 live Odoo.sh Phase-3 validation run | ❌ **5 failed, 2 errors of 692 post-tests (720 tests total)** — all 7 root causes since identified and fixed in the current package; kept as an honest historical record, not removed on a later successful run |
 | Pre-cleanup live Odoo.sh Full Regression (Version 52) | ✅ **0 failed, 0 errors of 725 post-tests (753 tests total)** — the pre-cleanup package's own passing baseline, kept as an honest historical record |

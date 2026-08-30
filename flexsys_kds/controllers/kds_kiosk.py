@@ -867,8 +867,32 @@ _KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
        Header (.card-head) and footer (.card-footer, the action button)
        sit OUTSIDE the scrollable region below (flex-shrink:0 on both),
        so they stay visible and reachable even for a 10+ item order -
-       only .card-body (the line items) scrolls internally. */
-    max-height:640px;
+       only .card-body (the line items) scrolls internally.
+
+       ADAPTIVE PAGINATION REVIEW ("Adaptive Pagination Review -
+       Correct Readable Row Height + Card Safety"), CARD MUST NEVER
+       OVERFLOW ITS GRID ROW: explicit grid-template-rows (now set
+       per-page in render() below) constrains the ROW TRACK's own
+       height, but does nothing on its own to stop a card taller than
+       that track from visually overflowing into the next row -
+       align-items:start (.grid's own default, never overridden)
+       aligns a card to the TOP of its row without ever clipping it to
+       the row's own actual height. min-height:0 is the standard flex/
+       grid override needed for max-height below to actually take
+       effect. max-height:min(640px, 100%%) keeps BOTH ceilings at
+       once - the existing fixed 640px cap for a genuinely oversized
+       order, AND the card's own real grid row height as the ultimate
+       upper bound whenever that row is shorter than 640px - never
+       just one or the other. Deliberately NOT height:100%% (would
+       force even a short, 1-2-line card to stretch to fill its entire
+       row) and .grid's own align-items deliberately stays at its
+       default `start`, never `stretch` - a short card keeps its own
+       natural height exactly as before; only a card that would
+       otherwise exceed its row is now actually capped by it, with
+       .card-body's own existing overflow-y:auto (unchanged, already
+       correct) absorbing genuine overflow internally. */
+    min-height:0;
+    max-height:min(640px, 100%%);
   }
   /* UI ADJUSTMENT ("KDS Card Width - Visual Adjustment Only"):
      confirmed live - on Full HD (>= 1600px, the Wide/4-column density
@@ -1320,8 +1344,17 @@ function toggleFullscreen() {
 // than tapping this button - the Esc key, or a tablet's own system
 // gesture ("standard browser Fullscreen exit behavior may be used",
 // per the request itself) - rather than only updating on click.
+// ADAPTIVE HEIGHT-AWARE PAGINATION ("Adaptive Height-Aware
+// Pagination - Internal KDS + Public Kiosk"): also re-renders (which
+// re-measures #grid's own real clientHeight and recomputes density -
+// see render()'s own comment) on every fullscreen enter/exit, not
+// just a plain window resize - entering fullscreen changes the
+// available grid height just as much as resizing the browser window
+// does, and must recalculate capacity the same way, without a reload.
+// render() is a hoisted function declaration (defined further down
+// this same file), safe to call from here regardless of source order.
 ['fullscreenchange', 'webkitfullscreenchange', 'msfullscreenchange'].forEach(
-  evt => document.addEventListener(evt, updateFullscreenIcon)
+  evt => document.addEventListener(evt, () => { updateFullscreenIcon(); render(); })
 );
 updateFullscreenIcon();
 
@@ -1618,18 +1651,33 @@ function render() {
     orders = orders.filter(o => o.effective_stage === FILTER);
   }
 
-  // HIGH-DENSITY LAYOUT: the SAME shared, deterministic pagination
-  // pass Internal KDS uses (static/src/shared/flexsys_pagination.js,
-  // loaded above in <head>) - never re-sorted/shuffled here, only
-  // sliced. KIOSK_PAGE itself is clamped by paginate() below, so a
-  // realtime refresh (loadOrders() -> render(), on the existing
-  // polling interval) that doesn't change the page count leaves the
-  // operator on the same page.
-  const pageResult = window.FlexSysPagination.paginate(orders, window.innerWidth, KIOSK_PAGE);
+  const grid = document.getElementById('grid');
+  // ADAPTIVE HEIGHT-AWARE PAGINATION ("Adaptive Height-Aware
+  // Pagination - Internal KDS + Public Kiosk"): the real, measured
+  // #grid clientHeight - NOT window.innerHeight, which would also
+  // count the header/filters/pagination/statbar framing #grid does
+  // not itself occupy (this page's own full-viewport flex layout -
+  // see the "Public Kiosk - Full Viewport Flex Layout Fix" - makes
+  // #grid's own clientHeight exactly the real available space for
+  // cards, regardless of how many cards are currently in it, since
+  // #grid is flex:1 1 auto and does not size itself from its own
+  // content). Measured fresh on every render() call - always
+  // reflects the grid's own CURRENT real size, including after a
+  // resize or fullscreen change (both already call render() again -
+  // see the resize/fullscreenchange listeners near the bottom of
+  // this file).
+  const availableGridHeight = grid.clientHeight;
+  const pageResult = window.FlexSysPagination.paginate(orders, window.innerWidth, availableGridHeight, KIOSK_PAGE);
   KIOSK_PAGE = pageResult.currentPage;
 
-  const grid = document.getElementById('grid');
   grid.style.gridTemplateColumns = `repeat(${pageResult.columns}, minmax(0, 1fr))`;
+  // GRID ROWS: explicit row tracks for the CURRENT page specifically -
+  // never left to implicit auto-row sizing, which could compress/
+  // overlap card content on a shorter final page. Math.max(1, ...)
+  // guards the one legitimate currentPageRows=0 case (zero orders on
+  // this page, handled separately just below anyway) - `repeat(0, ...)`
+  // is invalid CSS Grid syntax.
+  grid.style.gridTemplateRows = `repeat(${Math.max(1, pageResult.currentPageRows)}, minmax(0, 1fr))`;
   if (!orders.length) {
     grid.innerHTML = `<div class="empty">${KIOSK_LABELS.noOrders}</div>`;
     document.getElementById('pagination').innerHTML = '';

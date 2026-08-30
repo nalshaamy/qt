@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component, onWillStart, onMounted, onWillUnmount, useState } from "@odoo/owl";
+import { Component, onWillStart, onMounted, onWillUnmount, useState, useRef } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
 import { user } from "@web/core/user";
@@ -96,7 +96,32 @@ export class FlexSysKdsScreen extends Component {
         // in this.store.state either. viewportWidth starts from the
         // real window size immediately (not a guessed default) so the
         // very first render already uses the correct density.
-        this.pagState = useState({ page: 1, viewportWidth: window.innerWidth });
+        //
+        // ADAPTIVE HEIGHT-AWARE PAGINATION ("Adaptive Height-Aware
+        // Pagination - Internal KDS + Public Kiosk"): availableGridHeight
+        // is the real, measured .fs-grid clientHeight - NOT
+        // window.innerHeight, which would also count the header/
+        // filters/pagination framing .fs-grid does not itself occupy
+        // (this is exactly the root cause this whole change fixes:
+        // computeDensity() used to only ever see viewport WIDTH,
+        // never the grid's own real available vertical space). Starts
+        // at window.innerHeight as a reasonable pre-mount estimate
+        // (before .fs-grid has actually been painted and can be
+        // measured) - immediately replaced with the real, precise
+        // measurement once mounted (see the ResizeObserver set up in
+        // onMounted below), so the very first genuine render already
+        // uses the correct row count.
+        this.pagState = useState({
+            page: 1,
+            viewportWidth: window.innerWidth,
+            availableGridHeight: window.innerHeight,
+        });
+        // ADAPTIVE HEIGHT-AWARE PAGINATION: a real DOM reference to
+        // .fs-grid (t-ref="fsGrid" in kds_templates.xml) - required to
+        // measure its own real clientHeight, which no getter/computed
+        // value can do on its own (measuring a DOM element requires
+        // the element to actually exist, i.e. be mounted).
+        this.fsGridRef = useRef("fsGrid");
 
         // Multi-language: the user's language drives both which translated
         // strings render (handled transparently by _t()/backend *_label
@@ -149,6 +174,32 @@ export class FlexSysKdsScreen extends Component {
             if (this.isKiosk) {
                 document.body.classList.add(KIOSK_BODY_CLASS);
             }
+            // ADAPTIVE HEIGHT-AWARE PAGINATION ("Adaptive Height-Aware
+            // Pagination - Internal KDS + Public Kiosk"): ResizeObserver
+            // on the real .fs-grid element - fires on ANY actual change
+            // to its own real rendered size (a window resize, entering/
+            // exiting fullscreen, or the header/filters area itself
+            // changing height), not just a plain window "resize" event,
+            // and requires no separate fullscreenchange wiring of its
+            // own (this.fsState.isFullscreen below still tracks the
+            // icon/UI state independently - unrelated to this
+            // measurement). Guarded for a defensive null ref (should
+            // never actually be null once mounted, but a measurement
+            // failure here must never crash the whole screen) and for
+            // browsers without ResizeObserver support at all (falls
+            // back to the window.innerHeight-based initial estimate
+            // set above, silently - never throws).
+            if (this.fsGridRef.el && typeof ResizeObserver !== "undefined") {
+                this._fsGridResizeObserver = new ResizeObserver((entries) => {
+                    for (const entry of entries) {
+                        const height = Math.round(entry.contentRect.height);
+                        if (height > 0 && height !== this.pagState.availableGridHeight) {
+                            this.pagState.availableGridHeight = height;
+                        }
+                    }
+                });
+                this._fsGridResizeObserver.observe(this.fsGridRef.el);
+            }
             this._subscribeBus(this.state.currentStationId);
             this.busService.subscribe("flexsys_kds.order_update", this._onBusNotification);
             this.busService.start();
@@ -171,17 +222,15 @@ export class FlexSysKdsScreen extends Component {
                 this.fsState.isFullscreen = Boolean(document.fullscreenElement);
             };
             document.addEventListener("fullscreenchange", this._onFullscreenChange);
-            // HIGH-DENSITY LAYOUT: resize listener kept even though
-            // density is now fixed (3x2, see
-            // static/src/shared/flexsys_pagination.js's own
-            // CLOSEOUT note) - a resize can still change how many
-            // pixels a 6-card page has to work with, and this keeps
-            // this.pagState.viewportWidth accurate for any future
-            // reintroduction of width-aware behavior, at zero cost
-            // today. Does not reset
-            // the current page itself; a resize that doesn't change
-            // the resulting page count leaves the operator on the same
-            // page (paginate()'s own clamping in
+            // HIGH-DENSITY LAYOUT / ADAPTIVE HEIGHT-AWARE PAGINATION:
+            // a resize can change viewport WIDTH (column count), and
+            // the ResizeObserver set up above already independently
+            // tracks .fs-grid's own real HEIGHT (row count) - this
+            // listener keeps this.pagState.viewportWidth accurate for
+            // the column-count half of that same density calculation.
+            // Does not reset the current page itself; a resize that
+            // doesn't change the resulting page count leaves the
+            // operator on the same page (paginate()'s own clamping in
             // flexsys_pagination.js handles the case where it does).
             this._onResize = () => {
                 this.pagState.viewportWidth = window.innerWidth;
@@ -196,6 +245,12 @@ export class FlexSysKdsScreen extends Component {
             clearInterval(this._clockHandle);
             document.removeEventListener("fullscreenchange", this._onFullscreenChange);
             window.removeEventListener("resize", this._onResize);
+            // ADAPTIVE HEIGHT-AWARE PAGINATION: disconnects the
+            // ResizeObserver set up in onMounted above - never leaves
+            // a dangling observer watching a now-unmounted element.
+            if (this._fsGridResizeObserver) {
+                this._fsGridResizeObserver.disconnect();
+            }
         });
     }
 
@@ -299,12 +354,27 @@ export class FlexSysKdsScreen extends Component {
         return window.FlexSysPagination.paginate(
             this.filteredOrders,
             this.pagState.viewportWidth,
+            this.pagState.availableGridHeight,
             this.pagState.page
         );
     }
 
     get paginatedOrders() {
         return this.pagination.currentPageOrders;
+    }
+
+    // GRID ROWS ("Adaptive Height-Aware Pagination - Internal KDS +
+    // Public Kiosk"): makes the CSS Grid's own row tracks explicit for
+    // the CURRENT page specifically - never left to implicit auto-row
+    // sizing, which could compress/overlap card content when a
+    // shorter final page (e.g. 2 orders left over on the last page)
+    // happened to receive the same row-sizing behavior as a full one.
+    // Math.max(1, ...) guards the one legitimate currentPageRows=0
+    // case (zero orders on this page) - `repeat(0, ...)` is invalid
+    // CSS Grid syntax; a single (empty) row track is always safe to
+    // request even when nothing occupies it.
+    get gridTemplateRows() {
+        return `repeat(${Math.max(1, this.pagination.currentPageRows)}, minmax(0, 1fr))`;
     }
 
     onPrevPage() {
