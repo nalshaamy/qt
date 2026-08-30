@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_kds_printer_hub_form" model="ir.ui.view">
+        <field name="type">form</field>
+        <field name="name">kds.printer.hub.form</field>
+        <field name="model">kds.printer.hub</field>
+        <field name="arch" type="xml">
+            <!-- create/edit/delete/duplicate all false (dev request,
+                 item 1): this is a navigation/dashboard page, not an
+                 editable database record - suppresses the generic "New"
+                 button and other record-management controls that made
+                 it look like one. -->
+            <form string="Printing" create="false" edit="false" delete="false" duplicate="false">
+                <sheet>
+                    <div class="o_kds_hub_header mb-4">
+                        <h1 class="mb-1">Printing</h1>
+                        <!-- UI/DATA FIX ("Master Change Request", item
+                             12, "Printing Landing"): shortened - the
+                             card descriptions below already say what
+                             each destination is for; this line doesn't
+                             need to repeat it.
+                             COMMERCIAL AGENT UI CLEANUP ("Final Visible
+                             Text Closeout"), item 1: confirmed live -
+                             the prior subtitle still named "Printers"
+                             first, as if it were a primary commercial
+                             destination, contradicting the prior
+                             round's own removal of that card. Updated
+                             below to describe what the two current
+                             cards actually are. -->
+                        <p class="text-muted mb-0">Direct Network settings and print job history.</p>
+                    </div>
+                    <!-- UI/DATA FIX ("Printing UI & Job History - Final
+                         Cleanup Before Testing"), items 1 & 2: the
+                         separate Reprints card/destination is removed
+                         entirely - Print Jobs (below) now covers both,
+                         since both were always the exact same
+                         kds.print.job model and list view underneath.
+                         Two even columns (col-md-6) replace the
+                         original three (col-md-4) now that only two
+                         cards remain. -->
+                    <!-- COMMERCIAL UI CLEANUP ("Hide Legacy Print
+                         Agent From Commercial UI"), item 1: confirmed
+                         live - the "Printers" card (kds.printer/Legacy
+                         Agent management) is no longer a primary
+                         entry point in the commercial Printing UI, now
+                         that Direct Network configuration lives per-
+                         station instead (Station -> Printing tab).
+                         action_kds_printer/action_kds_printer_hub
+                         themselves and every kds.printer record are
+                         completely unchanged and untouched - only this
+                         one card, on this one landing page, is
+                         replaced. Print Jobs remains the primary
+                         operational card for BOTH transports (Direct
+                         Network and Legacy Agent) - unchanged, still
+                         the same first card position. The new second
+                         card replaces "Printers" with a direct link to
+                         Station configuration, where Direct Network
+                         printing is actually set up now. -->
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <div class="card o_kds_hub_block h-100">
+                                <div class="card-body d-flex flex-column">
+                                    <div class="o_kds_hub_icon mb-3"><i class="fa fa-list-alt" role="img" aria-label="Print Jobs"/></div>
+                                    <h5 class="card-title">Print Jobs</h5>
+                                    <!-- UI/DATA FIX ("Master Change
+                                         Request", item 12): shortened -
+                                         the screen's own column
+                                         headers and filters already
+                                         make this clear once opened. -->
+                                    <p class="card-text text-muted flex-grow-1">
+                                        Print and reprint job history, including status and any escalation.
+                                    </p>
+                                    <button name="%(action_kds_print_job)d" type="action"
+                                            string="Open Print Jobs" class="btn btn-primary o_kds_hub_btn"/>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="card o_kds_hub_block h-100">
+                                <div class="card-body d-flex flex-column">
+                                    <div class="o_kds_hub_icon mb-3"><i class="fa fa-desktop" role="img" aria-label="Station Printing Settings"/></div>
+                                    <h5 class="card-title">Station Printing Settings</h5>
+                                    <p class="card-text text-muted flex-grow-1">
+                                        Configure Direct Network printing (Epson ePOS) per station - Printer IP and Local Network Access, under each station's own Printing tab.
+                                    </p>
+                                    <button name="%(action_kds_station)d" type="action"
+                                            string="Open Stations" class="btn btn-primary o_kds_hub_btn"/>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_kds_printer_hub" model="ir.actions.act_window">
+        <field name="name">Printers</field>
+        <field name="res_model">kds.printer.hub</field>
+        <field name="view_mode">form</field>
+        <field name="target">current</field>
+    </record>
+</odoo>

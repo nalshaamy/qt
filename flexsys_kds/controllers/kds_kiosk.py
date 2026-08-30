@@ -1,0 +1,1994 @@
+# -*- coding: utf-8 -*-
+"""
+Public kiosk access - no Odoo login required.
+
+Security model: possession of the per-station `kiosk_token` (see
+kds.station.kiosk_token) IS the credential, in place of a logged-in
+user. Every route here re-validates the token against the requested
+station on every call (constant-time comparison), and the JSON API
+surface is deliberately narrow:
+- Only this station's own orders/lines are ever returned (the token is
+  scoped to exactly one station's `code`, checked again server-side on
+  every line action so a valid token for Station A can't be used to
+  touch a line that actually belongs to Station B by guessing IDs).
+- Only 'accept' / 'start' / 'ready' / 'complete' (all line-level -
+  'complete' was order-level when first added in v5.4, alongside the
+  manual-Complete design reversal, but became line-level in BUG-07's
+  station-scoped completion work; see kds_order_line.py's own
+  action_complete()) are allowed actions. No cancel, no reprint, no
+  reopen, no cross-station move - anything requiring Supervisor+
+  judgement stays behind a real Odoo login in the backend, on purpose.
+  'complete' fits this same Operator-tier bar
+  (ACTION_MIN_GROUP['complete']) - it's not a Supervisor-only move. A
+  leaked kiosk URL should be able to do no more damage than "mark a
+  food item as further along than it should be, or mark an already-
+  Ready order as picked up", never "cancel a paying customer's order"
+  or "see every station".
+
+The HTML page itself is deliberately plain server-rendered HTML/CSS/JS
+with no dependency on Odoo's frontend framework (Owl, the webclient
+service registry, etc.) - those all assume an authenticated backend
+session to bootstrap, which a public page by definition doesn't have.
+This trades some code reuse with the authenticated KDS screen for
+guaranteed-correct behavior with zero dependency on this Odoo 19 build's
+frontend internals (several of which have already turned out to differ
+from stock Odoo elsewhere in this module).
+"""
+import hmac
+import logging
+from datetime import timedelta
+
+from odoo import fields, http
+from odoo.exceptions import UserError, ValidationError
+from odoo.http import request
+
+from .kds import _kds_error
+
+_logger = logging.getLogger(__name__)
+
+# UX DECISION - see controllers/kds.py's own COMPLETED_GRACE_MINUTES for
+# the full rationale, including the dev request this specific value (5
+# minutes) traces back to. Kept in sync with that constant manually
+# (no shared config source exists yet - see that same comment on why
+# this stays a plain constant for now).
+COMPLETED_GRACE_MINUTES = 5
+# See controllers/kds.py's own CANCELLED_GRACE_MINUTES for the full
+# rationale (dev request "Cancellation Visibility Improvement"). Kept in
+# sync manually, same as COMPLETED_GRACE_MINUTES above.
+CANCELLED_GRACE_MINUTES = 5
+
+
+def _effective_stage(lines):
+    """BUG-10 FIX - see controllers/kds.py's own matching, more detailed
+    docstring for the full explanation. Kept in sync manually, same as
+    COMPLETED_GRACE_MINUTES/CANCELLED_GRACE_MINUTES above.
+
+    REAL BUG FIX ("CANCELLED FILTER CLASSIFICATION + RETENTION
+    LIFECYCLE", Issue 1) - see controllers/kds.py's own matching, more
+    detailed docstring for the full explanation: a fully-cancelled
+    station now returns the distinct 'cancelled' value, not a BUG-08
+    "preserved last stage" value - this is what actually fixes "NEW = 6"
+    with all 6 cards genuinely CANCELLED.
+    """
+    active = [l for l in lines if l.state != 'cancelled']
+    if not active:
+        return 'cancelled' if lines else 'new'
+    if all(l.state == 'completed' for l in active):
+        return 'completed'
+    if all(l.state in ('ready', 'completed') for l in active):
+        return 'ready'
+    if any(l.state in ('preparing', 'ready', 'completed') for l in active):
+        return 'preparing'
+    return 'new'
+
+
+def _station_from_token(env, station_code, token):
+    # DIAGNOSTIC LOGGING ("Deep Dead Code & Commercial Cleanup Request",
+    # item 5, "Runtime Diagnostic Cleanup"): the Printer Only enforcement
+    # issue has now been verified successfully at runtime - the
+    # investigation this logging was added for is closed. Reduced from
+    # INFO to DEBUG for routine request/success messages, per "Normal
+    # Kiosk polling/access must not generate excessive INFO logs" (a
+    # real kiosk device polls this function on essentially every screen
+    # refresh - INFO-level logging on every one of those calls, forever,
+    # is exactly the noise this item asks to avoid). Genuine rejections
+    # are kept at WARNING - "Do not remove useful security warnings for
+    # genuinely rejected or suspicious access" - a rejected kiosk
+    # request (bad token, disabled station, printer_only) is real
+    # security-relevant signal worth keeping visible in production logs
+    # by default, unlike routine successful polling.
+    _logger.debug("FLEXSYS_KIOSK_AUTH: request station_code=%r token_prefix=%r",
+                  station_code, (token or '')[:8])
+    if not station_code or not token:
+        _logger.warning("FLEXSYS_KIOSK_AUTH: REJECTED - station_code or token missing/empty")
+        return None
+    station = env['kds.station'].sudo().search([
+        ('code', '=', station_code), ('active', '=', True),
+    ], limit=1)
+    if not station:
+        _logger.warning("FLEXSYS_KIOSK_AUTH: REJECTED - no active station found for "
+                         "code=%r (in ANY company)", station_code)
+        return None
+    _logger.debug(
+        "FLEXSYS_KIOSK_AUTH: resolved station id=%s name=%r code=%r company_id=%s/%r "
+        "operating_mode=%r kiosk_disabled=%r",
+        station.id, station.name, station.code, station.company_id.id,
+        station.company_id.name, station.operating_mode, station.kiosk_disabled)
+    if not station.kiosk_token or not hmac.compare_digest(station.kiosk_token, token):
+        _logger.warning(
+            "FLEXSYS_KIOSK_AUTH: REJECTED - token mismatch for station id=%s (the token in "
+            "the URL does not match this station's own CURRENT kiosk_token)",
+            station.id)
+        return None
+    # UI/DATA FIX ("Master Change Request", item 5, "Public Kiosk
+    # Configuration Improvement"): "Add Disable Public Access option" -
+    # kiosk_disabled (models/kds_station.py) is checked here, the one
+    # central token-validation function every public kiosk route in
+    # this controller calls - covers every one of them uniformly. A
+    # deliberately separate gate from the token comparison above: this
+    # lets an administrator instantly deny every kiosk request for a
+    # station without regenerating/invalidating the token itself
+    # (useful for temporarily taking a station's kiosk offline without
+    # having to reconfigure every device with a new URL afterward).
+    if station.kiosk_disabled:
+        _logger.warning("FLEXSYS_KIOSK_AUTH: REJECTED - station id=%s has kiosk_disabled=True",
+                         station.id)
+        return None
+    # UI/DATA FIX ("Final Cleanup Request", item 1, "Printer Only -
+    # Remove Public Kiosk"): "Direct access using an existing/old
+    # Public Kiosk URL must also be rejected at backend/controller
+    # level... Please do not implement this as UI hiding only." Gated
+    # here, the same single, central token-validation function EVERY
+    # public kiosk route in this controller already calls (confirmed
+    # by usage check: all four routes below go through this exact
+    # function, none bypass it) - a previously bookmarked/saved kiosk
+    # URL for a station later reconfigured to 'printer_only' now
+    # correctly fails authentication itself, not merely a UI element
+    # that happens to be hidden if the page were somehow still
+    # reached. A station in 'kds_only' or 'kds_printer' mode is
+    # completely unaffected - only 'printer_only' is rejected here.
+    # Verified working correctly at runtime (see CHANGELOG for the
+    # confirmed investigation outcome).
+    if station.operating_mode == 'printer_only':
+        _logger.warning(
+            "FLEXSYS_KIOSK_AUTH: REJECTED - station id=%s operating_mode=%r == 'printer_only'",
+            station.id, station.operating_mode)
+        return None
+    _logger.debug(
+        "FLEXSYS_KIOSK_AUTH: ALLOWED - station id=%s operating_mode=%r (not printer_only, "
+        "not disabled, token matched)", station.id, station.operating_mode)
+    return station
+
+
+class FlexSysKdsKioskController(http.Controller):
+
+    @http.route('/flexsyskds/public/<string:station_code>/<string:token>',
+                type='http', auth='public', website=False)
+    def kiosk_page(self, station_code, token, **kwargs):
+        env = request.env
+        station = _station_from_token(env, station_code, token)
+        if not station:
+            return request.not_found()
+        # "Branch" is sourced from the station's linked pos.config(s) - the
+        # POS location name staff actually recognize - rather than the
+        # legal company name, which is now shown separately instead.
+        branch_name = ', '.join(station.pos_config_ids.mapped('name')) or ''
+        html = _KIOSK_HTML_TEMPLATE % {
+            'station_name': station.name,
+            'branch_name': branch_name,
+            'company_name': station.company_id.name or '',
+            'station_code': station.code,
+            'token': token,
+            # LOCALIZATION ("Arabic Localization & RTL Specification"),
+            # item 5, "Public Kiosk - Use an explicit supported
+            # Kiosk/Station language source": station.kiosk_language,
+            # never the browser's own Accept-Language header or any
+            # client-side guess - see that field's own docstring
+            # (kds_station.py) for the full reasoning.
+            # LOCALIZATION, item 5: the Branch/Time labels sit in the
+            # static HTML markup (rendered server-side via this same %
+            # substitution), outside the <script> block where
+            # KIOSK_LABELS lives - resolved here in Python instead, from
+            # the exact same station.kiosk_language source, so both the
+            # markup and the script agree on language with zero
+            # possibility of drift between them.
+            'kiosk_lang': station.kiosk_language,
+            'kiosk_dir': 'rtl' if station.kiosk_language == 'ar' else 'ltr',
+            'branch_label': 'الفرع' if station.kiosk_language == 'ar' else 'Branch',
+            'time_label': 'الوقت' if station.kiosk_language == 'ar' else 'Time',
+            # Bootstrapped once into the page itself (see
+            # FLEXSYS_PRINTING_CONFIG in the template below), never a
+            # separate route/network call.
+            'flexsys_printing_method': station.flexsys_printing_method or '',
+            'flexsys_printer_ip': station.flexsys_printer_ip or '',
+            # 'true'/'false' literals (not Python's own True/False,
+            # which would render as invalid JS) for direct use as a JS
+            # boolean via the %s (not %r) placeholder above.
+            'flexsys_use_local_network_access':
+                'true' if station.flexsys_use_local_network_access else 'false',
+        }
+        return request.make_response(
+            html,
+            headers=[
+                ('Content-Type', 'text/html; charset=utf-8'),
+                # REAL BUG FIX ("Final Cleanup Bug - Printer Only kiosk
+                # still opens with an old token"), confirmed live:
+                # _station_from_token() itself was re-verified,
+                # character by character, against every one of the four
+                # public kiosk routes below - the operating_mode ==
+                # 'printer_only' check is genuinely present and
+                # unconditional in the one, single, central function
+                # every one of them calls, with no alternate code path
+                # anywhere in this codebase that resolves a station
+                # without going through it (confirmed by a full
+                # codebase search for every @http.route this module
+                # defines). Since the backend logic itself checks out
+                # correctly on every static re-read, the most likely
+                # explanation for a still-succeeding request against a
+                # station now correctly rejected server-side is the
+                # BROWSER (or an intermediate cache/proxy) serving a
+                # stored copy of this exact page from an earlier,
+                # still-valid visit, without ever re-issuing the
+                # request to this server at all - this response
+                # previously carried no cache directives, leaving the
+                # browser free to decide for itself. These headers
+                # remove that ambiguity: no browser, proxy, or CDN in
+                # front of Odoo may serve a stored copy of this
+                # response under any circumstance - every single
+                # request for this URL must reach this exact handler,
+                # every time, so a station's own CURRENT operating_mode
+                # is always what gets checked, never a stale cached
+                # answer from before it changed. This is enforced
+                # entirely server-side, via a standard HTTP response
+                # header - not a JavaScript redirect, not client-side
+                # state, not anything the browser could choose to
+                # ignore or a device already showing the page could
+                # route around.
+                ('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0'),
+                ('Pragma', 'no-cache'),
+                ('Expires', '0'),
+            ],
+        )
+
+    @http.route('/flexsyskds/public/api/orders', type='jsonrpc', auth='public', csrf=False)
+    def kiosk_orders(self, station_code, token):
+        env = request.env
+        station = _station_from_token(env, station_code, token)
+        if not station:
+            return {'ok': False, 'error': 'Invalid or expired kiosk link'}
+
+        # UX DECISION (see COMPLETED_GRACE_MINUTES/CANCELLED_GRACE_MINUTES
+        # above): a line shows on screen if it's genuinely active (not
+        # completed, not cancelled), OR it's terminal (completed or
+        # cancelled) but still within its OWN grace window.
+        #
+        # BUG-08 FIX ("Cancelled Lines Break Station Card Lifecycle /
+        # Terminal Cleanup") - see controllers/kds.py's own matching,
+        # more detailed comment for the full root-cause explanation:
+        # this used to key the completed-line grace check off
+        # order_id.completion_time (only ever set once EVERY station on
+        # the order has completed), with an "or unset" fallback meaning
+        # a completed line on a still-active multi-station order was
+        # shown indefinitely. completed_at (kds_order_line.py, per-line,
+        # stamped by this line's own action_complete()) is this
+        # station's own completion timestamp, independent of any other
+        # station on the same order.
+        #
+        # REAL BUG FIX ("Retention Must Follow POS Order Lifecycle") -
+        # see controllers/kds.py's own matching, more detailed comment
+        # for the full explanation: extends the same pos_closed_at gate
+        # to Cancelled too - "this rule applies regardless of the
+        # current KDS terminal state, including COMPLETED [and]
+        # CANCELLED." Also gated on order_id.pos_order_id being set at
+        # all - see controllers/kds.py's own matching comment for the
+        # full explanation of why a ticket with no linked POS order must
+        # fall back to its own completed_at/cancelled_at directly,
+        # rather than unintentionally never expiring.
+        pos_closed_cutoff = fields.Datetime.now() - timedelta(minutes=COMPLETED_GRACE_MINUTES)
+        cancelled_cutoff = fields.Datetime.now() - timedelta(minutes=CANCELLED_GRACE_MINUTES)
+        lines = env['kds.order.line'].sudo().search([
+            ('station_id', '=', station.id),
+            '|', '|',
+                ('state', 'not in', ('completed', 'cancelled')),
+                '&', ('state', '=', 'completed'),
+                    '|',
+                        '&', ('order_id.pos_order_id', '!=', False),
+                            '|', ('order_id.pos_closed_at', '=', False), ('order_id.pos_closed_at', '>=', pos_closed_cutoff),
+                        '&', ('order_id.pos_order_id', '=', False), ('completed_at', '>=', pos_closed_cutoff),
+                '&', ('state', '=', 'cancelled'),
+                    '|',
+                        '&', ('order_id.pos_order_id', '!=', False),
+                            '|', ('order_id.pos_closed_at', '=', False), ('order_id.pos_closed_at', '>=', cancelled_cutoff),
+                        '&', ('order_id.pos_order_id', '=', False), ('cancelled_at', '>=', cancelled_cutoff),
+        ])
+        # UI/DATA FIX ("Final Cleanup Request", item 2, "Remove
+        # Priority / Urgent / VIP from KDS"): same fix as
+        # controllers/kds.py's own matching sorted() call - applied
+        # here too for consistency, since this public kiosk page is
+        # equally part of the "active KDS functionality" this item
+        # requires cleaned up, not only the Internal Screen named
+        # explicitly. Sorting by created_time alone (oldest first) is
+        # the only ordering left.
+        orders = lines.mapped('order_id').sorted(key=lambda o: o.created_time)
+
+        order_fg = env['kds.order'].sudo().fields_get(['order_type', 'state'])
+        line_fg = env['kds.order.line'].sudo().fields_get(['line_change'])
+        order_type_labels = dict(order_fg['order_type']['selection'])
+        state_labels = dict(order_fg['state']['selection'])
+        line_change_labels = dict(line_fg['line_change']['selection'])
+
+        result = []
+        for order in orders:
+            # REAL BUG FIX, confirmed live (dev request "Remaining Fixes
+            # After v19.0.7.0.0 Review", item 1) - see controllers/
+            # kds.py's own detailed comment for the full explanation.
+            # Same fix here: `display_lines` (payload - terminal-but-
+            # within-grace lines included) split from `active_line_sla`
+            # (still correctly excludes cancelled - not a meaningful SLA
+            # input).
+            # BUG-08 FIX - see controllers/kds.py's own matching, more
+            # detailed comment for the full explanation. Mirrors the
+            # search domain's own completed_at/cancelled_at grace-period
+            # conditions exactly, symmetrically for both terminal states.
+            # BUG-14 FIX: order.pos_closed_at (not completed_at) anchors
+            # a completed line's own grace check - see controllers/
+            # kds.py's own matching comment for the full explanation.
+            # REAL BUG FIX ("Retention Must Follow POS Order Lifecycle"):
+            # order.pos_closed_at now also gates cancelled_at, exactly
+            # the same way it already gates completed_at - and both are
+            # themselves conditioned on order_id.pos_order_id being set
+            # (see controllers/kds.py's own matching comment).
+            display_lines = order.line_ids.filtered(
+                lambda l, sid=station.id, cc=cancelled_cutoff, pcc=pos_closed_cutoff, o=order: l.station_id.id == sid and (
+                    (l.state not in ('completed', 'cancelled'))
+                    or (l.state == 'completed' and (
+                        (o.pos_order_id and (not o.pos_closed_at or o.pos_closed_at >= pcc))
+                        or (not o.pos_order_id and l.completed_at and l.completed_at >= pcc)
+                    ))
+                    or (l.state == 'cancelled' and (
+                        (o.pos_order_id and (not o.pos_closed_at or o.pos_closed_at >= cc))
+                        or (not o.pos_order_id and l.cancelled_at and l.cancelled_at >= cc)
+                    ))
+                ))
+            if not display_lines:
+                continue
+            # Same fix as the backend controller: order.sla_status is
+            # store=True and only recomputes on an explicit dependency
+            # write, not purely from elapsed time - recompute live from
+            # the (non-stored, always-fresh) line-level sla_status values
+            # instead of trusting the potentially-stale stored field.
+            active_line_sla = display_lines.filtered(lambda l: l.state != 'cancelled').mapped('sla_status')
+            if 'late' in active_line_sla:
+                live_sla_status = 'late'
+            elif 'warning' in active_line_sla:
+                live_sla_status = 'warning'
+            else:
+                live_sla_status = 'normal'
+            pos_order = order.pos_order_id
+            employee_name = ''
+            pos_ref = ''
+            table_label = ''
+            if pos_order:
+                employee_name = getattr(pos_order.sudo().user_id, 'name', '') or ''
+                pos_ref = getattr(pos_order, 'pos_reference', '') or ''
+                # Best-effort, defensive: restaurant.table field names
+                # (table_id, floor_id, table_number vs. name) haven't been
+                # verifiable against this specific Odoo 19 build without
+                # live access - if the Restaurant module isn't installed
+                # or uses different field names here, this just stays
+                # blank and the chip is hidden client-side, it won't error.
+                table = getattr(pos_order, 'table_id', False)
+                if table:
+                    floor_name = getattr(getattr(table, 'floor_id', False), 'name', '') or ''
+                    table_num = getattr(table, 'table_number', '') or getattr(table, 'name', '') or ''
+                    table_label = f"{floor_name} / {table_num}" if floor_name and table_num else (table_num or floor_name)
+            result.append({
+                'id': order.id,
+                'name': order.name,
+                'order_type_label': order_type_labels.get(order.order_type, order.order_type),
+                'state': order.state,
+                'state_label': state_labels.get(order.state, order.state),
+                # BUG-10 FIX: see controllers/kds.py's own matching,
+                # more detailed comment.
+                'effective_stage': _effective_stage(display_lines),
+                'sla_status': live_sla_status,
+                'customer_name': order.customer_name,
+                'employee_name': employee_name,
+                'pos_reference': pos_ref,
+                'table_label': table_label,
+                'created_time': order.created_time and order.created_time.isoformat() + 'Z',
+                'lines': [{
+                    'id': l.id,
+                    'product_name': l.product_name,
+                    'qty': l.qty,
+                    'note': request.env['kds.order.line'].normalize_note_text(l.note),
+                    'variant_info': l.variant_info,
+                    'state': l.state,
+                    'line_change': l.line_change,
+                    'line_change_label': line_change_labels.get(l.line_change, l.line_change),
+                    'qty_delta': l.qty_delta,
+                    # BUG-08 FIX ("Preserve Last Operational State") - see
+                    # controllers/kds.py's own matching, more detailed
+                    # comment for the full explanation.
+                    'preparation_start_time': l.preparation_start_time and l.preparation_start_time.isoformat() + 'Z',
+                    'ready_time': l.ready_time and l.ready_time.isoformat() + 'Z',
+                } for l in display_lines],
+            })
+
+        return {
+            'ok': True,
+            'station_name': station.name,
+            'branch_name': station.company_id.name or '',
+            'orders': result,
+            'printing_enabled': station.operating_mode != 'kds_only',
+            'stats': {
+                'orders_count': len(result),
+                'avg_prep_time': round(station.avg_prep_time, 1),
+                'late_count': station.late_order_count,
+            },
+        }
+
+    @http.route('/flexsyskds/public/api/action', type='jsonrpc', auth='public', csrf=False)
+    def kiosk_action(self, station_code, token, line_id, action):
+        env = request.env
+        station = _station_from_token(env, station_code, token)
+        if not station:
+            return {'ok': False, 'error': 'Invalid or expired kiosk link'}
+        # BUG-07 FIX ("Station COMPLETE does not transition from READY"):
+        # 'complete' added here as a line-level action, replacing the
+        # old order-level kiosk_order_complete() route below (removed -
+        # superseded by this, see that route's own removal note) - see
+        # kds_order_line.py's own new action_complete() for the full
+        # explanation of what completing a single line now does,
+        # independently of every other station on the same order.
+        if action not in ('accept', 'start', 'ready', 'complete'):
+            return {'ok': False, 'error': 'Action not available on the public kiosk'}
+
+        line = env['kds.order.line'].sudo().browse(line_id).exists()
+        if not line or line.station_id != station:
+            # Deliberately generic: don't reveal whether the line exists
+            # at all if it doesn't belong to this token's station.
+            return {'ok': False, 'error': 'Line not found for this station'}
+
+        method = {'accept': line.action_accept, 'start': line.action_start,
+                  'ready': line.action_ready, 'complete': line.action_complete}[action]
+        # REAL BUG FIX, found via a proactive sweep for hidden
+        # regressions (not a reported failure): this route had NO
+        # exception handling at all - every workflow action method has
+        # always raised UserError for an invalid transition, and BUG-07's
+        # own action_complete() guard made that significantly more
+        # likely to be hit in practice on this exact endpoint (any
+        # attempt to complete a station whose lines aren't actually all
+        # Ready yet). Uncaught, this would have crashed with a raw,
+        # unhandled server error - on a PUBLIC, unauthenticated kiosk
+        # endpoint - instead of the clean {'ok': False, 'error': ...}
+        # response the kiosk's own frontend JS already expects and
+        # displays gracefully to the operator.
+        try:
+            method(bypass_check=True)
+        except UserError as e:
+            return {'ok': False, 'error': str(e)}
+        return {'ok': True, 'state': line.state}
+
+    # BUG-07 FIX ("Station COMPLETE does not transition from READY"):
+    # kiosk_order_complete() (the order-level Complete endpoint added in
+    # v5.4) removed - completing the whole order regardless of station
+    # was exactly the bug: Kitchen completing would either fail (order
+    # not yet 'ready' if another station hadn't caught up) or complete
+    # every station's lines simultaneously (once it was), never "just
+    # Kitchen's own portion". Superseded entirely by kiosk_action()
+    # above now supporting a line-level 'complete' action - the frontend
+    # calls that instead, once per line on this station's own card, same
+    # as it already does for 'start'/'ready'.
+
+    @http.route('/flexsyskds/public/api/print', type='jsonrpc', auth='public', csrf=False)
+    def kiosk_print(self, station_code, token, order_id):
+        env = request.env
+        station = _station_from_token(env, station_code, token)
+        if not station:
+            return {'ok': False, 'error': 'Invalid or expired kiosk link'}
+        if station.operating_mode == 'kds_only':
+            return {'ok': False, 'error': 'Printing is not enabled for this station'}
+
+        order = env['kds.order'].sudo().browse(order_id).exists()
+        if not order or station not in order.station_ids:
+            return {'ok': False, 'error': 'Order not found for this station'}
+
+        # Same explicit decision as the backend controller: gated by the
+        # station's printing configuration, not a user permission tier -
+        # there's no logged-in user on the public kiosk to gate by
+        # anyway, so bypass_check=True here matches every other kiosk
+        # action (accept/start/ready).
+        # UI/DATA FIX ("Printing Cleanup & Job History - Final
+        # Request"), item 3: create_reprint() now raises a UserError
+        # (NoPrinterConfiguredError specifically) instead of silently
+        # creating a job with no printer, for a station with none
+        # configured - this call had no try/except around it at all
+        # before this fix, so that exception would have surfaced as an
+        # unhandled server error instead of the clean {'ok': False,
+        # 'error': ...} JSON response every other route on this kiosk
+        # controller already returns for an expected failure.
+        # error_code, when present, lets a kiosk frontend distinguish
+        # this specific condition without pattern-matching the
+        # translated message text - the same convention already
+        # established in controllers/kds.py's own _kds_error().
+        try:
+            job = env['kds.print.job'].create_reprint(
+                order, station, reason='kitchen_request', bypass_check=True)
+        except UserError as e:
+            # UI/DATA FIX ("Printing Cleanup & Job History - Final
+            # Request"): reuses controllers/kds.py's own _kds_error()
+            # (imported above) instead of a second, hand-duplicated
+            # copy of the same error_code-surfacing logic - one single
+            # implementation, matching this route's own established
+            # convention with the backend controller's own /flexsys_kds/
+            # print/reprint route.
+            return _kds_error(e)
+        return {'ok': True, 'job_id': job.id}
+
+    # -----------------------------------------------------------------
+    # PHASE 2 ("Direct Printing <-> kds.print.job Integration"): two
+    # new, narrow, station/token-validated routes for the Direct
+    # Network transport - deliberately NOT direct ORM access from the
+    # Public Kiosk (a standalone, unauthenticated page), per explicit
+    # direction. The Direct ePOS transport itself (LNA, protocol,
+    # endpoint, timeout, response parsing) executes entirely in the
+    # browser via the unchanged Public Adapter - these two routes only
+    # create the job record first, and record its own eventual result
+    # after the browser's own attempt - the server never itself talks
+    # to the printer.
+    # -----------------------------------------------------------------
+
+    @http.route('/flexsyskds/public/api/print/prepare', type='jsonrpc', auth='public', csrf=False)
+    def kiosk_prepare_direct_print(self, station_code, token, order_id):
+        """Step 1 of the Direct Network lifecycle: validates the
+        station/token exactly like every other kiosk route, confirms
+        the order genuinely belongs to this station, then creates the
+        kds.print.job record BEFORE the browser attempts to print -
+        same bypass_check=True convention as kiosk_print() above (no
+        logged-in user on a public kiosk to gate by a permission tier)."""
+        env = request.env
+        station = _station_from_token(env, station_code, token)
+        if not station:
+            return {'ok': False, 'error': 'Invalid or expired kiosk link'}
+
+        order = env['kds.order'].sudo().browse(order_id).exists()
+        if not order or station not in order.station_ids:
+            return {'ok': False, 'error': 'Order not found for this station'}
+
+        try:
+            result = env['kds.print.job'].sudo().create_direct_print_job(
+                order.id, station.id, job_type='manual',
+                reason='kitchen_request', bypass_check=True,
+                # CORRECTION ("Phase 2 - Final Corrections Before
+                # Regression Test"), item 4: source='public_kiosk'
+                # here is what makes create_direct_print_job() set
+                # user_id=False explicitly, rather than letting the
+                # field's own default=lambda: self.env.user fall
+                # through - a public, unauthenticated kiosk request
+                # must never be attributed to whichever technical user
+                # this sudo()'d request happens to run as.
+                source='public_kiosk')
+        except UserError as e:
+            return _kds_error(e)
+        return {'ok': True, 'job_id': result['job_id']}
+
+    @http.route('/flexsyskds/public/api/print/result', type='jsonrpc', auth='public', csrf=False)
+    def kiosk_report_direct_print_result(self, station_code, token, job_id,
+                                          successful, error_code=False, error_message=False):
+        """Step 2 of the Direct Network lifecycle: reports the
+        browser's own Direct ePOS attempt result back for the SAME
+        job created by kiosk_prepare_direct_print() above.
+
+        SECURITY (Ownership Guard - "One Final Public Result Guard"):
+        validates station/token exactly like every other kiosk route,
+        then explicitly confirms the given job_id exists AND belongs
+        to THIS SAME station AND was itself created by a Public Kiosk
+        request (source == 'public_kiosk') - a public client supplying
+        an arbitrary job_id belonging to a different station, a
+        Legacy Agent job entirely, or even a Direct Network job at the
+        SAME station that Internal KDS itself created, is rejected
+        outright. Never allowed to update a job it has no genuine
+        ownership claim over, in any of those three ways.
+
+        LIFECYCLE GUARD ("One Final Public Result Guard"): only a job
+        still genuinely 'dispatched' (awaiting its first real result)
+        is actually written here. Reporting the exact SAME outcome
+        again for a job already in its own matching terminal state
+        (successful=True on an already-'printed' job, or
+        successful=False on an already-'failed' job) is treated as a
+        safe, idempotent retry of the same callback - accepted with no
+        further write at all, so a flaky network re-sending the same
+        result never causes a spurious duplicate update. Any
+        genuinely CONFLICTING result for a job already in a terminal
+        state (printed -> failed, failed -> printed, or any result at
+        all for an already-'cancelled' job) is rejected - a terminal
+        state, once reached, never moves to a different terminal state
+        through this route.
+        """
+        env = request.env
+        station = _station_from_token(env, station_code, token)
+        if not station:
+            return {'ok': False, 'error': 'Invalid or expired kiosk link'}
+
+        job = env['kds.print.job'].sudo().browse(job_id).exists()
+        if (not job or job.station_id != station or job.transport != 'direct_network'
+                or job.source != 'public_kiosk'):
+            return {'ok': False, 'error': 'Print job not found for this station'}
+
+        # Ownership/security checks above are this route's own
+        # responsibility; the actual idempotency/conflict/lifecycle
+        # rules are delegated entirely to
+        # report_direct_print_result() - the ONE shared place those
+        # rules live, identical for both this Public Kiosk route and
+        # Internal KDS's own equivalent ORM call - never duplicated
+        # here.
+        try:
+            job.report_direct_print_result(
+                successful, error_code=error_code or False, error_message=error_message or False)
+        except ValidationError as e:
+            return {'ok': False, 'error': str(e)}
+        return {'ok': True}
+
+
+_KIOSK_HTML_TEMPLATE = r"""<!DOCTYPE html>
+<html lang="%(kiosk_lang)s" dir="%(kiosk_dir)s">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>FlexSys KDS - %(station_name)s</title>
+<!-- Loaded directly in the page's own <head>. Classic scripts (no
+     ES module loader here at all - this is standalone HTML) - the
+     shared renderer must load before the public adapter that calls
+     it, which must load before the inline script below that calls
+     printOrder(). -->
+<script src="/flexsys_kds/static/src/shared/flexsys_ticket_renderer.js"></script>
+<script src="/flexsys_kds/static/src/shared/flexsys_pagination.js"></script>
+<script src="/flexsys_kds/static/src/public/flexsys_epos_direct_public.js"></script>
+<style>
+  :root{
+    --fs-blue:#1E88E5; --fs-orange:#FF9800; --fs-bg:#12161c; --fs-card:#1b212b;
+    --fs-late:#ef4444; --fs-warning:#f59e0b; --fs-ready:#22c55e; --fs-muted:#7c8aa0;
+  }
+  /* REAL FIX (reported live: "touch on the card feels delayed"): the
+     classic mobile-browser tap-delay - up to ~300ms while the browser
+     waits to see whether a tap is actually the start of a double-tap-
+     to-zoom gesture. The <meta viewport> tag above already sets
+     user-scalable=no, which *should* disable this in most modern
+     browsers on its own, but that's not consistently honored across
+     every browser/OS combination a kitchen touch device might be
+     running - explicit touch-action is the direct, reliable fix
+     regardless of that. Applied universally (this is a touch-first
+     kiosk with no pinch/double-tap-zoom use case at all, matching the
+     viewport tag's own intent) rather than per-element, so nothing new
+     added later accidentally reintroduces the delay by missing it. */
+  *{box-sizing:border-box; touch-action:manipulation;} html,body{margin:0;padding:0;height:100%%;}
+  /* FULL VIEWPORT FLEX LAYOUT FIX ("Public Kiosk - Full Viewport Flex
+     Layout Fix"): confirmed by direct inspection of this exact file -
+     there is no body.o_flexsys_kiosk (or any other kiosk-specific
+     body class) anywhere in this standalone page's own HTML; that
+     class name belongs to a different context entirely and using it
+     here would silently match nothing. This page is already a
+     genuinely standalone, full-screen surface (its own <html>/<body>,
+     no Odoo backend chrome at all) - unlike Internal KDS, which
+     respects its own real Odoo action-container parent height, this
+     page should use the real, full browser viewport height directly.
+     100dvh (Dynamic Viewport Height) added alongside the existing
+     100%% above - not replacing it, the standard safe CSS fallback
+     pattern (older/safer value first, newer value second; a browser
+     without dvh support simply keeps using height:100%% above, which
+     already correctly resolves against the real viewport since
+     html/body have no non-full-height parent of their own to be
+     constrained by here). */
+  html,body{height:100vh; height:100dvh;}
+  body{
+    /* LOCALIZATION ("Arabic Localization & RTL Specification"), item
+       12/8: same approach as the Internal Screen's own matching font
+       stack (static/src/scss/kds_style.scss) - "Cairo" covers Arabic
+       glyphs cleanly (no disconnected letters, no tofu/square glyphs),
+       falling back to the existing Latin-only stack when unavailable.
+       Relies on the font being available as a system font, exactly
+       like the Internal Screen already does, rather than a remote
+       @import - a kiosk device may run offline/on a restricted
+       network, where a failed remote font fetch is worse than a
+       graceful local fallback. */
+    background:var(--fs-bg); color:#eef2f7; font-family:'Cairo','Segoe UI',Tahoma,sans-serif;
+    /* FULL VIEWPORT FLEX LAYOUT FIX ("Public Kiosk - Full Viewport
+       Flex Layout Fix"): confirmed root cause - this page had no
+       display:flex at all, so .header/.filters/.grid/.pagination/
+       .statbar simply stacked in normal block flow, and .grid itself
+       (display:grid, but with no height/flex constraint of its own)
+       only ever grew to its own natural content height - the height
+       of however many cards actually fit the current page. With few
+       orders (e.g. 1 or 4), that natural height is short, so
+       .statbar (this page's own real "Kiosk Footer" - there is no
+       element literally named "footer" here) ended right after it,
+       leaving a large, unused block of this body's own dark
+       background below it, down to the real bottom of the viewport -
+       exactly the symptom reported. body is now the flex column that
+       owns the whole vertical layout - header/filters/pagination/
+       statbar stay their own natural size (see each of those rules'
+       own added flex-shrink:0 below), and ONLY .grid (below) is the
+       flexible region that actually claims the leftover space and
+       scrolls internally when it genuinely needs to - overflow-y
+       itself moves from here down to .grid specifically, mirroring
+       the same fix already applied to Internal KDS's own .fs-kds-app/
+       .fs-grid, scoped independently to this page's own real element
+       names.
+       RUNTIME UI ADJUSTMENT ("Vertical Scroll + Slightly Narrower
+       Cards"), confirmed live on Odoo.sh: overflow:hidden here was
+       blocking ANY vertical scroll for the page - once the header +
+       filters + a 3x2 card grid together exceeded the available
+       viewport height, the overflow was simply clipped, never
+       scrollable, cutting off the second row and making Pagination
+       itself unreachable in that case. That same real page-overflow
+       risk is why .grid (not body) now owns overflow-y:auto instead -
+       the header/filters/pagination/statbar framing must never be
+       pushed off-screen by a tall grid, exactly as before, but now
+       via a flex layout that also fixes the opposite (few-orders)
+       case in the same change; overflow-x:hidden keeps the explicit
+       "no horizontal scroll" requirement. */
+    display:flex; flex-direction:column; overflow-x:hidden; transition:background .2s;
+  }
+  /* Light mode (toggle button in header): only the page/grid background
+     changes to a light gradient - header, filters, and cards deliberately
+     keep their existing dark styling, per request. */
+  body.light-theme{
+    background:linear-gradient(180deg, #eaf1f6 0%%, #dbe7ef 100%%);
+  }
+  body.light-theme .empty{ color:#5a6b7a; }
+  .theme-toggle{
+    background:#161c25; border:1px solid #202834; border-radius:50%%;
+    width:34px; height:34px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; padding:0;
+  }
+  .theme-toggle svg{ width:18px; height:18px; stroke:#aab6c8; }
+  body.light-theme .theme-toggle{ background:#fff; border-color:#c7d6e0; }
+  body.light-theme .theme-toggle svg{ stroke:#3a4a58; }
+  .header{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:10px 18px; background:#0a0e14; border-bottom:1px solid #1a212b;
+    /* FULL VIEWPORT FLEX LAYOUT FIX: fixed-size, never compressed to
+       make room for .grid below it - body's own flex column above. */
+    flex-shrink:0;
+  }
+  .header-left{ display:flex; align-items:center; gap:14px; }
+  .logo{ font-weight:800; font-size:18px; }
+  .logo b{ color:var(--fs-blue); }
+  .station-badge{
+    background:var(--fs-blue); color:#fff; font-weight:700; font-size:13px;
+    padding:6px 14px; border-radius:8px;
+  }
+  .header-info{ display:flex; gap:18px; font-size:11.5px; color:var(--fs-muted); }
+  .header-info b{ color:#eef2f7; font-size:12.5px; display:block; }
+  .company-badge{
+    border:1px solid #2a3340; border-radius:8px; padding:7px 18px;
+    font-size:13px; font-weight:700; color:#cfd8e6;
+  }
+  body.light-theme .company-badge{ border-color:#c7d6e0; color:#3a4a58; }
+  .header-right{ display:flex; align-items:center; gap:16px; }
+  .conn{ font-size:12px; color:var(--fs-muted); font-family:monospace; }
+  .dot{ display:inline-block; width:7px; height:7px; border-radius:50%%; margin-inline-end:5px; }
+  .dot-on{ background:var(--fs-ready); } .dot-off{ background:var(--fs-late); }
+  .filters{
+    display:flex; gap:12px; padding:14px 18px; background:#0d1219; border-bottom:1px solid #161c25;
+    /* FULL VIEWPORT FLEX LAYOUT FIX: fixed-size, same reasoning as .header. */
+    flex-shrink:0;
+  }
+  .fbtn{
+    background:#161c25; color:#aab6c8; border:1px solid #232b37; padding:14px 26px;
+    border-radius:12px; font-weight:800; font-size:20px; cursor:pointer;
+    box-shadow:0 3px 8px rgba(0,0,0,.3); display:flex; align-items:center; gap:10px;
+  }
+  .fbtn .fcount{
+    background:rgba(255,255,255,.12); padding:2px 10px; border-radius:8px; font-size:17px;
+  }
+  .fbtn.active{ background:var(--fs-blue); color:#fff; border-color:var(--fs-blue); }
+  .fbtn.active .fcount{ background:rgba(255,255,255,.25); }
+  body.light-theme .fbtn{ background:#fff; color:#3a4a58; border-color:#c7d6e0; }
+  body.light-theme .fbtn .fcount{ background:rgba(0,0,0,.06); }
+  .grid{
+    /* HIGH-DENSITY LAYOUT ("Restore the approved pagination design"):
+       fixed-height scrolling grid REPLACED with a fixed page size -
+       grid-template-columns is now set inline from JS, inside
+       render() itself, matching the same ADAPTIVE column count
+       (Commercial Demo Layout Adjustment: 3 columns below 1600px
+       viewport width, 4 columns at/above it, never more than 4)
+       Internal KDS's own shared flexsys_pagination.js computes - no
+       independent copy of that density logic here. No more
+       height/overflow-y - the page bar below replaces scrolling as
+       the way to reach more orders.
+       FULL VIEWPORT FLEX LAYOUT FIX ("Public Kiosk - Full Viewport
+       Flex Layout Fix"): the comment directly above is now partially
+       superseded - this IS once again the one region with its own
+       height/overflow-y, but for a different reason than before: it
+       is body's own single flexible flex-column child, claiming
+       exactly the leftover space between the fixed-size header/
+       filters above and the fixed-size pagination/statbar below
+       (each of those has its own matching flex-shrink:0). With few
+       orders, this area simply doesn't fill that space and nothing
+       scrolls - .pagination/.statbar still sit right after it,
+       flush with the real bottom of the viewport, instead of a large
+       unused gap remaining below them. With enough orders/pages that
+       a single page's own grid content is genuinely taller than the
+       space available, THIS element scrolls internally
+       (min-height:0 is the standard flexbox override required here -
+       a flex child's own default min-height:auto would otherwise
+       refuse to shrink below its content's natural size, defeating
+       overflow-y:auto and just growing this area past its own
+       allotted space instead) - header/filters/pagination/statbar
+       are never pushed off-screen by it. */
+    display:grid; gap:24px; padding:20px 24px;
+    align-content:start; justify-content:start; justify-items:stretch; align-items:start;
+    flex:1 1 auto; min-height:0; overflow-y:auto;
+  }
+  .pagination{
+    display:flex; align-items:center; justify-content:center; gap:24px; padding:10px 0 4px;
+    /* FULL VIEWPORT FLEX LAYOUT FIX: fixed-size, same reasoning as
+       .header/.filters - never compressed, always visible right
+       after .grid's own leftover space. */
+    flex-shrink:0;
+  }
+  .pagination button{
+    min-width:64px; min-height:64px; border-radius:14px; border:none;
+    background:var(--fs-blue); color:#fff; font-size:28px; font-weight:700; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .pagination button:disabled{ background:#2a3340; color:#5a6578; cursor:default; }
+  .pagination-status{ min-width:96px; text-align:center; font-size:22px; font-weight:700; color:#eef2f7; }
+  .card{
+    background:#fff; border-radius:14px; overflow:hidden;
+    display:flex; flex-direction:column; position:relative;
+    box-shadow:0 4px 14px rgba(0,0,0,.35);
+    /* RUNTIME UI FIX ("Card Width / Excessive Grid Spacing"),
+       confirmed live on Odoo.sh: max-width:380px REMOVED - it was
+       capping every card at that width regardless of how much wider
+       its own grid column actually was on a Full HD screen's own
+       3-column layout, leaving large, wasted horizontal gaps between
+       cards. width:100%% (combined with .grid's own
+       justify-items:stretch) let each card genuinely use its
+       full column width.
+       UI ADJUSTMENT ("Vertical Scroll + Slightly Narrower Cards"):
+       confirmed live - 100%% read as slightly too wide once seen on
+       the actual screen. width:95%% + justify-self:center takes a
+       small, even margin off both sides of each card within its own
+       grid column (not the grid's own 24px gap between columns),
+       still comfortably wider than the old, removed 380px cap. */
+    width:95%%; justify-self:center;
+    /* HIGH-DENSITY LAYOUT (dev request, point 5: "a single order may
+       contain many products... do not allow one very large order to
+       destroy the entire grid layout... define a reasonable maximum
+       visible card height... keep the header visible, keep the action
+       area accessible, allow the product section to scroll"):
+       max-height caps how tall any one card can ever get (roughly
+       enough for ~6-7 line items at this font size before it starts
+       scrolling internally instead of growing further - tall enough
+       that the common case, a handful of items, never scrolls at all).
+       Header (.card-head) and footer (.card-footer, the action button)
+       sit OUTSIDE the scrollable region below (flex-shrink:0 on both),
+       so they stay visible and reachable even for a 10+ item order -
+       only .card-body (the line items) scrolls internally. */
+    max-height:640px;
+  }
+  /* UI ADJUSTMENT ("KDS Card Width - Visual Adjustment Only"):
+     confirmed live - on Full HD (>= 1600px, the Wide/4-column density
+     tier), the card was still wider than it needed to be. Visual-only
+     change: column COUNT (4), row count (2), and the 8-card max are
+     all still computed exactly the same way by the shared
+     flexsys_pagination.js/this file's own render() - nothing about
+     that logic is touched here, only how WIDE each of those 4
+     columns/cards is allowed to become at this one tier.
+     grid-template-columns here needs !important specifically because
+     render() sets it directly as an inline style on the .grid
+     element itself (`grid.style.gridTemplateColumns = ...`), which
+     would otherwise always win over a plain stylesheet rule - the
+     standard, minimal way to override an inline style from CSS alone.
+     Below 1600px: completely untouched - still the existing
+     3-column / width:95%% behavior above, unaffected by this block.
+     UI ADJUSTMENT ("KDS Card Width - 360px experiment"): trial
+     max-width raised from 340px to 360px at this same tier - visual
+     width only, everything else in this block unchanged. */
+  @media (min-width:1600px){
+    .grid{ grid-template-columns:repeat(4, minmax(0, 360px)) !important; }
+    .card{ width:100%%; max-width:360px; }
+  }
+  .card.celebrate{ animation:cardCelebrate .7s ease-in-out; z-index:5; }
+  @keyframes cardCelebrate{
+    0%%{ transform:rotate(0deg) scale(1); }
+    50%%{ transform:rotate(200deg) scale(1.05); }
+    100%%{ transform:rotate(360deg) scale(1); }
+  }
+  .card-head{
+    background:var(--fs-blue); color:#fff; padding:16px;
+    /* High-density layout: never shrunk or scrolled - always visible,
+       even when .card-body below is internally scrolling. */
+    flex-shrink:0;
+  }
+  .card.late .card-head{ background:var(--fs-late); }
+  .card.warning .card-head{ background:var(--fs-orange); }
+  .card.ready .card-head{ background:var(--fs-ready); }
+  /* CANCELLATION VISIBILITY (dev request, point 2: "the operator must
+     immediately understand that the entire order has been cancelled"):
+     deliberately muted grey rather than red/late's alert color - this
+     isn't an urgent problem needing attention, it's a completed
+     non-event (nothing left to prepare), and reusing the "late/warning"
+     alert color here would wrongly suggest otherwise. opacity on the
+     whole card reinforces "this is over, not active" at a glance,
+     matching how a fully cancelled order needs no interaction at all
+     (see mainAction() - action is null, no button renders). */
+  .card.cancelled{ opacity:.7; }
+  .card.cancelled .card-head{ background:#5a6472; }
+  .card-title-row{ display:flex; align-items:flex-start; gap:10px; }
+  .accent-bar{ width:4px; height:34px; background:rgba(255,255,255,.55); border-radius:2px; flex-shrink:0; }
+  /* LOCALIZATION ("Arabic Localization & RTL Specification"), item 9:
+     same fix as the Internal Screen's own matching .fs-order-number
+     rule (static/src/scss/kds_style.scss) - forces order numbers/POS
+     references to always render left-to-right, immune to the
+     surrounding Arabic (RTL) kiosk language's own bidi context. */
+  .order-no{ font-size:28px; font-weight:800; line-height:1; direction:ltr; unicode-bidi:isolate; }
+  .ordered-ref{ font-size:11px; opacity:.75; margin-top:4px; font-family:monospace; }
+  .chips-row{ display:flex; gap:7px; margin-top:12px; flex-wrap:wrap; }
+  .chip{
+    background:rgba(255,255,255,.95); color:#1a2330; font-size:11.5px; font-weight:700;
+    padding:6px 11px; border-radius:8px; display:inline-flex; align-items:center; gap:5px;
+  }
+  .chip svg{ width:13px; height:13px; flex-shrink:0; }
+  .chip-timer{ color:var(--fs-blue); }
+  .card.late .chip-timer{ color:var(--fs-late); }
+  .card.warning .chip-timer{ color:var(--fs-orange); }
+  .card.ready .chip-timer{ color:var(--fs-ready); }
+  .chip-timer.pulse{ animation:pulseTimer 1.6s ease-in-out infinite; }
+  @keyframes pulseTimer{ 0%%,100%%{ opacity:1; } 50%%{ opacity:.5; } }
+  .employee-row{
+    margin-top:10px; font-size:12.5px; color:rgba(255,255,255,.9);
+    display:flex; justify-content:flex-end; align-items:center; gap:6px;
+  }
+  .employee-row svg{ width:15px; height:15px; }
+  .customer-name{
+    font-size:13px; font-weight:800; color:#fff; background:rgba(255,255,255,.18);
+    padding:4px 10px; border-radius:7px; display:inline-block; margin-top:8px;
+  }
+  .status-blink{
+    display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:800;
+    letter-spacing:.5px; margin-top:10px; color:#fff;
+  }
+  .status-blink .dot{
+    width:8px; height:8px; border-radius:50%%; background:#fff;
+    animation:statusBlink 1.1s ease-in-out infinite;
+  }
+  @keyframes statusBlink{ 0%%,100%%{ opacity:1; } 50%%{ opacity:.15; } }
+  /* HIGH-DENSITY LAYOUT (dev request, point 5): this is the section that
+     scrolls internally once .card hits its own max-height (above) -
+     min-height:0 is the essential flexbox override here (a flex child's
+     default min-height:auto would otherwise refuse to shrink below its
+     content's natural size no matter how constrained the parent is,
+     silently defeating overflow-y:auto and just growing the card past
+     its max-height instead). flex:1 1 auto lets it claim exactly the
+     leftover space between the fixed-size header and footer. */
+  .card-body{ padding:2px 16px; flex:1 1 auto; min-height:0; overflow-y:auto; }
+  .line-item{ display:flex; align-items:flex-start; gap:12px; padding:13px 0; border-bottom:1px solid #eef1f4; }
+  .line-item:last-child{ border-bottom:none; }
+  .line-checkbox{
+    width:21px; height:21px; border:2px solid #cbd3da; border-radius:6px; flex-shrink:0;
+    margin-top:2px; display:flex; align-items:center; justify-content:center; cursor:pointer;
+    background:#fff;
+  }
+  .line-checkbox.checked{ background:var(--fs-ready); border-color:var(--fs-ready); }
+  .line-checkbox.in-progress{ background:var(--fs-blue); border-color:var(--fs-blue); }
+  .line-checkbox svg{ width:13px; height:13px; stroke:#fff; display:none; }
+  .line-checkbox.checked svg.icon-check{ display:block; }
+  .line-checkbox.in-progress svg.icon-dash{ display:block; }
+  /* CANCELLATION VISIBILITY (dev request, point 1: "visually
+     distinguishable from active preparation lines"): cursor:default (not
+     pointer) since a cancelled line's checkbox is display-only, no
+     onclick handler attached at all (see the cancelled-line branch in
+     the linesHtml map above). */
+  .line-checkbox-cancelled{
+    background:#8a94a3; border-color:#8a94a3; cursor:default;
+  }
+  .line-checkbox-cancelled svg{ width:13px; height:13px; stroke:#fff; display:block; }
+  .line-item.line-cancelled{ opacity:.65; }
+  .line-item.line-cancelled .line-title{ text-decoration:line-through; color:#7c8aa0; }
+  .line-badge-cancelled{
+    background:var(--fs-late) !important;
+  }
+  .line-main{ flex:1; min-width:0; }
+  .line-title-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .line-title{ font-weight:800; font-size:15px; color:#1a2330; }
+  .variant-pill{
+    background:#fdecd2; color:#8a5a12; font-size:11.5px; font-weight:700;
+    padding:3px 10px; border-radius:999px;
+  }
+  .line-note-row{ display:flex; align-items:center; gap:6px; margin-top:4px; font-size:12px; color:#8a94a3; }
+  .line-note-row svg{ width:13px; height:13px; flex-shrink:0; }
+  .line-badge{
+    font-size:9.5px; background:var(--fs-blue); color:#fff; padding:2px 8px;
+    border-radius:5px; font-weight:800; text-transform:uppercase;
+  }
+  .line-qty{ font-weight:800; font-size:15px; color:#1a2330; white-space:nowrap; }
+  .card-footer{
+    padding:14px 16px; display:flex; justify-content:space-between; align-items:center;
+    /* High-density layout: never shrunk or scrolled - the action button
+       stays reachable even for a 10+ item order (dev request, point 5:
+       "keep the action area accessible"). */
+    flex-shrink:0;
+    border-top:1px solid #eef1f4; gap:10px;
+  }
+  .print-act{
+    background:#fff; border:1px solid #d4dae1; border-radius:10px; width:44px; height:44px;
+    display:inline-flex; align-items:center; justify-content:center; cursor:pointer;
+    color:#556270; flex-shrink:0;
+  }
+  .print-act svg{ width:18px; height:18px; }
+  .print-act:disabled{ cursor:not-allowed; opacity:.4; }
+  .main-act{
+    background:var(--fs-blue); color:#fff; border:none; border-radius:10px; padding:12px 30px;
+    font-weight:800; font-size:15px; cursor:pointer; display:inline-flex; align-items:center; gap:8px;
+  }
+  .main-act svg{ width:16px; height:16px; }
+  .card.late .main-act{ background:var(--fs-late); }
+  .card.warning .main-act{ background:var(--fs-orange); color:#3a1f00; }
+  .card.ready .main-act{ background:var(--fs-ready); }
+  .empty{ grid-column:1/-1; text-align:center; padding:60px; color:var(--fs-muted); }
+  .statbar{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:8px 18px; background:#0a0e14; border-top:1px solid #1a212b;
+    font-size:11.5px; color:var(--fs-muted); font-family:monospace;
+    /* FULL VIEWPORT FLEX LAYOUT FIX ("Public Kiosk - Full Viewport
+       Flex Layout Fix"): this IS the page's own real "Kiosk Footer" -
+       there is no element literally named "footer" in this file.
+       flex-shrink:0 keeps it its own natural size as the last child
+       of body's own flex column, so it lands flush with the real
+       bottom of the viewport (with .grid's own leftover space
+       directly above it) instead of ending wherever .grid's own
+       natural content height happened to stop, with a large unused
+       gap below it down to the actual bottom of the screen. */
+    flex-shrink:0;
+  }
+  .statbar b{ color:#eef2f7; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-left">
+    <span class="logo">FlexSys <b>KDS</b></span>
+    <span class="station-badge">%(station_name)s</span>
+    <div class="header-info">
+      <div>%(branch_label)s<b id="branchName">%(branch_name)s</b></div>
+      <div>%(time_label)s<b id="clock">--:--</b></div>
+    </div>
+  </div>
+  <div class="company-badge" id="companyBadge">%(company_name)s</div>
+  <div class="header-right">
+    <button class="theme-toggle" id="fullscreenToggle" onclick="toggleFullscreen()" aria-label="Toggle fullscreen"></button>
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle light/dark mode"></button>
+    <div class="conn"><span class="dot dot-on" id="dot"></span><span id="connLabel"></span></div>
+  </div>
+</div>
+<div class="filters" id="filters"></div>
+<div class="grid" id="grid"></div>
+<div class="pagination" id="pagination"></div>
+<div class="statbar">
+  <span><span id="lblStatsOrders"></span> <b id="statOrders">0</b> &nbsp; <span id="lblStatsAvgPrep"></span> <b id="statAvg">--</b> <span id="lblStatsMinAbbrev"></span> &nbsp; <span id="lblStatsLate"></span> <b id="statLate">0</b></span>
+  <span>KIOSK-%(station_code)s</span>
+</div>
+
+<script>
+// LOCALIZATION ("Arabic Localization & RTL Specification"), item 4,
+// "Public Kiosk Translation" + item 13, "No Hard-Coded Arabic Business
+// Logic": a single, centralized dictionary lookup - exactly what item
+// 13 asks for instead of `if (lang === "ar") { label = "..."; }`
+// scattered through this file's own runtime logic below. Selected ONCE,
+// here, from the explicit station-level language source (item 5) the
+// server already resolved and injected - never re-derived from the
+// browser anywhere else in this file. Every value uses the client's
+// own approved terminology table (item 6) exactly. Adding a third
+// language later means adding one more object here and one more
+// KIOSK_LABELS = ... line - no other line in this file changes.
+const KIOSK_LABELS_EN = {
+  filterAll: 'ALL', filterNew: 'NEW', filterPreparing: 'PREPARING',
+  filterReady: 'READY', filterCompleted: 'COMPLETED', filterCancelled: 'CANCELLED',
+  actionStart: 'START', actionReady: 'READY', actionComplete: 'COMPLETE',
+  noOrders: 'No orders for this filter.',
+  branchLabel: 'Branch', timeLabel: 'Time', wasStage: 'was',
+  enterFullscreen: 'Enter fullscreen', exitFullscreen: 'Exit fullscreen',
+  online: 'Online', offline: 'Offline',
+  statsOrders: 'Orders', statsAvgPrep: 'Avg. Prep', statsMinAbbrev: 'min', statsLate: 'Late',
+};
+const KIOSK_LABELS_AR = {
+  filterAll: 'الكل', filterNew: 'جديد', filterPreparing: 'قيد التحضير',
+  filterReady: 'جاهز', filterCompleted: 'مكتمل', filterCancelled: 'ملغى',
+  actionStart: 'بدء', actionReady: 'جاهز', actionComplete: 'إكمال',
+  noOrders: 'لا توجد طلبات لهذا الفلتر.',
+  branchLabel: 'الفرع', timeLabel: 'الوقت', wasStage: 'كان',
+  enterFullscreen: 'فتح ملء الشاشة', exitFullscreen: 'الخروج من ملء الشاشة',
+  online: 'متصل', offline: 'غير متصل',
+  statsOrders: 'الطلبات', statsAvgPrep: 'متوسط التحضير', statsMinAbbrev: 'د', statsLate: 'متأخر',
+};
+const KIOSK_LANG = %(kiosk_lang)r;
+const KIOSK_LABELS = KIOSK_LANG === 'ar' ? KIOSK_LABELS_AR : KIOSK_LABELS_EN;
+const STATION_CODE = %(station_code)r;
+const TOKEN = %(token)r;
+// Needed by normalizeOrderForTicket() below (station name / branch
+// name for the printed ticket's own header) - reusing the exact same
+// station_name/company_name values already resolved server-side for
+// this page's own visible header, never a second/different lookup.
+const STATION_NAME = %(station_name)r;
+const COMPANY_NAME = %(company_name)r;
+// Bootstrapped ONCE directly into this page's own initial render (no
+// separate route, no extra network call) - never re-sent by the
+// existing orders polling below. Only these three non-sensitive
+// fields - no Agent Key, no printer secrets.
+const FLEXSYS_PRINTING_CONFIG = {
+  printingMethod: %(flexsys_printing_method)r,
+  printerIp: %(flexsys_printer_ip)r,
+  useLocalNetworkAccess: %(flexsys_use_local_network_access)s,
+};
+
+// CORRECTION ("Phase 2 - Final Corrections Before Regression Test"),
+// item 3: the SAME normalization logic as Internal KDS's own
+// normalizeDirectPrintError() (static/src/js/kds_app.js) - kept
+// identical by hand since these two contexts cannot literally share
+// one file (see this file's own top-of-<head> comment on why the
+// Public Kiosk is standalone classic JS, not an ES module). Handles
+// every shape either Adapter can actually return: a bare
+// {errorCode: null/"", error: <raw JS exception>} with no
+// distinguishing code (a fetch()-level failure), a
+// {parseError: "..."} shape, or a genuine Epson-returned error code.
+// Never persists the raw JS exception object or raw response text as
+// the message - only this function's own short, stable description.
+function normalizeDirectPrintError(result) {
+  const code = (result && result.errorCode) || '';
+  const KNOWN_MESSAGES = {
+    LNA_DENIED: 'Local network access permission was denied.',
+    LNA_INIT_ERROR: 'Local network access permission could not be initialized.',
+    TIMEOUT: 'Printer connection timed out.',
+    NETWORK_ERROR: 'Unable to reach the printer over the local network.',
+  };
+  if (KNOWN_MESSAGES[code]) {
+    return { code: code, message: KNOWN_MESSAGES[code] };
+  }
+  if (result && result.parseError) {
+    return { code: code || 'PARSE_ERROR', message: 'Invalid response received from printer.' };
+  }
+  if (code) {
+    return { code: code, message: 'Direct printer returned error: ' + code };
+  }
+  return { code: 'UNKNOWN', message: 'Direct printing failed for an unknown reason.' };
+}
+
+let ORDERS = [];
+let FILTER = 'all';
+// HIGH-DENSITY LAYOUT: 1-based, same convention as Internal KDS's own
+// pagState.page - reset to 1 by setFilter() below whenever the
+// filtered result set changes shape.
+let KIOSK_PAGE = 1;
+let PRINTING_ENABLED = false;
+let WAS_READY = new Set(); // order ids that were fully-Ready as of the last poll
+let CELEBRATE_IDS = new Set(); // order ids that just NOW became fully-Ready this poll
+let KNOWN_ORDER_IDS = null; // null until first load completes, so we never beep on page load
+// CANCELLATION VISIBILITY (dev request, point 5): tracks which *lines*
+// (not orders - a single item can be cancelled without its order being
+// cancelled at all) were already cancelled as of the last poll, so the
+// alert plays only for genuinely new cancellations, not every poll for
+// as long as a cancelled line stays visible in its own grace window -
+// same null-until-first-load pattern as KNOWN_ORDER_IDS above, for the
+// same reason (never alert for cancellations already on screen when the
+// page opens).
+let KNOWN_CANCELLED_LINE_IDS = null;
+// REALTIME VALIDATION (dev request, "no duplicate orders or transitions
+// may occur because Bus + polling both receive the same event"): the
+// kiosk has no Bus subscription at all (plain 4-second polling only -
+// see setInterval(loadOrders, 4000) below), so the specific "two
+// mechanisms racing" scenario doesn't apply here the way it does on the
+// backend screen (see kds_store.js's own loadOrdersSeq for that case).
+// The same underlying race class still exists though: if any one fetch
+// ever takes longer than 4 seconds (network stress), the next poll
+// fires anyway before the previous one resolves, and the two responses
+// could resolve out of order - the later-resolving one would overwrite
+// ORDERS with a slightly staler snapshot. Same sequence-number guard,
+// same fix.
+let loadOrdersSeq = 0;
+
+// Web Audio API beep - generated in-code, no external sound file, so this
+// keeps working even if the device is offline/the asset can't load.
+// Browsers block audio until a user gesture happens on the page at least
+// once (autoplay policy) - resumeAudioOnFirstInteraction() below handles
+// that as best as JS can, but the very first order of the day may not
+// audibly beep if literally nobody has tapped the screen yet. That's a
+// browser platform limitation, not something fixable from here.
+let AUDIO_CTX = null;
+function getAudioContext() {
+  if (!AUDIO_CTX) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (Ctx) AUDIO_CTX = new Ctx();
+  }
+  return AUDIO_CTX;
+}
+function resumeAudioOnFirstInteraction() {
+  const ctx = getAudioContext();
+  if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+}
+document.addEventListener('click', resumeAudioOnFirstInteraction, {once: true});
+document.addEventListener('touchstart', resumeAudioOnFirstInteraction, {once: true});
+
+function playBeep() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  try {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    const now = ctx.currentTime;
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.35, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+    osc.start(now);
+    osc.stop(now + 0.36);
+  } catch (e) { /* audio unavailable/blocked - fail silently, never break the screen over this */ }
+}
+
+// CANCELLATION VISIBILITY (dev request, point 5: "use a clearly
+// distinguishable cancellation notification/sound so kitchen staff
+// notice it quickly"): a lower-pitched double-tone, deliberately the
+// opposite shape of playBeep() above (one bright rising tone) - two
+// short, low, descending pulses read as "stop/attention" rather than
+// "something arrived", so staff can tell the two apart without looking
+// at the screen first.
+function playCancelAlert() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  try {
+    const now = ctx.currentTime;
+    [[420, 0], [330, 0.16]].forEach(([freq, delay]) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      const start = now + delay;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.28, start + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.15);
+      osc.start(start);
+      osc.stop(start + 0.16);
+    });
+  } catch (e) { /* audio unavailable/blocked - fail silently, never break the screen over this */ }
+}
+
+function tickClock() {
+  const d = new Date();
+  document.getElementById('clock').textContent =
+    d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+}
+setInterval(tickClock, 1000); tickClock();
+
+const THEME_KEY = 'flexsys_kds_theme_%(station_code)s';
+const ICON_SUN = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>';
+const ICON_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+function applyTheme(theme) {
+  document.body.classList.toggle('light-theme', theme === 'light');
+  // Icon shows the mode you'd SWITCH TO (sun while dark = tap for light).
+  document.getElementById('themeToggle').innerHTML = theme === 'light' ? ICON_MOON : ICON_SUN;
+  try { localStorage.setItem(THEME_KEY, theme); } catch (e) {}
+}
+function toggleTheme() {
+  const current = document.body.classList.contains('light-theme') ? 'light' : 'dark';
+  applyTheme(current === 'light' ? 'dark' : 'light');
+}
+let savedTheme = 'dark';
+try { savedTheme = localStorage.getItem(THEME_KEY) || 'dark'; } catch (e) {}
+applyTheme(savedTheme);
+
+// KDS FULLSCREEN MODE (dev request "V1 Finalization", item 1, "Required
+// for V1"): the standard browser Fullscreen API - requestFullscreen()/
+// exitFullscreen() are purely a rendering-level browser feature, never
+// reloading the page or touching any JS state, which is exactly why
+// this satisfies every one of the request's "must NOT" requirements
+// (no refresh, no lost filters/realtime/timers/ticket state, no
+// duplicate orders) automatically, by construction, rather than
+// needing special-case handling for each one - nothing about ORDERS,
+// FILTER, the polling interval, or any other in-memory state is
+// affected by entering/leaving fullscreen at all.
+const ICON_EXPAND = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>';
+const ICON_COMPRESS = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path></svg>';
+function updateFullscreenIcon() {
+  const btn = document.getElementById('fullscreenToggle');
+  if (!btn) return;
+  const isFullscreen = Boolean(document.fullscreenElement);
+  // Icon shows the action a tap performs next (compress = currently
+  // fullscreen, tap to exit; expand = currently windowed, tap to enter)
+  // - same "show what happens next" convention as the theme toggle.
+  btn.innerHTML = isFullscreen ? ICON_COMPRESS : ICON_EXPAND;
+  btn.setAttribute('aria-label', isFullscreen ? KIOSK_LABELS.exitFullscreen : KIOSK_LABELS.enterFullscreen);
+}
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    const el = document.documentElement;
+    const request = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if (request) request.call(el).catch(() => {});
+  } else {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+    if (exit) exit.call(document).catch(() => {});
+  }
+}
+// Keeps the icon correct even when fullscreen is exited a way other
+// than tapping this button - the Esc key, or a tablet's own system
+// gesture ("standard browser Fullscreen exit behavior may be used",
+// per the request itself) - rather than only updating on click.
+['fullscreenchange', 'webkitfullscreenchange', 'msfullscreenchange'].forEach(
+  evt => document.addEventListener(evt, updateFullscreenIcon)
+);
+updateFullscreenIcon();
+
+async function api(path, params) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({jsonrpc: '2.0', method: 'call', params: params}),
+  });
+  const data = await res.json();
+  return data.result || {ok: false, error: 'Network error'};
+}
+
+async function loadOrders() {
+  const mySeq = ++loadOrdersSeq;
+  const res = await api('/flexsyskds/public/api/orders', {station_code: STATION_CODE, token: TOKEN});
+  // Discard this response if a newer loadOrders() call has been issued
+  // since this one started - see loadOrdersSeq's own comment above.
+  if (mySeq !== loadOrdersSeq) {
+    return;
+  }
+  const dot = document.getElementById('dot');
+  const label = document.getElementById('connLabel');
+  if (res.ok) {
+    const isFirstLoad = KNOWN_ORDER_IDS === null;
+    const newIds = new Set(res.orders.map(o => o.id));
+    if (!isFirstLoad) {
+      // Beep once per poll if any order id showed up that wasn't there
+      // last time - not on the very first load (that would beep for
+      // every order already sitting on screen when the page opens).
+      const hasNewArrival = [...newIds].some(id => !KNOWN_ORDER_IDS.has(id));
+      if (hasNewArrival) playBeep();
+    }
+    KNOWN_ORDER_IDS = newIds;
+
+    // CANCELLATION VISIBILITY (dev request, point 5: "clearly
+    // distinguishable cancellation notification/sound so kitchen staff
+    // notice it quickly"): fires for a newly-cancelled *line*, whether
+    // it's a single item cancelled on an otherwise-active order, or
+    // every line on a fully-cancelled order (each line's own
+    // cancelled_at still gets set individually by the cascade - see
+    // kds_order.py::action_cancel() - so this same per-line check
+    // naturally covers both cases without needing separate logic for
+    // "was this a full-order cancel").
+    const cancelledLineIds = new Set(
+      res.orders.flatMap(o => o.lines.filter(l => l.state === 'cancelled').map(l => l.id))
+    );
+    const isFirstCancelCheck = KNOWN_CANCELLED_LINE_IDS === null;
+    if (!isFirstCancelCheck) {
+      const hasNewCancellation = [...cancelledLineIds].some(id => !KNOWN_CANCELLED_LINE_IDS.has(id));
+      if (hasNewCancellation) playCancelAlert();
+    }
+    KNOWN_CANCELLED_LINE_IDS = cancelledLineIds;
+
+    const nowReadyIds = new Set(
+      // BUG-03 fix (see render()'s own detailed comment for the full
+      // story): the celebration is specifically for "MY station's own
+      // production just finished" - order.state alone requires every
+      // station on a multi-station order to be done, which would
+      // silently suppress the celebration for a station that finished
+      // its own part while another station on the same shared order was
+      // still working.
+      res.orders.filter(o => {
+        if (o.state === 'completed' || o.state === 'cancelled') return false;
+        const lines = activeLines(o);
+        return lines.length > 0 && lines.every(l => l.state === 'ready' || l.state === 'completed');
+      }).map(o => o.id)
+    );
+    // Only the orders that JUST crossed into fully-Ready this poll get
+    // the celebration spin - not every order that's already Ready (that
+    // would replay it every 4s forever), and not on the very first load.
+    CELEBRATE_IDS = isFirstLoad
+      ? new Set()
+      : new Set([...nowReadyIds].filter(id => !WAS_READY.has(id)));
+    WAS_READY = nowReadyIds;
+
+    ORDERS = res.orders;
+    PRINTING_ENABLED = res.printing_enabled;
+    dot.className = 'dot dot-on'; label.textContent = KIOSK_LABELS.online;
+    document.getElementById('statOrders').textContent = res.stats.orders_count;
+    document.getElementById('statAvg').textContent = res.stats.avg_prep_time || '--';
+    document.getElementById('statLate').textContent = res.stats.late_count;
+    render();
+  } else {
+    dot.className = 'dot dot-off'; label.textContent = KIOSK_LABELS.offline;
+  }
+}
+
+function counts() {
+  // REAL BUG FIX (BUG-10) - see render()'s own detailed comment. One
+  // authoritative value per order, computed once, drives every count
+  // below - eliminating the possibility of the same ticket incrementing
+  // more than one bucket at once.
+  const byStage = {};
+  for (const o of ORDERS) {
+    byStage[o.effective_stage] = (byStage[o.effective_stage] || 0) + 1;
+  }
+  return {
+    all: ORDERS.length,
+    new: byStage.new || 0,
+    preparing: byStage.preparing || 0,
+    ready: byStage.ready || 0,
+    completed: byStage.completed || 0,
+  };
+}
+
+function renderFilters() {
+  const c = counts();
+  const defs = [['all',KIOSK_LABELS.filterAll,c.all],['new',KIOSK_LABELS.filterNew,c.new],['preparing',KIOSK_LABELS.filterPreparing,c.preparing],['ready',KIOSK_LABELS.filterReady,c.ready],['completed',KIOSK_LABELS.filterCompleted,c.completed]];
+  document.getElementById('filters').innerHTML = defs.map(([k,label,n]) => `
+    <button class="fbtn ${FILTER===k?'active':''}" onclick="setFilter('${k}')">${label} <span class="fcount">${n}</span></button>
+  `).join('');
+}
+
+function setFilter(f) { FILTER = f; KIOSK_PAGE = 1; render(); }
+
+// Small inline SVGs (no external icon font - keeps the kiosk page fully
+// self-contained). Kept intentionally simple per the reference design.
+const ICON_STORE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"></path><path d="M4 9v10h16V9"></path><path d="M9 19v-6h6v6"></path></svg>';
+const ICON_LAYERS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 8 12 14 22 8 12 2"></polygon><polyline points="2 14 12 20 22 14"></polyline></svg>';
+const ICON_CLOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 16 14"></polyline></svg>';
+const ICON_PERSON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 20c0-4 4-6 8-6s8 2 8 6"></path></svg>';
+const ICON_NOTE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="13" rx="2"></rect><path d="M9 7V5a3 3 0 0 1 6 0v2"></path></svg>';
+const ICON_CHECK = '<svg class="icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+const ICON_DASH = '<svg class="icon-dash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+const ICON_CANCEL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+const ICON_PRINT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>';
+
+function elapsed(iso) {
+  if (!iso) return '';
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  const h = Math.floor(mins/60), m = mins%%60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function orderedAt(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+}
+
+function cleanVariantInfo(text) {
+  // The POS attribute-selection flow this reads from returns full
+  // "question: answer" text per attribute (e.g. "Cup type (choose one):
+  // paper cup"), joined with ", " for multiple attributes. Keeping only
+  // the part after each segment's last ":" gives just the selected
+  // values ("paper cup, medium, +30g") without the verbose questions -
+  // a display-only cleanup; the raw value is untouched in the database.
+  return text.split(', ').map(part => {
+    const idx = part.lastIndexOf(':');
+    return idx === -1 ? part.trim() : part.slice(idx + 1).trim();
+  }).join(', ');
+}
+
+// BUG-09 FIX ("POS Quantity Delta Is Not Explicitly Communicated to
+// Kitchen"): "1 x Pizza -> UPDATED" alone is operationally ambiguous -
+// the kitchen can't tell whether 2 more are now needed or 2 fewer are.
+// qty_delta (kds_order_line.py, backend field - not inferred from
+// transient frontend state, per the dev request's own explicit
+// requirement) makes this explicit: "UPDATED (+2)" or "UPDATED (-2)".
+// Only rendered for line_change === 'updated' specifically - an ADDED
+// line's own qty is already the full, unambiguous amount to prepare,
+// and a delta suffix there would be redundant at best.
+function qtyDeltaSuffix(l) {
+  if (l.line_change !== 'updated' || !l.qty_delta) return '';
+  const sign = l.qty_delta > 0 ? '+' : '';
+  // LOCALIZATION ("Arabic Localization & RTL Specification"), item 10,
+  // "Delta Markers" - same fix as the Internal Screen's own matching
+  // lineChangeLabel() (kds_order_card.js): \u2066/\u2069 (LRI/PDI) keep
+  // the sign+number rendering left-to-right and visually attached as
+  // one unit under Arabic (RTL) kiosk language too.
+  return ` (\u2066${sign}${l.qty_delta}\u2069)`;
+}
+
+function lineNextAction(state) {
+  // Mirrors the backend's LINE_TRANSITIONS: 'ready' is only a valid move
+  // FROM 'preparing', not from 'new'/'accepted'. Computing each line's
+  // own next action (rather than applying one action to every line on
+  // the card) avoids silently-failing invalid-transition calls when a
+  // single order has lines in different states at once (e.g. one item
+  // already Preparing while another hasn't been Started yet).
+  if (state === 'new' || state === 'accepted') return 'start';
+  if (state === 'preparing') return 'ready';
+  return null;
+}
+
+// CANCELLATION VISIBILITY (dev request): a cancelled line must never
+// count toward "is this order still waiting on something" - matching
+// the backend's own established pattern for the exact same question
+// (kds_order.py's is_expeditor_ready already filters
+// `l.state != 'cancelled'` before checking readiness). Before this
+// existed, a single cancelled item on an otherwise-fully-ready order
+// would make every "all lines done" check here return false forever
+// (a cancelled line never satisfies state === 'ready'/'completed'),
+// silently blocking the order from ever reaching its own COMPLETE
+// button - a real, separate bug this feature surfaced while
+// implementing it, not just a display change.
+function activeLines(order) {
+  return order.lines.filter(l => l.state !== 'cancelled');
+}
+
+// BUG-08 FIX ("Cancelled Lines Break Station Card Lifecycle / Terminal
+// Cleanup"): a station whose lines are ALL terminal (completed and/or
+// cancelled, with none of them genuinely active) needs to be classified
+// two different ways depending on whether any of them actually
+// finished:
+//   - at least one line 'completed' -> this station's work genuinely
+//     finished (Scenario A: "completed + cancelled" mix, or all-
+//     completed) - treated as done/ready-style, matching how a plain
+//     completed station already looked.
+//   - zero lines 'completed' (every terminal line is 'cancelled') ->
+//     nothing this station was working on ever finished (Scenario B) -
+//     "preserve the last operational stage" instead: NEW if the
+//     cancelled line(s) never even started, PREPARING if any reached
+//     preparation_start_time before being cancelled, READY if any
+//     reached ready_time. Point 3 of the dev request ("Terminal Line
+//     Definition"): completed and cancelled both count as terminal for
+//     "does this station have any active work left" purposes - the
+//     distinction here is only about which STAGE label/visual to keep
+//     showing, not about whether there's active work (there never is,
+//     in either sub-case).
+function stationLifecycle(order) {
+  const lines = order.lines;
+  const active = activeLines(order);
+  if (active.length > 0) {
+    return {hasActiveWork: true};
+  }
+  const hasAnyCompleted = lines.some(l => l.state === 'completed');
+  if (hasAnyCompleted || !lines.length) {
+    return {hasActiveWork: false, allCancelled: false};
+  }
+  // Every line is 'cancelled' specifically, zero completed - preserve
+  // the last operational stage this station actually reached.
+  const everReady = lines.some(l => l.ready_time);
+  const everPreparing = lines.some(l => l.preparation_start_time);
+  const lastStage = everReady ? 'ready' : everPreparing ? 'preparing' : 'new';
+  return {hasActiveWork: false, allCancelled: true, lastStage: lastStage};
+}
+
+function mainAction(order) {
+  // A fully-cancelled order (every line cancelled, order.state itself
+  // 'cancelled') has nothing left to action at all.
+  if (order.state === 'cancelled') return {action: null, label: KIOSK_LABELS.filterCancelled};
+  // REAL BUG FIX, confirmed live on Odoo.sh (BUG-08, point 2: "No
+  // Active Work = No Workflow Actions... authoritative from backend
+  // payload/workflow eligibility, not only hidden with CSS"): a station
+  // whose every line was cancelled (nothing ever completed either) must
+  // never expose an action - checked first, before effective_stage is
+  // even consulted, since a "preserved last stage" of e.g. 'preparing'
+  // (BUG-08) must NOT be mistaken for a genuinely active preparing
+  // station that still needs a READY tap.
+  const lifecycle = stationLifecycle(order);
+  if (!lifecycle.hasActiveWork && lifecycle.allCancelled) {
+    return {action: null, label: KIOSK_LABELS.filterCancelled};
+  }
+  // BUG-10 FIX: driven by the same single authoritative
+  // order.effective_stage every tab filter/count now uses (see
+  // render()'s own detailed comment) - not a separately-maintained set
+  // of activeLines()-based checks that happened to mostly agree with
+  // it. BUG-07's own reasoning still applies throughout: every value
+  // here is computed per-station, never from the order's own aggregate
+  // `state` field, so Kitchen's own button is correct independent of
+  // whatever Coffee/Bar are still doing on the same order.
+  switch (order.effective_stage) {
+    case 'new': return {action: 'start', label: KIOSK_LABELS.actionStart};
+    case 'preparing': return {action: 'ready', label: KIOSK_LABELS.actionReady};
+    case 'ready': return {action: 'complete_station', label: KIOSK_LABELS.actionComplete};
+    case 'completed': return {action: null, label: KIOSK_LABELS.filterCompleted};
+    default: return {action: null, label: KIOSK_LABELS.filterCancelled};
+  }
+}
+
+function render() {
+  renderFilters();
+  let orders = ORDERS;
+  // REAL BUG FIX, confirmed at runtime (dev request "Reopened READY
+  // Order Appears in Multiple Stage Tabs", BUG-10): every tab filter
+  // below used to run its own INDEPENDENT check ("does ANY line match
+  // this tab's own state(s)?"), each entirely oblivious to the others -
+  // a reopened order with one line back at 'new' (freshly added/reset
+  // by a POS Delta) and another still 'preparing' satisfied BOTH
+  // checks at once, so the same physical ticket counted under NEW *and*
+  // PREPARING simultaneously ("NEW = 1, PREPARING = 1" for one ticket,
+  // reported live), on top of everything BUG-03/BUG-07/BUG-08 already
+  // had to separately account for (per-station Ready visibility,
+  // completion, preserved-last-stage-while-cancelled). Replaced with
+  // order.effective_stage - one authoritative value, computed once on
+  // the backend (see controllers/kds.py's own _effective_stage() for
+  // the full algorithm, identical here), used identically for the tab
+  // filter/count below AND the card's own displayed status text -
+  // structurally guaranteeing a ticket belongs to exactly one tab,
+  // rather than relying on several independently-written checks to
+  // happen to agree.
+  if (FILTER !== 'all') {
+    orders = orders.filter(o => o.effective_stage === FILTER);
+  }
+
+  // HIGH-DENSITY LAYOUT: the SAME shared, deterministic pagination
+  // pass Internal KDS uses (static/src/shared/flexsys_pagination.js,
+  // loaded above in <head>) - never re-sorted/shuffled here, only
+  // sliced. KIOSK_PAGE itself is clamped by paginate() below, so a
+  // realtime refresh (loadOrders() -> render(), on the existing
+  // polling interval) that doesn't change the page count leaves the
+  // operator on the same page.
+  const pageResult = window.FlexSysPagination.paginate(orders, window.innerWidth, KIOSK_PAGE);
+  KIOSK_PAGE = pageResult.currentPage;
+
+  const grid = document.getElementById('grid');
+  grid.style.gridTemplateColumns = `repeat(${pageResult.columns}, minmax(0, 1fr))`;
+  if (!orders.length) {
+    grid.innerHTML = `<div class="empty">${KIOSK_LABELS.noOrders}</div>`;
+    document.getElementById('pagination').innerHTML = '';
+    return;
+  }
+  orders = pageResult.currentPageOrders;
+
+  grid.innerHTML = orders.map(order => {
+    // Card frame color: blue = normal/active, red = late (even if it did
+    // eventually get marked ready - still flags it finished late), green
+    // = fully ready/completed, orange = warning/priority as before, grey
+    // = fully cancelled (dev request "Cancellation Visibility
+    // Improvement" - new).
+    const act = mainAction(order);
+    // REAL BUG FIX (BUG-10) - see render()'s own detailed comment: the
+    // card's displayed status text and border color now read directly
+    // from order.effective_stage, the exact same single authoritative
+    // value driving the tab filters/counts above - previously two
+    // separately-maintained local computations (anyNew/anyStarted/
+    // allReady/allCompleted) that happened to mostly agree with the tab
+    // logic via BUG-02's own "anyStarted before anyNew" precedence -
+    // now there is structurally only one answer to "what stage is this
+    // card in", not two parallel implementations that could drift.
+    const lifecycle = stationLifecycle(order);
+    const isCancelledTerminal = !lifecycle.hasActiveWork && lifecycle.allCancelled;
+    // REAL BUG FIX ("CANCELLED FILTER CLASSIFICATION + RETENTION
+    // LIFECYCLE", Issue 1): order.effective_stage itself is now the
+    // distinct 'cancelled' value for this exact case (see
+    // controllers/kds_kiosk.py's own _effective_stage() docstring for
+    // the full explanation of why - "NEW = 6" with all 6 cards
+    // genuinely CANCELLED, since effective_stage used to reuse the
+    // "preserved last stage" value directly). The "was X" stage label
+    // must therefore come from lifecycle.lastStage (stationLifecycle()
+    // above, computed independently from ever_ready/ever_preparing
+    // timestamps) instead of order.effective_stage, which no longer
+    // carries that information - looking it up there now would
+    // incorrectly read "CANCELLED (was undefined)".
+    const stageLabel = {new: KIOSK_LABELS.filterNew, preparing: KIOSK_LABELS.filterPreparing, ready: KIOSK_LABELS.filterReady, completed: KIOSK_LABELS.filterCompleted};
+    const statusText = order.state === 'cancelled' ? KIOSK_LABELS.filterCancelled
+      : isCancelledTerminal ? `${KIOSK_LABELS.filterCancelled} (${KIOSK_LABELS.wasStage} ${stageLabel[lifecycle.lastStage]})`
+      : stageLabel[order.effective_stage] || KIOSK_LABELS.filterPreparing;
+    const isReadyOrDone = order.effective_stage === 'ready' || order.effective_stage === 'completed';
+    // REAL BUG FIX ("Batch 4 Live Test - Fix #1, Public Kiosk:
+    // Completed Late Visual"), confirmed live on order KDS/26/0106: an
+    // order that was Late and then reached Completed correctly changed
+    // state, but this card kept its red 'late' visual forever - the
+    // Internal KDS Screen (kds_order_card.js's own borderClass) had
+    // already been fixed for the exact same underlying priority bug in
+    // an earlier round (Batch 4, item 28), but that fix lived in a
+    // completely separate file (a real OWL component's own JS) and
+    // never touched this standalone kiosk page's own independent copy
+    // of the same card-class logic - the two surfaces' own visual
+    // priority had silently diverged. Fixed identically here: checked
+    // BEFORE order.sla_status === 'late' below, but ONLY for
+    // effective_stage === 'completed' specifically - not 'ready' (an
+    // order that reached Ready but hasn't been handed off/completed yet
+    // is still an active state, and a genuinely late one there
+    // correctly keeps the red urgency exactly as before, unchanged).
+    // order.sla_status itself is never read, written, or recomputed
+    // here - only which CSS class a COMPLETED order's own card resolves
+    // to changes; the underlying SLA data stays fully intact for
+    // Analytics, exactly as required.
+    const cardClass = order.state === 'cancelled' ? 'cancelled'
+      : isCancelledTerminal ? 'cancelled'
+      : order.effective_stage === 'completed' ? 'ready'
+      : order.sla_status === 'late' ? 'late'
+      : isReadyOrDone ? 'ready'
+      : order.sla_status === 'warning' ? 'warning'
+      : 'normal';
+    const celebrateClass = CELEBRATE_IDS.has(order.id) ? 'celebrate' : '';
+
+    const linesHtml = order.lines.map(l => {
+      // CANCELLATION VISIBILITY (dev request, point 1: "the cancelled
+      // line should remain temporarily visible and clearly display
+      // CANCELLED... visually distinguishable from active preparation
+      // lines"): a cancelled line keeps its normal place in the list
+      // (never removed - see the grace-period query fix in this
+      // controller's own get_orders() for why it's still in `order` at
+      // all) but renders distinctly: no interactive checkbox (nothing
+      // left to action on it), struck-through text, and an explicit
+      // CANCELLED badge instead of any variant/change badge.
+      if (l.state === 'cancelled') {
+        return `
+      <div class="line-item line-cancelled">
+        <div class="line-checkbox line-checkbox-cancelled">${ICON_CANCEL}</div>
+        <div class="line-main">
+          <div class="line-title-row">
+            <span class="line-title">${l.qty} × ${l.product_name}</span>
+            <span class="line-badge line-badge-cancelled">${KIOSK_LABELS.filterCancelled}</span>
+          </div>
+        </div>
+      </div>`;
+      }
+      const checkboxState = (l.state === 'ready' || l.state === 'completed') ? 'checked' : l.state === 'preparing' ? 'in-progress' : '';
+      const nextAction = lineNextAction(l.state);
+      return `
+      <div class="line-item">
+        <div class="line-checkbox ${checkboxState}"
+             ${nextAction ? `onclick="advanceLine(${order.id}, ${l.id}, '${nextAction}')"` : ''}>
+          ${ICON_CHECK}${ICON_DASH}
+        </div>
+        <div class="line-main">
+          <div class="line-title-row">
+            <span class="line-title">${l.qty} × ${l.product_name}</span>
+            ${l.variant_info ? `<span class="variant-pill">${cleanVariantInfo(l.variant_info)}</span>` : ''}
+            ${l.line_change && l.line_change !== 'none' ? `<span class="line-badge">${l.line_change_label}${qtyDeltaSuffix(l)}</span>` : ''}
+          </div>
+          ${l.note ? `<div class="line-note-row">${ICON_NOTE}<span>${l.note}</span></div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+
+    // Headline shows the actual POS receipt number (what the customer
+    // and cashier both already recognize) rather than the internal
+    // kds.order sequence - falls back to the internal name only for
+    // orders with no linked POS order (future QR/web/API sources).
+    const headline = order.pos_reference || order.name;
+    const hasCustomerName = order.customer_name && order.customer_name !== order.pos_reference;
+
+    return `
+      <div class="card ${cardClass} ${celebrateClass}">
+        <div class="card-head">
+          <div class="card-title-row">
+            <div class="accent-bar"></div>
+            <div>
+              <div class="order-no">${headline}</div>
+              <div class="ordered-ref">#${order.name} &middot; ${orderedAt(order.created_time)}</div>
+            </div>
+          </div>
+          <div class="chips-row">
+            <span class="chip">${ICON_STORE}${order.order_type_label}</span>
+            ${order.table_label ? `<span class="chip">${ICON_LAYERS}${order.table_label}</span>` : ''}
+            <span class="chip chip-timer ${order.sla_status === 'late' ? 'pulse' : ''}">${ICON_CLOCK}${elapsed(order.created_time)}</span>
+          </div>
+          <div class="status-blink"><span class="dot"></span>${statusText}</div>
+          ${hasCustomerName ? `<div class="customer-name">${order.customer_name}</div>` : ''}
+          ${order.employee_name ? `<div class="employee-row">${order.employee_name}${ICON_PERSON}</div>` : ''}
+        </div>
+        <div class="card-body">${linesHtml}</div>
+        <div class="card-footer">
+          <button class="print-act" ${PRINTING_ENABLED ? '' : 'disabled'} onclick="printOrder(${order.id})" title="${PRINTING_ENABLED ? '' : 'Printing is not enabled for this station'}">${ICON_PRINT}</button>
+          ${act.action === null
+            ? '' /* Real COMPLETED tab (dev request): "There should no longer be a DONE button because the order is already completed" - no button at all now, not even a disabled one. The COMPLETED status text/badge on the card is the sole indicator. */
+            : `<button class="main-act" onclick="advance(${order.id})">${act.label}${ICON_CHECK}</button>`}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // HIGH-DENSITY LAYOUT: bottom navigation bar, always rendered
+  // (even for a single page) - same reasoning as Internal KDS's own
+  // fs-pagination: a consistent, always-visible position, and "1 / 1"
+  // itself is a clear confirmation everything fits on one screen.
+  const pag = document.getElementById('pagination');
+  const isRtl = document.documentElement.dir === 'rtl';
+  const prevIcon = isRtl ? '▶' : '◀';
+  const nextIcon = isRtl ? '◀' : '▶';
+  pag.innerHTML = `
+    <button ${pageResult.currentPage <= 1 ? 'disabled' : ''} onclick="prevPage()">${prevIcon}</button>
+    <span class="pagination-status">${pageResult.currentPage} / ${pageResult.totalPages}</span>
+    <button ${pageResult.currentPage >= pageResult.totalPages ? 'disabled' : ''} onclick="nextPage()">${nextIcon}</button>
+  `;
+}
+
+function prevPage() {
+  if (KIOSK_PAGE > 1) {
+    KIOSK_PAGE -= 1;
+    render();
+  }
+}
+
+function nextPage() {
+  // No pre-check needed here (unlike prevPage's own simple lower-bound
+  // check): render()'s own call to paginate() below already clamps
+  // KIOSK_PAGE back down to the real, FILTER-aware totalPages on every
+  // call - computing that same bound independently here would risk
+  // exactly the kind of drift a shared, single source of truth exists
+  // to prevent (this button is also visually disabled at the true
+  // last page already, via render()'s own pageResult.currentPage >=
+  // pageResult.totalPages check above).
+  KIOSK_PAGE += 1;
+  render();
+}
+
+async function advance(orderId) {
+  const order = ORDERS.find(o => o.id === orderId);
+  if (!order) return;
+  const act = mainAction(order);
+  if (act.action === 'complete_station') {
+    // BUG-07 FIX ("Station COMPLETE does not transition from READY"):
+    // was an order-level call (order_complete) - completing this
+    // station's own ready lines individually instead, the same way
+    // 'start'/'ready' already advance each line on this card one at a
+    // time below. Only lines actually sitting at 'ready' get the call
+    // (a line already 'completed' - possible mid-batch if this ever
+    // races with something else touching the same card - is simply
+    // skipped, not re-completed).
+    for (const line of activeLines(order)) {
+      if (line.state === 'ready') {
+        await api('/flexsyskds/public/api/action', {station_code: STATION_CODE, token: TOKEN, line_id: line.id, action: 'complete'});
+      }
+    }
+    loadOrders();
+    return;
+  }
+  for (const line of order.lines) {
+    const lineAct = lineNextAction(line.state);
+    if (lineAct) {
+      await api('/flexsyskds/public/api/action', {station_code: STATION_CODE, token: TOKEN, line_id: line.id, action: lineAct});
+    }
+  }
+  loadOrders();
+}
+
+async function advanceLine(orderId, lineId, action) {
+  // Checkbox click on a single line - advances just that one item, unlike
+  // the card's main button which advances every remaining line at once.
+  await api('/flexsyskds/public/api/action', {station_code: STATION_CODE, token: TOKEN, line_id: lineId, action: action});
+  loadOrders();
+}
+
+async function printOrder(orderId) {
+  if (!PRINTING_ENABLED) return;
+
+  // Direct Network stations use the Direct ePOS Adapter
+  // (flexsys_epos_direct_public.js, loaded above in <head> - this
+  // inline script never performs the actual printer connection
+  // itself).
+  //
+  // COMPATIBILITY GUARD: explicit Truth Table, matched IDENTICALLY
+  // on the Internal KDS side (see static/src/js/kds_app.js's own
+  // onPrintClick()), so Legacy Printing genuinely keeps working during
+  // this transition period:
+  //   direct_network + Printer IP set   -> Direct ePOS
+  //   direct_network + Printer IP empty -> Legacy Agent fallback
+  //                                         (the existing backend
+  //                                         itself decides whether a
+  //                                         kds.printer exists)
+  //   iot                               -> NOT Legacy Agent, NOT a
+  //                                         print attempt - a clear
+  //                                         "not implemented yet" log
+  //                                         only (IoT itself is not
+  //                                         built yet)
+  //   unset / false / any other legacy
+  //   state                             -> Legacy Agent path, exactly
+  //                                         as before this merge
+  // The direct_network+empty-IP case already fell through correctly
+  // here (the && below is simply false, reaching the unconditional
+  // legacy call at the bottom) - the actual bug fixed in this round is
+  // 'iot' also silently falling through to Legacy Agent, which this
+  // explicit early check now prevents.
+  if (FLEXSYS_PRINTING_CONFIG.printingMethod === 'iot') {
+    console.log(
+      "FlexSys: Printing Method is 'Odoo IoT' for this station - Odoo IoT " +
+      'is not implemented yet. No print attempted (not falling back to ' +
+      'the legacy Agent path, which would be equally incorrect for an ' +
+      'IoT-configured station).'
+    );
+    return;
+  }
+
+  if (FLEXSYS_PRINTING_CONFIG.printingMethod === 'direct_network' && FLEXSYS_PRINTING_CONFIG.printerIp) {
+    let rawOrder = null;
+    for (let i = 0; i < ORDERS.length; i++) {
+      if (ORDERS[i].id === orderId) { rawOrder = ORDERS[i]; break; }
+    }
+    if (!rawOrder) {
+      console.error('FlexSys: order id ' + orderId + ' not found in ORDERS.');
+      return;
+    }
+
+    // PHASE 2 ("Direct Printing <-> kds.print.job Integration"): the
+    // server creates/owns the job FIRST, via the station/token-
+    // validated 'prepare' route - never raw ORM access from this
+    // standalone public page. Renderer/Raster/LNA/Epson endpoint/
+    // Direct Adapter themselves are completely untouched below - only
+    // this lifecycle wrapping is new.
+    let jobId;
+    try {
+      const prepared = await api('/flexsyskds/public/api/print/prepare', {
+        station_code: STATION_CODE, token: TOKEN, order_id: orderId
+      });
+      if (!prepared || !prepared.ok) {
+        console.error('FlexSys: failed to create kds.print.job for Direct Network print.', prepared);
+        return;
+      }
+      jobId = prepared.job_id;
+    } catch (e) {
+      console.error('FlexSys: failed to create kds.print.job for Direct Network print.', e);
+      return;
+    }
+
+    const normalizedOrder = window.FlexSysTicketBuilder.normalizeOrderForTicket(
+      rawOrder, STATION_NAME, 'NEW', COMPANY_NAME
+    );
+    const result = await window.FlexSysKDSPrint.printDirectEpos({
+      ip: FLEXSYS_PRINTING_CONFIG.printerIp,
+      useLocalNetworkAccess: FLEXSYS_PRINTING_CONFIG.useLocalNetworkAccess,
+      normalizedOrder: normalizedOrder,
+    });
+
+    // RESULT CONTRACT: the Adapter's own {successful, errorCode, ...}
+    // shape is reported back via the station/token-validated 'result'
+    // route - never a raw, unfiltered browser exception saved
+    // server-side, and never a direct ORM write from this public page.
+    if (!result || !result.successful) {
+      console.error('FlexSys: Direct Network print did not succeed.', result);
+    }
+    const normalizedError = normalizeDirectPrintError(result);
+    try {
+      await api('/flexsyskds/public/api/print/result', {
+        station_code: STATION_CODE, token: TOKEN, job_id: jobId,
+        successful: Boolean(result && result.successful),
+        error_code: normalizedError.code,
+        error_message: normalizedError.message,
+      });
+    } catch (e) {
+      console.error("FlexSys: failed to report the print result back to the job's own record.", e);
+    }
+    return;
+  }
+
+  // Falls through here for: direct_network with no Printer IP set yet,
+  // OR FLEXSYS_PRINTING_CONFIG.printingMethod unset/false/any other
+  // legacy value - the exact same Legacy Agent path this button always
+  // used, completely unchanged.
+  // Legacy Agent path - UNCHANGED.
+  // UI/DATA FIX ("Printing Cleanup - Toast + Job Record
+  // Simplification"), decision item 6: reverted to the simple
+  // fire-and-forget form - the Toast requirement this function's own
+  // result-checking existed to support (v7.17.1) is removed entirely
+  // per explicit direction - "No Printer -> No Job is sufficient." The
+  // backend guard that actually matters (no kds.print.job created at
+  // all for a station with no configured printer) lives entirely on
+  // the server side.
+  await api('/flexsyskds/public/api/print', {station_code: STATION_CODE, token: TOKEN, order_id: orderId});
+}
+
+loadOrders();
+setInterval(loadOrders, 4000);
+// PUBLIC KIOSK ARABIC UI COMPLETION: static label text (never changes
+// after load, unlike the dynamic stat VALUES already updated inside
+// loadOrders() above) filled in once here from the selected
+// KIOSK_LABELS dictionary - connLabel also gets its own initial value
+// here so it never flashes hardcoded English before the first
+// loadOrders() response arrives and updates it again.
+document.getElementById('connLabel').textContent = KIOSK_LABELS.online;
+document.getElementById('lblStatsOrders').textContent = KIOSK_LABELS.statsOrders;
+document.getElementById('lblStatsAvgPrep').textContent = KIOSK_LABELS.statsAvgPrep;
+document.getElementById('lblStatsMinAbbrev').textContent = KIOSK_LABELS.statsMinAbbrev;
+document.getElementById('lblStatsLate').textContent = KIOSK_LABELS.statsLate;
+// HIGH-DENSITY LAYOUT: render() itself now derives column count from
+// window.innerWidth on every call - a resize alone (no new order
+// data at all) must still re-render so density/pagination stay
+// correct for the new viewport size. Does not touch KIOSK_PAGE
+// itself; paginate()'s own clamping inside render() handles a resize
+// that changes the resulting page count.
+window.addEventListener('resize', render);
+</script>
+</body>
+</html>
+"""

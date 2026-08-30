@@ -1,0 +1,1100 @@
+// FlexSys KDS - Kitchen station screen styling
+//
+// Multi-language / RTL note: the root .fs-kds-app element gets an explicit
+// dir="ltr"/"rtl" attribute from JS based on the current user's language
+// (see kds_app.js). Flexbox layouts below (fs-header, fs-filters, fs-card,
+// fs-actions, etc.) reverse direction automatically with the `dir`
+// attribute in modern browsers, so no [dir="rtl"] override rules were
+// needed for those. Directional spacing uses logical properties
+// (margin-inline-start/end) instead of margin-left/right for the same
+// reason. "Cairo" (set in the font stack below) covers Arabic; if you
+// support other RTL languages (Hebrew, Persian, Urdu) that need different
+// glyph coverage, extend the stack accordingly.
+$fs-blue: #1E88E5;
+$fs-orange: #FF9800;
+$fs-bg: #12161c;
+$fs-card-bg: #1b212b;
+$fs-late: #e53935;
+$fs-warning: #ff9800;
+$fs-ready: #43a047;
+
+.fs-kds-app {
+    background: $fs-bg;
+    color: #f5f7fa;
+    // RUNTIME UI FIX ("Version 38 Review - Incomplete Runtime UI
+    // Fix"), confirmed live: the earlier body.o_flexsys_kiosk fix
+    // (still correct and unchanged below) only ever applies in
+    // ?kiosk=1 mode - that class is never added to <body> for the
+    // NORMAL Internal KDS backend action (navbar/breadcrumbs visible),
+    // so this screen's own vertical scroll was still broken there:
+    // min-height: 100vh forced this element to be at least the FULL
+    // viewport height even though its own real parent container
+    // (Odoo's own action/content area, already smaller than the full
+    // viewport once the navbar/breadcrumbs take their own space) had
+    // no matching overflow handling for that overflow - the second
+    // card row and Pagination itself were clipped below the visible
+    // area, with no scrollbar anywhere.
+    //
+    // height: 100% (not min-height: 100vh) makes this element respect
+    // its own real parent's actual available height instead of always
+    // claiming the full viewport; min-height: 0 is required alongside
+    // it for a flex/grid-context parent (Odoo's own action container)
+    // to let this element genuinely shrink to fit rather than forcing
+    // its own intrinsic content size back upward. See the
+    // scoped .o_action_manager/.o_content :has() rule further below,
+    // added only because height: 100% requires a real parent height
+    // to resolve against, and Odoo's own backend chrome is not
+    // something this stylesheet controls globally.
+    height: 100%;
+    min-height: 0;
+    // VIEWPORT FIX ("KDS Browser 100% Viewport Fix"): the app root is
+    // now the flex column that owns the whole vertical layout - header
+    // (via .fs-sticky-top below) and pagination stay fixed-size, and
+    // ONLY the grid area (below) scrolls internally when it genuinely
+    // needs to. Previously this element itself was the single
+    // scrollable block for header+filters+grid+pagination together -
+    // on a shorter screen, a heavy header/filters area pushed the
+    // whole grid (and the action buttons inside a normal-sized card)
+    // out of the initially visible area, requiring the user to scroll
+    // the WHOLE page just to reach a card's own footer - not merely
+    // to see extra cards. overflow-y itself moves from here down to
+    // .fs-grid specifically (see below) - this element itself no
+    // longer needs its own scrollbar, since none of its three
+    // children (header, grid, pagination) can now push it taller than
+    // its own fixed height.
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    font-family: "Cairo", "Segoe UI", sans-serif;
+    // RUNTIME UI FIX ("Card Width / Excessive Grid Spacing"): slightly
+    // increased (12px -> 20px) to stay visually balanced against the
+    // grid's own larger 24px gap introduced in the same fix - outer
+    // padding around the whole card area, distinct from the gap
+    // between cards themselves.
+    padding: 20px;
+
+    // UI FIX ("KDS Screen - Dropdown Styling"), confirmed live: every
+    // <select> element's own CLOSED state (Station, Order Type,
+    // Employee, POS, etc.) was already dark - the reported issue is
+    // specifically the OPEN dropdown's own <option> list, which
+    // rendered with a white background, inconsistent with the rest of
+    // this dark-themed screen. Deliberately placed here, at this
+    // top-level scope (not nested inside .fs-header or .fs-dropdown-
+    // filters individually) - descendant-selector nesting inside just
+    // one of those sections would only have fixed the dropdown(s)
+    // physically located there, missing every other one; this single
+    // rule now covers every <select> anywhere under .fs-kds-app, "any
+    // other dropdown on the Internal KDS Screen" included, without
+    // needing a separate copy per section.
+    //
+    // Root cause, and an honest technical limit worth stating plainly:
+    // a native <select>'s own dropdown popup is a browser/OS-level UI
+    // element, not a plain HTML node CSS can fully restyle (see MDN's
+    // own "Customizable select elements" article - full styling
+    // control requires an entirely different, still limited-support
+    // HTML/CSS mechanism, or a custom JS-built dropdown from scratch,
+    // replacing this module's own long-standing plain <select>
+    // elements with a new custom widget - a real component/behavior
+    // change well beyond a styling-only fix, and explicitly not what
+    // was asked for here: "do not modify dropdown/filter behavior").
+    // `color-scheme: dark` (widely supported since 2022, per MDN and
+    // multiple independent CSS references) is the correct, standard,
+    // lightweight way to ask the browser to render an element's own
+    // native controls - including this exact dropdown popup - using
+    // dark colors instead of light ones, with no custom dropdown
+    // implementation at all. Combined with an explicit `option`
+    // background/color/selected-highlight rule below - keeping the
+    // existing blue ($fs-blue) highlight for the selected/hovered
+    // option, exactly as required - honored by Chromium/Firefox-based
+    // browsers, the ones actually likely to be running this internal
+    // screen, for the closest practical match to this project's own
+    // brand colors. The exact popup appearance can still vary slightly
+    // by browser/OS - stated plainly, not a gap this delivery can
+    // close further with CSS alone.
+    select {
+        color-scheme: dark;
+
+        option {
+            background: $fs-card-bg;
+            color: #eef2f7;
+
+            &:checked, &:hover {
+                background: $fs-blue;
+                color: white;
+            }
+        }
+    }
+
+    // REAL FIX (reported live on the kiosk, applied here too since this
+    // screen explicitly supports a touch-tablet kiosk mode of its own -
+    // see the comment just below): the classic mobile-browser tap delay
+    // (up to ~300ms while the browser waits to see if a tap is the start
+    // of a double-tap-to-zoom gesture). Applied at the app root so every
+    // interactive element inside inherits it, rather than needing it
+    // re-added piecemeal on each card/button/checkbox.
+    touch-action: manipulation;
+}
+
+// Point 5: kiosk mode. Applied to <body> (see kds_app.js) when the URL
+// carries ?kiosk=1 (as set by the /flexsyskds/<station_code> redirect
+// route), hiding the normal Odoo backend chrome so the tablet shows only
+// the KDS screen, full viewport, nothing else.
+//
+// CAVEAT: I don't have a live Odoo 19 instance to confirm these exact
+// class names against this build's actual DOM - .o_main_navbar has been
+// the top backend menu bar's class across many Odoo versions, but this
+// build has already diverged from what I could verify offline in a few
+// other places (res.groups.category_id, the view RelaxNG schema). If the
+// top bar or a breadcrumb strip is still visible in kiosk mode, open
+// devtools, inspect the element sitting above/around .fs-kds-app, and
+// tell me its actual class name so I can correct the selector.
+body.o_flexsys_kiosk {
+    .o_main_navbar,
+    .o_action_manager > .o_control_panel,
+    .o_control_panel_breadcrumbs,
+    .o_breadcrumb {
+        display: none !important;
+    }
+    .o_action_manager,
+    .o_web_client {
+        // VIEWPORT FIX ("KDS Browser 100% Viewport Fix"): 100dvh
+        // (Dynamic Viewport Height) added alongside the existing
+        // 100vh, not replacing it - a browser that doesn't yet
+        // support the dvh unit simply ignores this second
+        // declaration and keeps using 100vh above it (the standard,
+        // safe CSS fallback pattern: write the older/safer value
+        // first, the newer value second). dvh reflects the browser's
+        // own actual, currently-visible viewport height more
+        // accurately than the static vh unit in edge cases where a
+        // browser's own chrome (address bar, etc.) can change size
+        // dynamically - this kiosk mode already hides Odoo's own
+        // navbar/breadcrumbs, so this element is the true full-page
+        // shell here, making an accurate real-viewport height
+        // meaningful.
+        height: 100vh !important;
+        height: 100dvh !important;
+    }
+    // RUNTIME UI ADJUSTMENT ("Vertical Scroll + Slightly Narrower
+    // Cards"), confirmed live on Odoo.sh: overflow: hidden here
+    // (combined with height: 100vh !important above) was blocking ANY
+    // vertical scroll for the whole page - once the header + filters +
+    // a 3x2 card grid together exceeded the available viewport height,
+    // the overflow was simply clipped, never scrollable, cutting off
+    // the second row and making Pagination itself unreachable in that
+    // case. overflow-y: auto restores real vertical scrolling when
+    // content genuinely exceeds the viewport; overflow-x: hidden keeps
+    // the explicit "no horizontal scroll" requirement. .fs-sticky-top
+    // below still works correctly against body as its own scroll
+    // container - nothing else here changed.
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+// RUNTIME UI FIX ("Version 38 Review - Incomplete Runtime UI Fix"):
+// scoped ONLY to an Odoo action container that actually contains
+// .fs-kds-app (via :has(), well-supported in the Chrome/Edge-class
+// browsers Odoo 19 itself targets) - deliberately NOT a global change
+// to .o_action_manager/.o_content, which would affect every other
+// Odoo action in the backend. This exists purely so .fs-kds-app's own
+// height: 100% above has a real, non-auto parent height to resolve
+// against - Odoo's own action container does not guarantee one on its
+// own for an arbitrary embedded client action. Applies in the NORMAL
+// (non-?kiosk=1) Internal KDS backend mode specifically - the
+// ?kiosk=1 case already has its own separate, working fix above
+// (body.o_flexsys_kiosk's own height: 100vh !important + overflow-y:
+// auto).
+.o_action_manager:has(.fs-kds-app),
+.o_content:has(.fs-kds-app) {
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+// HIGH-DENSITY LAYOUT (dev request, point 6: "the overall KDS orders
+// area may scroll vertically... prefer sticky header/status filters +
+// scrollable orders area"): the public kiosk already gets this for free
+// from its own dedicated fixed-height, overflow-y:auto .grid container
+// (see controllers/kds_kiosk.py) - this backend screen had no
+// equivalent, so .fs-kds-app's min-height:100vh let the whole page
+// (header, filters, and grid together) scroll as one block, taking the
+// header/filters out of view along with it. Wraps .fs-header,
+// .fs-filters, and .fs-dropdown-filters together (see the matching
+// wrapper div added in kds_templates.xml) as a single sticky unit -
+// simpler and more robust than making each one sticky individually with
+// hand-calculated top offsets to stack correctly below one another.
+// position: sticky is additive and doesn't require restructuring the
+// page's own scroll architecture, which matters here given this screen
+// is embedded in Odoo's own backend chrome, whose exact scroll-
+// container structure isn't something I have live access to confirm.
+.fs-sticky-top {
+    // VIEWPORT FIX ("KDS Browser 100% Viewport Fix"): now that
+    // .fs-kds-app itself is a flex column (see above) with only
+    // .fs-grid scrolling internally, this wrapper's own position:
+    // sticky is no longer load-bearing for keeping it visible (it sits
+    // fixed-size at the top of the flex column regardless) - kept
+    // here anyway as a harmless defense-in-depth measure, since it
+    // costs nothing and protects against any future change to the
+    // surrounding scroll structure. flex-shrink: 0 is the actual fix:
+    // this wrapper (header + status filters + dropdown filters
+    // together) must never be compressed to make room for the grid
+    // below it - it keeps its own natural height, and .fs-grid gets
+    // exactly what's left.
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: $fs-bg;
+}
+
+.fs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #0e1116;
+    padding: 10px 16px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+
+    .fs-header-left {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+    .fs-logo {
+        color: $fs-blue;
+        font-size: 20px;
+    }
+    .fs-station-select {
+        background: $fs-blue;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-weight: bold;
+    }
+    .fs-header-info {
+        display: flex;
+        gap: 18px;
+        font-size: 11.5px;
+        color: #7a8598;
+        b { color: #f5f7fa; font-size: 12.5px; display: block; }
+    }
+    .fs-company-badge {
+        border: 1px solid #2a3340;
+        border-radius: 8px;
+        padding: 7px 18px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #cfd8e6;
+    }
+    .fs-header-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    // KDS FULLSCREEN MODE (dev request "V1 Finalization", item 1)
+    .fs-fullscreen-toggle {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        border: 1px solid #2a3340;
+        background: transparent;
+        color: #cfd8e6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        flex-shrink: 0;
+
+        svg { width: 17px; height: 17px; }
+
+        &:hover { border-color: $fs-blue; color: $fs-blue; }
+    }
+    .fs-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin: 0 4px;
+        &-online { background: $fs-ready; }
+        &-offline { background: $fs-late; }
+    }
+}
+
+.fs-filters {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+
+    .fs-filter-btn {
+        background: #232b36;
+        color: #cfd6e0;
+        border: 1px solid #2a3340;
+        padding: 14px 26px;
+        border-radius: 12px;
+        font-weight: 800;
+        font-size: 20px;
+        cursor: pointer;
+        text-transform: uppercase;
+        box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        &.active { background: $fs-blue; color: white; border-color: $fs-blue; }
+        .fs-count {
+            background: rgba(255, 255, 255, 0.12);
+            padding: 2px 10px;
+            border-radius: 8px;
+            font-size: 17px;
+            opacity: 1;
+        }
+        &.active .fs-count { background: rgba(255, 255, 255, 0.25); }
+    }
+}
+
+.fs-dropdown-filters {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+
+    label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: #7a8598;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    select {
+        background: #232b36;
+        color: #eef2f7;
+        border: 1px solid #2a3340;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        text-transform: none;
+    }
+}
+
+.fs-grid {
+    // HIGH-DENSITY LAYOUT ("Restore the approved pagination design"):
+    // grid-template-columns is now set inline per-render from
+    // JS (kds_app.js's own pagination.columns, computed by the
+    // shared static/src/shared/flexsys_pagination.js) - ADAPTIVE
+    // density (Commercial Demo Layout Adjustment): 3 columns below
+    // 1600px viewport width, 4 columns at/above it, never more than 4
+    // at any width - REPLACING the earlier auto-fit/minmax approach,
+    // which let the browser pack an unbounded number of columns/rows
+    // and grow the whole order area vertically with no fixed page
+    // size at all. This base rule is now only a fallback for the
+    // brief instant before the first inline style is applied - 3
+    // columns is a reasonable default for that brief window regardless
+    // of which tier the actual viewport resolves to.
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 24px;
+    justify-content: start;
+    justify-items: stretch;
+    align-items: start;
+    // VIEWPORT FIX ("KDS Browser 100% Viewport Fix"): this is now the
+    // ONE flexible region of .fs-kds-app's own flex column - flex: 1 1
+    // auto claims exactly the leftover space after the fixed-size
+    // header/filters wrapper above and the fixed-size pagination bar
+    // below (see both of those rules for their own matching
+    // flex-shrink: 0), rather than the previous design where this
+    // whole page (header + filters + grid + pagination together)
+    // scrolled as one block and a heavy header could push a
+    // perfectly normal, short order's own action buttons out of the
+    // initially visible area. min-height: 0 is the standard flexbox
+    // override needed here (a flex child's own default
+    // min-height: auto would otherwise refuse to shrink below its
+    // content's natural size, defeating overflow-y: auto below and
+    // just growing this area past its own allotted space instead).
+    // overflow-y: auto moves here from .fs-kds-app itself - only THIS
+    // region scrolls now, never the header/filters/pagination framing
+    // it.
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    // UI ADJUSTMENT ("Internal KDS Sticky Pagination"), now largely
+    // superseded by the flex-column restructuring above (.fs-pagination
+    // is a fixed-size flex sibling AFTER this element now, never
+    // stacked on top of it) - a small bottom margin is kept purely as
+    // breathing room below the last card row, not as a safety gap
+    // against an overlapping bar.
+    padding-bottom: 16px;
+}
+
+.fs-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 40px;
+    color: #7a8598;
+}
+
+// HIGH-DENSITY LAYOUT: fixed navigation bar under the card grid -
+// large, touch-friendly buttons and a clear "N / total" status, per
+// the explicit "not like small backend-table pagination" requirement.
+//
+// UI ADJUSTMENT ("Internal KDS Sticky Pagination"): confirmed live -
+// with two full rows of cards, Previous/Next/page indicator sat below
+// the fold and only appeared after scrolling down. position: sticky +
+// bottom: 0 (INTERNAL KDS ONLY - Public Kiosk's own pagination bar is
+// untouched, confirmed visually acceptable as-is) keeps it always
+// visible at the bottom of .fs-kds-app's own scrollable area (the
+// same scroll container Version 39's own overflow-y: auto lives on -
+// .fs-pagination is a direct child of it, exactly like .fs-grid, so
+// sticky resolves against it correctly with no extra wrapper needed).
+// Solid background (same $fs-bg as .fs-sticky-top above, and the same
+// z-index: 20 - the two never overlap spatially, one pinned to the
+// top edge and the other to the bottom, so sharing a z-index is safe)
+// prevents card content from visually showing through underneath as
+// it scrolls past. See .fs-grid's own padding-bottom below for the
+// matching fix that keeps a tall last card from ending up hidden
+// behind this now-fixed-in-place bar.
+.fs-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 16px 0;
+    // VIEWPORT FIX ("KDS Browser 100% Viewport Fix"): flex-shrink: 0
+    // is the actual fix now - as the last fixed-size child of
+    // .fs-kds-app's own flex column, this bar is always visible at
+    // the bottom of the available area without needing to stick to
+    // anything; position: sticky/bottom/z-index are kept as a
+    // harmless defense-in-depth measure (costs nothing, protects
+    // against any future change to the surrounding scroll structure)
+    // but are no longer what keeps this bar on screen.
+    flex-shrink: 0;
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    background: $fs-bg;
+}
+
+.fs-pagination-btn {
+    min-width: 64px;
+    min-height: 64px;
+    border-radius: 14px;
+    border: none;
+    background: #1e88e5;
+    color: #fff;
+    font-size: 28px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:disabled {
+        background: #2a3340;
+        color: #5a6578;
+        cursor: default;
+    }
+
+    &:not(:disabled):active {
+        background: #1565c0;
+    }
+}
+
+.fs-pagination-status {
+    min-width: 96px;
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    color: #eef2f7;
+}
+
+.fs-card {
+    background: #fff;
+    border-radius: 14px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    position: relative;
+    // RUNTIME UI FIX ("Card Width / Excessive Grid Spacing"), confirmed
+    // live on Odoo.sh: max-width: 380px REMOVED - it was capping every
+    // card at that width regardless of how much wider its own grid
+    // column actually was (a Full HD screen's own 3-column layout
+    // leaves each column comfortably wider than 380px), leaving large,
+    // wasted horizontal gaps between cards instead of each card
+    // actually filling its own column. width: 100% (combined
+    // with .fs-grid's own justify-items: stretch above) let each
+    // card genuinely use its full column width - product names,
+    // mixed Arabic/English text, modifiers, and notes all get the
+    // extra room this was meant to free up.
+    //
+    // UI ADJUSTMENT ("Vertical Scroll + Slightly Narrower Cards"):
+    // confirmed live - 100% read as slightly too wide once seen on the
+    // actual Full HD screen. width: 95% + justify-self: center takes
+    // a small, even margin off both sides of each card within its own
+    // grid column (not the grid's own gap between columns, which stays
+    // at 24px) - still comfortably wider than the old, removed 380px
+    // cap, keeping product names/notes/mixed Arabic-English text just
+    // as readable, while avoiding the card touching its own column's
+    // full edge-to-edge width.
+    width: 95%;
+    justify-self: center;
+    // HIGH-DENSITY LAYOUT (dev request, point 5: "a single order may
+    // contain many products... do not allow one very large order to
+    // destroy the entire grid layout... define a reasonable maximum
+    // visible card height... keep the header visible, keep the action
+    // area accessible, allow the product section to scroll"): caps how
+    // tall any one card can ever get - roughly enough for ~6-7 line
+    // items at this font size before it starts scrolling internally
+    // instead of growing further (tall enough that the common case, a
+    // handful of items, never scrolls at all). .fs-card-head and
+    // .fs-card-footer (below) stay outside the scrollable region
+    // (flex-shrink: 0 on both) so they're always visible and reachable,
+    // even for a 10+ item order - only .fs-card-body scrolls internally.
+    max-height: 640px;
+
+    &.fs-celebrate {
+        animation: fs-card-celebrate 0.7s ease-in-out;
+        z-index: 5;
+    }
+}
+
+@keyframes fs-card-celebrate {
+    0% { transform: rotate(0deg) scale(1); }
+    50% { transform: rotate(200deg) scale(1.05); }
+    100% { transform: rotate(360deg) scale(1); }
+}
+
+// UI ADJUSTMENT ("KDS Card Width - Visual Adjustment Only"): confirmed
+// live - on Full HD (>= 1600px, the Wide/4-column density tier), the
+// card was still wider than it needed to be - even a moderately long
+// product name stayed on one line with visible leftover horizontal
+// space instead of wrapping naturally at a more reasonable card width.
+// Visual-only change: column COUNT (4), row count (2), and the 8-card
+// max are all still computed exactly the same way by
+// flexsys_pagination.js/kds_app.js's own pagination.columns - nothing
+// about that logic is touched here. Only how WIDE each of those 4
+// columns/cards is allowed to become, at this one tier, changes.
+//
+// grid-template-columns here needs !important specifically because
+// kds_app.js's own inline style (t-attf-style="grid-template-columns:
+// repeat({{pagination.columns}}, minmax(0, 1fr))") is applied directly
+// on the element and would otherwise always win over a plain
+// stylesheet rule regardless of media query/specificity - this is the
+// standard, minimal way to override an inline style from CSS alone,
+// without needing to touch the pagination column-count logic itself
+// to also carry a width value.
+//
+// Placed deliberately AFTER both the .fs-grid and .fs-card base rules
+// above (not interleaved between .fs-grid and .fs-card, which would
+// let a naive "first .fs-card{ rule found" text-based check pick up
+// this override instead of the base rule) - a plain CSS specificity/
+// source-order override, not a restructuring of either base rule.
+//
+// Below 1600px: completely untouched - still the existing 3-column /
+// width: 95% behavior from .fs-card above, unaffected by this block.
+//
+// UI ADJUSTMENT ("KDS Card Width - 360px experiment"): the trial
+// max-width raised from 340px to 360px at this same >= 1600px tier -
+// visual width only, nothing else in this block's own rules changed
+// (still 4 columns x 2 rows, still max 8 cards/page, still no
+// !important override below 1600px).
+@media (min-width: 1600px) {
+    .fs-grid {
+        grid-template-columns: repeat(4, minmax(0, 360px)) !important;
+    }
+    .fs-card {
+        width: 100%;
+        max-width: 360px;
+    }
+}
+
+.fs-card-head {
+    background: $fs-blue;
+    color: #fff;
+    padding: 16px;
+    position: relative;
+    // High-density layout: never shrunk or scrolled - always visible,
+    // even when .fs-card-body below is internally scrolling.
+    flex-shrink: 0;
+
+    .fs-card.fs-card-late & { background: $fs-late; }
+    .fs-card.fs-card-warning & { background: $fs-orange; }
+    .fs-card.fs-card-ready & { background: $fs-ready; }
+    // CANCELLATION VISIBILITY (dev request, point 2): deliberately muted
+    // grey rather than the late/warning alert colors above - see the
+    // matching, more detailed comment on the public kiosk's own
+    // .card.cancelled rule in controllers/kds_kiosk.py for the full
+    // reasoning (this isn't an urgent problem, it's a completed
+    // non-event).
+    .fs-card.fs-card-cancelled & { background: #5a6472; }
+}
+
+// See the .fs-card-head cancelled rule just above for the reasoning.
+.fs-card.fs-card-cancelled { opacity: 0.7; }
+
+.fs-card-title-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.fs-accent-bar {
+    width: 4px;
+    height: 34px;
+    background: rgba(255, 255, 255, 0.55);
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+// LOCALIZATION ("Arabic Localization & RTL Specification"), item 9,
+// "Mixed Arabic / English / Numeric Content": "Order identifiers must
+// render in a stable readable direction. Use appropriate bidi/
+// isolation handling where required." Order numbers/POS references
+// (e.g. "2634-3-000011") mix digits and separator characters that
+// Unicode's own bidi algorithm can treat ambiguously inside a
+// surrounding RTL (Arabic) context - `direction: ltr` plus
+// `unicode-bidi: isolate` forces this element to always render its own
+// content left-to-right and never reorder/merge with the RTL text
+// around it, regardless of which language is active.
+.fs-order-number, .fs-ordered-ref { direction: ltr; unicode-bidi: isolate; }
+.fs-order-number { font-size: 26px; font-weight: 800; line-height: 1; }
+.fs-ordered-ref { font-size: 11px; opacity: 0.75; margin-top: 4px; font-family: monospace; }
+
+.fs-status-blink {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    margin-top: 10px;
+    color: #fff;
+}
+
+.fs-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fff;
+    animation: fs-status-blink 1.1s ease-in-out infinite;
+}
+
+@keyframes fs-status-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.15; }
+}
+
+.fs-chips-row {
+    display: flex;
+    gap: 7px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+
+.fs-chip {
+    background: rgba(255, 255, 255, 0.95);
+    color: #1a2330;
+    font-size: 11.5px;
+    font-weight: 700;
+    padding: 6px 11px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+
+    svg { width: 13px; height: 13px; flex-shrink: 0; }
+}
+
+.fs-chip-timer {
+    color: $fs-blue;
+    .fs-card.fs-card-late & { color: $fs-late; }
+    .fs-card.fs-card-warning & { color: $fs-orange; }
+    .fs-card.fs-card-ready & { color: $fs-ready; }
+
+    &.fs-pulse { animation: fs-pulse-timer 1.6s ease-in-out infinite; }
+}
+
+@keyframes fs-pulse-timer {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.fs-order-customer {
+    font-size: 13px;
+    font-weight: 800;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.18);
+    padding: 4px 10px;
+    border-radius: 7px;
+    display: inline-block;
+    margin-top: 8px;
+}
+
+.fs-employee-row {
+    margin-top: 10px;
+    font-size: 12.5px;
+    color: rgba(255, 255, 255, 0.9);
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 6px;
+
+    svg { width: 15px; height: 15px; }
+}
+
+.fs-card-body {
+    // HIGH-DENSITY LAYOUT (dev request, point 5): this is the section
+    // that scrolls internally once .fs-card hits its own max-height
+    // (above) - min-height: 0 is the essential flexbox override here (a
+    // flex child's default min-height:auto would otherwise refuse to
+    // shrink below its content's natural size no matter how constrained
+    // the parent is, silently defeating overflow-y:auto and just
+    // growing the card past its max-height instead). flex: 1 1 auto
+    // lets it claim exactly the leftover space between the fixed-size
+    // header and footer.
+    padding: 2px 16px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.fs-line-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 13px 0;
+    border-bottom: 1px solid #eef1f4;
+
+    &:last-child { border-bottom: none; }
+}
+
+.fs-line-checkbox {
+    width: 21px;
+    height: 21px;
+    border: 2px solid #cbd3da;
+    border-radius: 6px;
+    flex-shrink: 0;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: #fff;
+
+    svg { width: 13px; height: 13px; stroke: #fff; display: none; }
+
+    // Four visual states: empty (new/accepted), blue+dash (preparing -
+    // in progress), green+check (ready), grey+X (cancelled - new, dev
+    // request "Cancellation Visibility Improvement") - see
+    // KdsOrderCard.lineCheckboxClass() for the state->class mapping.
+    &.fs-in-progress {
+        background: $fs-blue;
+        border-color: $fs-blue;
+        .fs-icon-dash { display: block; }
+    }
+
+    &.fs-checked {
+        background: $fs-ready;
+        border-color: $fs-ready;
+        .fs-icon-check { display: block; }
+    }
+
+    &.fs-cancelled {
+        background: #8a94a3;
+        border-color: #8a94a3;
+        cursor: default;
+        .fs-icon-cancel { display: block; }
+    }
+}
+
+.fs-line-item-cancelled {
+    opacity: 0.65;
+
+    .fs-line-title {
+        text-decoration: line-through;
+        color: #7c8aa0;
+    }
+}
+
+.fs-line-badge-cancelled {
+    background: $fs-late !important;
+}
+
+.fs-line-main { flex: 1; min-width: 0; }
+.fs-line-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fs-line-title { font-weight: 800; font-size: 15px; color: #1a2330; }
+// LOCALIZATION ("Arabic Localization & RTL Specification"), item 8:
+// "Do not blindly reverse operational layout if doing so makes the
+// KDS harder to scan... Numeric quantities should remain clearly
+// readable... Timers must remain visually stable." Both mix a number
+// with text/symbols ("2 × Tart strawberries", "04:12") - isolating
+// them keeps the quantity/timer digits in a stable, predictable visual
+// order regardless of the surrounding RTL/LTR context, the same
+// reasoning already applied to order numbers and delta markers above.
+.fs-line-title, .fs-chip-timer { unicode-bidi: isolate; }
+
+.fs-variant-pill {
+    background: #fdecd2;
+    color: #8a5a12;
+    font-size: 11.5px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
+}
+
+.fs-line-note-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    font-size: 12px;
+    color: #8a94a3;
+
+    svg { width: 13px; height: 13px; flex-shrink: 0; }
+}
+
+.fs-line-badge {
+    font-size: 9.5px;
+    background: $fs-blue;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 5px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.fs-card-footer {
+    padding: 14px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid #eef1f4;
+    gap: 10px;
+    // High-density layout: never shrunk or scrolled - the action button
+    // stays reachable even for a 10+ item order (dev request, point 5:
+    // "keep the action area accessible").
+    flex-shrink: 0;
+}
+
+.fs-print-action {
+    background: #fff;
+    border: 1px solid #d4dae1;
+    border-radius: 10px;
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #556270;
+    flex-shrink: 0;
+
+    svg { width: 18px; height: 18px; }
+
+    &:disabled {
+        cursor: not-allowed;
+        opacity: 0.4;
+    }
+}
+
+.fs-main-action {
+    background: $fs-blue;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 30px;
+    font-weight: 800;
+    font-size: 15px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+
+    svg { width: 16px; height: 16px; }
+
+    .fs-card.fs-card-late & { background: $fs-late; }
+    .fs-card.fs-card-warning & { background: $fs-orange; color: #3a1f00; }
+    .fs-card.fs-card-ready & { background: $fs-ready; }
+}
+
+// VIEWPORT FIX ("KDS Browser 100% Viewport Fix"), compact mode for
+// shorter screens: moderately reduces ONLY vertical padding/margins/
+// gaps in the header, filter bars, and pagination framing - never
+// product/note/variant text size or emphasis (those stay exactly as
+// designed, per explicit requirement). Combined with the flex-column
+// restructuring above (.fs-grid is the one region that actually
+// scrolls), this frees up extra vertical room for the card grid area
+// itself on laptop-height screens (roughly 900px and below) without
+// touching card width, column count, cards-per-page, or font sizes
+// anywhere.
+//
+// VISUAL FOLLOW-UP ("V64 Visual Follow-up - 100% Zoom Still Clips
+// Normal Card Footer"): confirmed on a real runtime screenshot at
+// Browser Zoom 100% - the top-framing compaction above was not
+// enough on its own: even a single-line-item order's own card head/
+// line/footer vertical spacing, unchanged until now, still pushed
+// that one normal card's own footer (Print/START) below the
+// available .fs-grid height on shorter desktop viewports. Extended
+// here with matching, moderate vertical-only reductions inside the
+// card itself (head padding, the three internal margin-top gaps,
+// line-item padding, footer padding) and slightly deeper reductions
+// to the same top-framing elements already compacted above - still
+// never touching any font-size, color, card width, column count, or
+// pagination/JS logic anywhere.
+//
+// CASCADE FIX ("V65 - CSS Cascade / Source Order Fix"): confirmed by
+// static review - this entire block used to sit BEFORE the base card
+// rules it overrides (.fs-card-head, .fs-status-blink, .fs-chips-row,
+// .fs-employee-row, .fs-line-item, .fs-card-footer all being defined
+// further down the file). With equal selector specificity, plain CSS
+// source order decides the winner - the later base rule was silently
+// winning over this media query's own compact values every single
+// time, at any viewport height, making every V64 card-internal
+// reduction completely inert in practice despite being textually
+// correct. Fixed by moving this entire block (values themselves
+// completely unchanged) to AFTER every base rule it touches,
+// including .fs-main-action just above - the header/filters/grid/
+// pagination overrides earlier in this same block were already
+// correctly ordered and remain exactly as effective as before; only
+// the block's own position changed, not a single property value
+// inside it. No !important needed - correct source order alone is
+// sufficient and is the cleaner fix, per explicit direction.
+@media (max-height: 900px) {
+    .fs-header {
+        padding: 4px 14px;
+        margin-bottom: 4px;
+    }
+    .fs-filters {
+        margin-bottom: 6px;
+
+        .fs-filter-btn {
+            padding: 7px 18px;
+        }
+    }
+    .fs-dropdown-filters {
+        margin-bottom: 6px;
+    }
+    .fs-grid {
+        gap: 16px;
+        padding-bottom: 10px;
+    }
+    .fs-pagination {
+        padding: 6px 0;
+    }
+    // V64: button size moderately reduced (still well above the
+    // ~44px touch-target minimum widely recommended by Apple/Google's
+    // own platform guidelines) - font-size reduced proportionally so
+    // the page-number digits stay visually balanced inside the
+    // smaller button, not because product/note/variant text is being
+    // touched (it isn't - pagination controls are UI chrome, not
+    // order content).
+    .fs-pagination-btn {
+        min-width: 52px;
+        min-height: 52px;
+        font-size: 22px;
+    }
+
+    // V64: card-internal vertical density. .fs-card's own max-height
+    // is untouched (still the same cap for genuinely large orders,
+    // per "keep this a vertical-density adjustment only") - these
+    // reductions instead lower how much vertical space a NORMAL,
+    // short order's own head/line/footer consume in the first place,
+    // so it fits the (now also slightly larger, thanks to the
+    // top-framing reductions above) available .fs-grid height without
+    // ever needing to scroll.
+    .fs-card-head {
+        padding: 10px 16px;
+    }
+    .fs-status-blink {
+        margin-top: 6px;
+    }
+    .fs-chips-row {
+        margin-top: 8px;
+    }
+    .fs-employee-row {
+        margin-top: 6px;
+    }
+    .fs-line-item {
+        padding: 9px 0;
+    }
+    .fs-card-footer {
+        padding: 8px 16px;
+    }
+
+    // V66 ("Root Cause Fix for Card Height at Browser Zoom 100%"):
+    // the actual root cause, confirmed by inspecting .fs-grid's own
+    // align-items rule - it is (and, above this media query, remains)
+    // `start`, meaning every card grows to its OWN natural content
+    // height with NO relationship at all to how much vertical space
+    // its own grid row actually has available on a short screen. A
+    // perfectly normal, short order's card - even after every
+    // padding/margin reduction already applied above - could still
+    // end up taller than the row's own real available height,
+    // pushing its footer out of view; no amount of further padding
+    // reduction alone can fix that, since the card was never
+    // constrained BY the row's own available height to begin with.
+    // .fs-card's own existing max-height: 640px (unchanged above this
+    // media query) is a fixed pixel ceiling for genuinely large
+    // orders - it does nothing to relate a SHORT order's own card to
+    // a SHORT screen's own smaller row height.
+    //
+    // Fixed, at this short-screen tier only (the taller-screen
+    // default above this media query is completely unchanged - this
+    // is not a general design change): align-items: stretch makes
+    // every card in a row genuinely fill that row's own real
+    // available height, and .fs-card's own height: 100%/
+    // min-height: 0/max-height: 100% (overriding the 640px ceiling
+    // only at this tier) let it actually claim that height instead of
+    // just its own natural content size. .fs-card-body's own EXISTING
+    // flex: 1 1 auto; min-height: 0; overflow-y: auto (completely
+    // unchanged - already correct) is what then absorbs any genuine
+    // overflow internally, scrolling only the card's own body, rather
+    // than the row forcing the footer below the visible grid area.
+    .fs-grid {
+        align-items: stretch;
+    }
+    .fs-card {
+        height: 100%;
+        min-height: 0;
+        max-height: 100%;
+    }
+}
+
+// Configuration > Printers hub - three blocks, each linking to its own
+// page (views/kds_printer_hub_views.xml). Subtle, consistent with the
+// rest of the module's own brand accent rather than plain default
+// Bootstrap cards - restrained, since this is an internal admin
+// configuration screen, not a marketing page.
+.o_kds_hub_block {
+    border: 1px solid #e2e6ea;
+    border-radius: 10px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+    &:hover {
+        border-color: $fs-blue;
+        box-shadow: 0 2px 10px rgba(30, 136, 229, 0.12);
+    }
+
+    .card-title { font-weight: 700; }
+}
+
+.o_kds_hub_icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: rgba(30, 136, 229, 0.1);
+    color: $fs-blue;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+}
+
+.o_kds_hub_btn {
+    align-self: flex-start;
+}
