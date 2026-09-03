@@ -136,7 +136,7 @@ else:
 head("SIG-05 — PORTAL GROUP")
 portal = env.ref("base.group_portal", raise_if_not_found=False)
 print("base.group_portal id    : %s" % (portal.id if portal else "NOT FOUND"))
-print("portal users count      : %s" % (len(portal.users) if portal else "N/A"))
+print("portal users count      : %s" % (len(portal.user_ids) if portal else "N/A"))
 
 head("SIG-07 — ACL ON TARGET MODELS")
 for model_name in ("hr.attendance", "hr.employee", "hr.work.location"):
