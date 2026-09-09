@@ -85,6 +85,13 @@ class FlexSysPosDevice(models.Model):
                 raise ValidationError(_("The technical POS user must have access to the device company."))
             if user and user._is_system():
                 raise ValidationError(_("A system administrator cannot be used as the technical POS user."))
+            if user and not (
+                user.has_group("point_of_sale.group_pos_user")
+                or user.has_group("point_of_sale.group_pos_manager")
+            ):
+                raise ValidationError(_(
+                    "The technical POS user must have Point of Sale access (User or Administrator)."
+                ))
 
     @api.model
     def _new_raw_token(self):

@@ -71,7 +71,9 @@ class FlexSysPosDeviceAccessController(http.Controller):
     def _generic_not_found(self):
         # Keep failure responses intentionally generic so the public endpoint
         # does not reveal whether a device, POS, user or token exists.
-        response = request.not_found()
+        # Odoo 19's request.not_found() returns a NotFound HTTP exception, not
+        # a mutable Response object, so headers must be set on a real response.
+        response = request.make_response("Not Found", status=404)
         response.headers["Cache-Control"] = "no-store"
         response.headers["Referrer-Policy"] = "no-referrer"
         return response
