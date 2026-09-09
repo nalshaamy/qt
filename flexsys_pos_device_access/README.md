@@ -1,97 +1,37 @@
 # FlexSys POS Device Access — Odoo 19
 
-## هدف الموديول
+Version: **19.0.1.1.0**
 
-توفير رابط آمن ثابت لكل جهاز كاشير يربطه مباشرة بنقطة بيع محددة، ويتجاوز صفحات Odoo الإدارية واختيار نقطة البيع، **مع الإبقاء الإلزامي على شاشة إلغاء قفل الكاشير وPIN الموظف**.
+## V1.1 Device Pairing
 
-المبدأ المعتمد:
+FlexSys POS Device Access binds a cashier browser to one Odoo POS configuration while preserving Odoo's native employee PIN verification.
 
-- **Secure Token = التحقق من الجهاز**
-- **Employee PIN = التحقق من الموظف**
+Flow:
 
-المسار النهائي:
+1. Manager creates a device record and generates a short-lived **one-time Pairing Link**.
+2. The first browser that opens the link becomes paired.
+3. The pairing link is consumed immediately and cannot pair another browser/device.
+4. FlexSys generates a separate 256-bit device credential, stores only its SHA-256 hash in Odoo, and places the raw credential in a **Secure + HttpOnly + SameSite=Lax** host cookie.
+5. Daily entry uses `/flexsys/pos/device/start`.
+6. The device credential establishes the minimum-permission POS service-user session and opens the fixed `/pos/ui/<config>/login` route.
+7. The cashier must still enter their native Odoo POS employee PIN.
+8. Backend navigation and attempts to switch to another POS are blocked for device sessions.
 
-`Secure Device URL -> FlexSys token validation -> Odoo user session -> /pos/ui/<config_id>/login -> Cashier PIN -> POS selling screen`
+## Administration
 
-## ما يتم تجاوزه
+- Generate / rotate one-time Pairing Link
+- Reset Pairing (invalidates current browser credential and open device sessions)
+- Revoke Access
+- Disable device
+- Optional IP/CIDR restriction
+- Credential expiry policy
+- Audit logs
+- Managed minimum-permission POS service user
 
-- تسجيل دخول Odoo اليدوي
-- الصفحة الرئيسية
-- اختيار تطبيق نقطة البيع
-- اختيار QT001 / QT002 / غيرها
+## Upgrade from 19.0.1.0.x
 
-## ما يبقى
+Existing V1.0 Secure Links are treated as **legacy one-time pairing links** after upgrade. A legacy link can be consumed once to pair the browser, after which it is invalidated. Managers can instead generate a new V1.1 Pairing Link.
 
-- شاشة Odoo الأصلية لإلغاء قفل الكاشير
-- PIN الموظف
-- تسجيل هوية الكاشير داخل POS قبل البيع
+## Security note
 
-## التصميم الأمني
-
-1. الـToken عشوائي بطول 256-bit تقريبًا باستخدام `secrets.token_urlsafe(32)`.
-2. لا يتم تخزين الـToken الخام في سجل الجهاز؛ يتم تخزين SHA-256 فقط.
-3. الرابط الخام يظهر مرة واحدة فقط في Wizard عند Generate / Rotate.
-4. تدوير Token يلغي الرابط السابق فورًا.
-5. يمكن تحديد تاريخ انتهاء صلاحية.
-6. يمكن تقييد الجهاز بعنوان IP أو CIDR اختياريًا.
-7. يوجد Audit Log لمحاولات النجاح والفشل دون تسجيل الـToken الخام.
-8. يوجد Rate Limiting مبدئي على المحاولات الفاشلة حسب IP.
-9. يعتمد الموديول على `pos_hr` لضمان وجود Employee Login / PIN في نقطة البيع.
-10. يتم إنشاء Odoo session صالحة باستخدام مستخدم تقني محدود الصلاحيات، ثم التحويل إلى مسار POS القياسي.
-11. لا يتم تعديل Controller القياسي لنقطة البيع ولا تجاوز PIN الموظف.
-12. بعد نجاح PIN فقط، يتم تسجيل اسم الموظف ووقت آخر تحقق على سجل الجهاز، بدون حفظ قيمة PIN نهائيًا.
-
-## الإعداد
-
-بعد تثبيت الموديول:
-
-`Point of Sale -> Configuration -> Device Access -> Devices`
-
-أنشئ Device جديدًا وحدد:
-
-- Device Name
-- Company
-- Point of Sale
-- Technical POS User
-- Token expiry (اختياري)
-- Allowed IP / CIDR (اختياري)
-
-ثم اضغط **Generate / Rotate Secure Link** وانسخ الرابط إلى اختصار سطح المكتب أو وضع Kiosk للمتصفح على جهاز الكاشير.
-
-## Technical POS User
-
-استخدم مستخدم Odoo داخليًا مخصصًا لهذا الغرض بصلاحيات Point of Sale الضرورية فقط. لا تستخدم Administrator أو Settings user. هذا المستخدم يمثل **الجهاز/الجلسة التقنية** وليس الكاشير الفعلي؛ الكاشير الفعلي يتم تحديده بواسطة PIN داخل POS.
-
-## Config Parameters
-
-يمكن ضبط القيم التالية من `ir.config_parameter` عند الحاجة:
-
-- `flexsys_pos_device_access.rate_limit_max_failed` — الافتراضي `10`
-- `flexsys_pos_device_access.rate_limit_window_seconds` — الافتراضي `60`
-- `flexsys_pos_device_access.log_retention_days` — الافتراضي `90`
-
-## ملاحظة مهمة عن IP
-
-في Odoo.sh / Cloudflare يجب اختبار القيمة الفعلية التي تصل إلى `remote_addr` قبل تفعيل Allowed IP في الإنتاج. اترك الحقل فارغًا أثناء الاختبار الأول.
-
-## Acceptance Criteria
-
-- فتح Secure URL صالح ينتقل إلى `/pos/ui/<config_id>/login`.
-- لا تظهر الصفحة الرئيسية أو شاشة اختيار نقاط البيع.
-- شاشة PIN تبقى كما هي.
-- PIN الصحيح يدخل إلى نقطة البيع.
-- Token ملغى/منتهي/خاطئ لا يعمل.
-- الـToken الخام لا يُكتب في **Audit Logs الخاصة بالموديول**؛ يتم حفظ بصمة SHA-256 مختصرة فقط. ملاحظة: رابط V1 نفسه قد يظهر في Browser/HTTP access history حسب البنية التحتية، لذلك يجب استخدام HTTPS وعدم مشاركة الرابط.
-- Service User لا يمكن أن يكون System Administrator.
-- نقطة البيع يجب أن يكون فيها Employee Login (`module_pos_hr`) مفعّلًا.
-- نجاح PIN يسجل اسم الموظف/الوقت فقط ولا يسجل PIN نفسه.
-- محاولة الوصول تسجل في Access Logs.
-
-## Deployment Status
-
-هذه النسخة اجتازت فحوصات static للبنية وPython/XML، لكنها يجب أن تُثبت أولًا على **Odoo.sh Staging** وتُختبر end-to-end قبل Production، خصوصًا إنشاء الـsession، تحميل POS assets، وقراءة IP خلف Odoo.sh/Cloudflare.
-
-
-## 19.0.1.0.1
-- Hotfix: establish the technical POS user session through Odoo 19 `Session.finalize()` rather than manually copying session internals.
-- Keeps the Secure Token as device authentication and preserves the native cashier PIN screen.
+The pairing mechanism binds the **browser profile** through an HttpOnly credential cookie. It prevents copying the Pairing Link to another device after first use. It is not hardware attestation; an attacker with the ability to export browser secrets/cookies from the paired workstation is outside this V1.1 threat model.

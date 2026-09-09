@@ -1,7 +1,7 @@
 {
     "name": "FlexSys POS Device Access",
     "summary": "Secure device-token entry to a fixed Odoo POS while preserving cashier PIN verification",
-    "version": "19.0.1.0.2",
+    "version": "19.0.1.1.0",
     "category": "Sales/Point of Sale",
     "author": "FlexSys",
     "website": "https://flexsyssa.com",
@@ -14,6 +14,7 @@
     },
     "data": [
         "security/security.xml",
+        "data/device_sequence.xml",
         "security/ir.model.access.csv",
         "wizard/token_wizard_views.xml",
         "views/pos_device_views.xml",

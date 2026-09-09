@@ -21,26 +21,233 @@ msgstr "سجل الدخول"
 msgid "Point of Sale"
 msgstr "نقطة البيع"
 
-msgid "Technical POS User"
-msgstr "مستخدم نقطة البيع التقني"
+msgid "POS Service User"
+msgstr "مستخدم خدمة نقطة البيع"
 
-msgid "Secure Token"
-msgstr "الرمز الآمن"
+msgid "Managed by FlexSys"
+msgstr "مُدار بواسطة FlexSys"
+
+msgid "Use FlexSys Managed User"
+msgstr "استخدام مستخدم FlexSys المُدار"
 
 msgid "Secure Device URL"
 msgstr "رابط الجهاز الآمن"
 
-msgid "Generate / Rotate Secure Link"
-msgstr "إنشاء / تدوير الرابط الآمن"
+msgid "Generate Secure Link"
+msgstr "إنشاء رابط آمن"
 
-msgid "Revoke Token"
-msgstr "إلغاء الرمز"
+msgid "Rotate Secure Link"
+msgstr "تدوير الرابط الآمن"
 
-msgid "Token Expires At"
-msgstr "انتهاء صلاحية الرمز"
+msgid "Revoke Access"
+msgstr "إلغاء الوصول"
+
+msgid "Test Device Access"
+msgstr "اختبار دخول الجهاز"
+
+msgid "Device Access Status"
+msgstr "حالة دخول الجهاز"
+
+msgid "Not Configured"
+msgstr "غير مُعد"
+
+msgid "Active"
+msgstr "نشط"
+
+msgid "Disabled"
+msgstr "معطل"
+
+msgid "Revoked"
+msgstr "ملغى"
+
+msgid "Expired"
+msgstr "منتهي"
+
+msgid "Expiry Policy"
+msgstr "سياسة انتهاء الصلاحية"
+
+msgid "No Expiry"
+msgstr "بدون انتهاء"
+
+msgid "30 Days"
+msgstr "30 يومًا"
+
+msgid "90 Days"
+msgstr "90 يومًا"
+
+msgid "Custom Date"
+msgstr "تاريخ مخصص"
+
+msgid "Access Expires At"
+msgstr "تنتهي صلاحية الوصول في"
 
 msgid "Allowed IP / CIDR"
 msgstr "IP / CIDR المسموح"
 
 msgid "Secure Device Link"
 msgstr "رابط الجهاز الآمن"
+
+msgid "Device Binding"
+msgstr "ربط الجهاز"
+
+msgid "Secure Access"
+msgstr "الوصول الآمن"
+
+msgid "Usage & Verification"
+msgstr "الاستخدام والتحقق"
+
+msgid "Advanced Security"
+msgstr "الأمان المتقدم"
+
+msgid "Token Metadata"
+msgstr "بيانات الرمز"
+
+msgid "Has Secure Link"
+msgstr "لديه رابط آمن"
+
+msgid "Without Secure Link"
+msgstr "بدون رابط آمن"
+
+msgid "Device Access Success"
+msgstr "نجاح دخول الجهاز"
+
+msgid "Invalid Token"
+msgstr "رمز غير صالح"
+
+msgid "Inactive / Revoked"
+msgstr "غير نشط / ملغى"
+
+msgid "Expired Token"
+msgstr "رمز منتهي الصلاحية"
+
+msgid "IP Denied"
+msgstr "IP مرفوض"
+
+msgid "POS Service User Invalid"
+msgstr "مستخدم خدمة نقطة البيع غير صالح"
+
+msgid "POS Configuration Invalid"
+msgstr "إعداد نقطة البيع غير صالح"
+
+msgid "Cashier PIN Verified"
+msgstr "تم التحقق من PIN الكاشير"
+
+msgid "Backend Access Blocked"
+msgstr "تم منع الوصول إلى Backend"
+
+msgid "Other POS Access Blocked"
+msgstr "تم منع الوصول إلى نقطة بيع أخرى"
+
+msgid "Secure Link Generated"
+msgstr "تم إنشاء الرابط الآمن"
+
+msgid "Secure Link Rotated"
+msgstr "تم تدوير الرابط الآمن"
+
+msgid "Secure Link Revoked"
+msgstr "تم إلغاء الرابط الآمن"
+
+msgid "Device Access Test Passed"
+msgstr "نجح اختبار دخول الجهاز"
+
+msgid "Device Access Test Failed"
+msgstr "فشل اختبار دخول الجهاز"
+
+msgid "Actor"
+msgstr "المنفذ"
+
+msgid "Blocked / Failed"
+msgstr "ممنوع / فاشل"
+
+msgid "Device ID"
+msgstr "معرّف الجهاز"
+
+msgid "Pairing Status"
+msgstr "حالة الربط"
+
+msgid "Unpaired"
+msgstr "غير مربوط"
+
+msgid "Paired"
+msgstr "مربوط"
+
+msgid "One-Time Pairing"
+msgstr "الربط لمرة واحدة"
+
+msgid "Paired Device"
+msgstr "الجهاز المربوط"
+
+msgid "Pairing Link Validity"
+msgstr "صلاحية رابط الربط"
+
+msgid "5 Minutes"
+msgstr "5 دقائق"
+
+msgid "10 Minutes"
+msgstr "10 دقائق"
+
+msgid "30 Minutes"
+msgstr "30 دقيقة"
+
+msgid "60 Minutes"
+msgstr "60 دقيقة"
+
+msgid "Generate Pairing Link"
+msgstr "إنشاء رابط ربط"
+
+msgid "Rotate Pairing Link"
+msgstr "تدوير رابط الربط"
+
+msgid "Reset Pairing"
+msgstr "إعادة تعيين الربط"
+
+msgid "Credential Expiry Policy"
+msgstr "سياسة انتهاء اعتماد الجهاز"
+
+msgid "Credential Expires At"
+msgstr "تنتهي صلاحية اعتماد الجهاز في"
+
+msgid "One-Time Device Pairing Link"
+msgstr "رابط ربط الجهاز لمرة واحدة"
+
+msgid "One-Time Pairing URL"
+msgstr "رابط الربط لمرة واحدة"
+
+msgid "Expires At"
+msgstr "ينتهي في"
+
+msgid "Device Pairing Success"
+msgstr "نجاح ربط الجهاز"
+
+msgid "Pairing Link Created"
+msgstr "تم إنشاء رابط الربط"
+
+msgid "Pairing Link Rotated"
+msgstr "تم تدوير رابط الربط"
+
+msgid "Pairing Link Expired"
+msgstr "انتهت صلاحية رابط الربط"
+
+msgid "Pairing Reuse Rejected"
+msgstr "تم رفض إعادة استخدام رابط الربط"
+
+msgid "Device Pairing Reset"
+msgstr "تمت إعادة تعيين ربط الجهاز"
+
+msgid "Invalid Device Credential"
+msgstr "اعتماد الجهاز غير صالح"
+
+msgid "Device Credential Expired"
+msgstr "انتهت صلاحية اعتماد الجهاز"
+
+msgid "Device Disabled"
+msgstr "الجهاز معطل"
+
+msgid "Device Revoked"
+msgstr "تم إلغاء الجهاز"
+
+msgid "Stale Device Session Blocked"
+msgstr "تم منع جلسة جهاز قديمة"
+
+msgid "Security Metadata"
+msgstr "بيانات الأمان"

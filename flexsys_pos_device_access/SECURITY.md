@@ -1,21 +1,18 @@
-# Security Notes
+# Security Model — FlexSys POS Device Access 19.0.1.1.0
 
-## Threat model
+- Pairing tokens are 256-bit URL-safe random secrets and are short-lived.
+- Pairing tokens are stored only as SHA-256 hashes.
+- Pairing is serialized with a database row lock so only one concurrent browser can win first-device binding.
+- Successful pairing creates a different 256-bit device credential.
+- Raw device credentials are stored only in a host-scoped `Secure`, `HttpOnly`, `SameSite=Lax` cookie.
+- Odoo stores only the device credential SHA-256 hash.
+- Reset/Revoke increments `credential_version`; already-authenticated POS service-user sessions carry the old version and are blocked immediately on their next guarded navigation/PIN audit.
+- Employee PINs are never received or stored by the device gateway. Native `pos_hr` verifies the employee PIN.
+- The POS service user must be internal, non-system, company-scoped and limited to POS access.
+- Device sessions are confined to the configured `pos.config`; Backend navigation and POS switching are blocked and audited.
+- Optional IP/CIDR allowlists and public-endpoint rate limiting are supported.
+- Access logs never store raw pairing tokens, raw device credentials, or employee PINs.
 
-The Secure Token is an authentication credential for a physical POS device. Anyone who obtains the raw URL can establish the configured technical user's Odoo session until the token is revoked or expires. Therefore:
+## Threat-model boundary
 
-- Always use HTTPS.
-- Use a dedicated, least-privilege internal POS user.
-- Never bind an Administrator/System user.
-- Rotate immediately if a device is lost or the URL is exposed.
-- Prefer kiosk/managed browser deployment on branch devices.
-- Consider Cloudflare/WAF rate limiting in front of Odoo.sh in addition to the module's database-backed limit.
-- Consider an IP/CIDR allowlist only after confirming the client IP seen by Odoo.sh.
-
-## Why cashier PIN is preserved
-
-The device token identifies the workstation and selects its POS configuration. It does not identify the human operator. Odoo's native employee lock/PIN screen remains the second verification layer and provides cashier accountability.
-
-## Session implementation
-
-Odoo 19's own `Session.finalize()` stores `db`, `login`, `uid`, user context and a session token derived from the session id and user security state. This module mirrors that final session structure only after the device token has been successfully validated, then redirects to the standard Point of Sale route.
+V1.1 binds a browser profile, not TPM/MDM-backed physical hardware. Copying the Pairing Link after it has been consumed will not work. Theft/export of the paired browser's cookie store requires endpoint-level controls outside this module (OS account security, kiosk mode, MDM, disk encryption, etc.).
