@@ -1,0 +1,46 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+# * flexsys_pos_device_access
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Device Access"
+msgstr "دخول الأجهزة"
+
+msgid "Devices"
+msgstr "الأجهزة"
+
+msgid "Access Logs"
+msgstr "سجل الدخول"
+
+msgid "Point of Sale"
+msgstr "نقطة البيع"
+
+msgid "Technical POS User"
+msgstr "مستخدم نقطة البيع التقني"
+
+msgid "Secure Token"
+msgstr "الرمز الآمن"
+
+msgid "Secure Device URL"
+msgstr "رابط الجهاز الآمن"
+
+msgid "Generate / Rotate Secure Link"
+msgstr "إنشاء / تدوير الرابط الآمن"
+
+msgid "Revoke Token"
+msgstr "إلغاء الرمز"
+
+msgid "Token Expires At"
+msgstr "انتهاء صلاحية الرمز"
+
+msgid "Allowed IP / CIDR"
+msgstr "IP / CIDR المسموح"
+
+msgid "Secure Device Link"
+msgstr "رابط الجهاز الآمن"

@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_flexsys_pos_device_list" model="ir.ui.view">
+        <field name="name">flexsys.pos.device.list</field>
+        <field name="model">flexsys.pos.device</field>
+        <field name="arch" type="xml">
+            <list string="POS Device Access">
+                <field name="name"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="pos_config_id"/>
+                <field name="service_user_id"/>
+                <field name="has_token"/>
+                <field name="token_hint" optional="hide"/>
+                <field name="token_expires_at" optional="hide"/>
+                <field name="last_used_at"/>
+                <field name="last_ip" optional="hide"/>
+                <field name="last_user_pin_success" optional="hide"/>
+                <field name="last_user_pin_success_at" optional="hide"/>
+                <field name="access_count" optional="hide"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_flexsys_pos_device_search" model="ir.ui.view">
+        <field name="name">flexsys.pos.device.search</field>
+        <field name="model">flexsys.pos.device</field>
+        <field name="arch" type="xml">
+            <search string="POS Device Access">
+                <field name="name"/>
+                <field name="pos_config_id"/>
+                <field name="service_user_id"/>
+                <field name="company_id"/>
+                <filter name="active" string="Active" domain="[('active', '=', True)]"/>
+                <filter name="without_token" string="Without Token" domain="[('token_hash', '=', False)]"/>
+                <group>
+                    <filter string="Point of Sale" name="group_pos" context="{'group_by': 'pos_config_id'}"/>
+                    <filter string="Company" name="group_company" context="{'group_by': 'company_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_flexsys_pos_device_form" model="ir.ui.view">
+        <field name="name">flexsys.pos.device.form</field>
+        <field name="model">flexsys.pos.device</field>
+        <field name="arch" type="xml">
+            <form string="POS Device Access">
+                <header>
+                    <button name="action_generate_token" type="object" string="Generate / Rotate Secure Link" class="btn-primary"/>
+                    <button name="action_revoke_token" type="object" string="Revoke Token" class="btn-secondary" invisible="not has_token" confirm="Revoke this device token? The current device link will stop working immediately."/>
+                    <field name="active" widget="boolean_toggle"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" placeholder="e.g. QT001 Cashier-01"/></h1>
+                    </div>
+                    <group>
+                        <group string="Device Binding">
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="pos_config_id" options="{'no_create': True}"/>
+                            <field name="service_user_id" options="{'no_create': True}"/>
+                        </group>
+                        <group string="Secure Token">
+                            <field name="has_token" readonly="1"/>
+                            <field name="token_hint" readonly="1" invisible="not has_token"/>
+                            <field name="token_created_at" readonly="1" invisible="not has_token"/>
+                            <field name="token_expires_at"/>
+                            <field name="allowed_ip" placeholder="e.g. 203.0.113.10, 10.0.0.0/24"/>
+                        </group>
+                    </group>
+                    <group string="Usage">
+                        <field name="last_used_at" readonly="1"/>
+                        <field name="last_ip" readonly="1"/>
+                        <field name="access_count" readonly="1"/>
+                        <field name="last_user_pin_success" readonly="1"/>
+                        <field name="last_user_pin_success_at" readonly="1"/>
+                    </group>
+                    <notebook>
+                        <page string="Notes">
+                            <field name="notes" placeholder="Device location, branch, owner, maintenance notes..."/>
+                        </page>
+                        <page string="Security Notes">
+                            <div class="alert alert-info" role="alert">
+                                <p><strong>Secure Token = device verification.</strong></p>
+                                <p>The cashier is still verified by Odoo's native employee PIN screen at <code>/pos/ui/&lt;config_id&gt;/login</code>.</p>
+                                <p>Use a dedicated internal Point of Sale user with the minimum permissions required. Never select an administrator account.</p>
+                            </div>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_flexsys_pos_device" model="ir.actions.act_window">
+        <field name="name">Device Access</field>
+        <field name="res_model">flexsys.pos.device</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_flexsys_pos_device_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Create a secure POS device binding</p>
+            <p>Bind one fixed device to one POS configuration. The secure token skips Odoo navigation but preserves the cashier PIN verification screen.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_flexsys_pos_device_access_root"
+              name="Device Access"
+              parent="point_of_sale.menu_point_config_product"
+              sequence="80"
+              groups="point_of_sale.group_pos_manager"/>
+    <menuitem id="menu_flexsys_pos_device"
+              name="Devices"
+              parent="menu_flexsys_pos_device_access_root"
+              action="action_flexsys_pos_device"
+              sequence="10"
+              groups="point_of_sale.group_pos_manager"/>
+</odoo>
