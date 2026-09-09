@@ -77,34 +77,37 @@ class FlexSysPosDeviceAccessController(http.Controller):
         return response
 
     def _establish_device_session(self, device):
-        """Create a normal Odoo user session without exposing/storing a password.
+        """Create the technical-user session through Odoo's native finalizer.
 
-        This is a custom authentication method: the high-entropy device token
-        has already authenticated the device. Session fields mirror Odoo 19's
-        Session.finalize() implementation so subsequent auth='user' routes,
-        including the native POS controller, receive a valid session.
+        The device token authenticates the device; it never authenticates the
+        cashier.  We intentionally reuse ``Session.finalize()`` instead of
+        manually reproducing Odoo's session internals.  This keeps the module
+        aligned with the exact Odoo 19 session implementation running on the
+        server (session token, context and rotation included).
         """
-        user = device.service_user_id
+        user = device.service_user_id.sudo()
         session = request.session
 
         # A device URL must deterministically select its dedicated technical
-        # user rather than inheriting whoever happened to be logged in before.
+        # user rather than inherit an existing browser login.
         session.logout(keep_db=True)
 
-        user_env = request.env(user=user.id, su=False)
-        user_context = dict(user_env["res.users"].context_get())
+        # Session.finalize() is Odoo's native conversion from a pre-session to
+        # an authenticated session.  The Secure Device Token is our custom
+        # authentication factor, so we populate only the two pre-session values
+        # that finalize() expects; no Odoo password is stored or exposed.
+        session["pre_login"] = user.login
+        session["pre_uid"] = user.id
+        session.finalize(request.env)
 
-        session.should_rotate = True
-        session.update({
-            "db": user_env.registry.db_name,
-            "login": user.login,
-            "uid": user.id,
-            "context": user_context,
-            "session_token": user_env.user._compute_session_token(session.sid),
-            "flexsys_pos_device_id": device.id,
-        })
+        # Keep the device binding in the authenticated session for PIN-success
+        # auditing.  Never place the raw device token in the session.
+        session["flexsys_pos_device_id"] = device.id
         session.touch()
-        request.update_env(user=user.id, context=user_context, su=False)
+
+        # The current request started as auth='public'; switch its environment
+        # to the now-authenticated technical user before redirect/post-dispatch.
+        request.update_env(user=session.uid, context=session.context, su=False)
 
     @http.route(
         "/flexsys/pos/device/<string:token>",

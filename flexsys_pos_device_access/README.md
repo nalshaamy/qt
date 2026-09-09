@@ -90,3 +90,8 @@
 ## Deployment Status
 
 هذه النسخة اجتازت فحوصات static للبنية وPython/XML، لكنها يجب أن تُثبت أولًا على **Odoo.sh Staging** وتُختبر end-to-end قبل Production، خصوصًا إنشاء الـsession، تحميل POS assets، وقراءة IP خلف Odoo.sh/Cloudflare.
+
+
+## 19.0.1.0.1
+- Hotfix: establish the technical POS user session through Odoo 19 `Session.finalize()` rather than manually copying session internals.
+- Keeps the Secure Token as device authentication and preserves the native cashier PIN screen.
