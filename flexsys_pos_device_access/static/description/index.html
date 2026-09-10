@@ -1,0 +1,120 @@
+<section class="container py-4">
+  <div class="text-center mb-4">
+    <h1 class="font-weight-bold">FlexSys POS Device Access</h1>
+    <p class="lead">Secure one-time device pairing for Odoo 19 Point of Sale</p>
+    <img class="img-fluid rounded border" src="banner.png" alt="FlexSys POS Device Access cover"/>
+  </div>
+
+  <div class="row my-5">
+    <div class="col-lg-8 mx-auto text-center">
+      <h2 class="font-weight-bold">Turn a cashier browser into a trusted POS device</h2>
+      <p class="lead">Pair the first browser with a short-lived one-time link, open only the assigned POS, and keep native employee PIN verification mandatory.</p>
+    </div>
+  </div>
+
+  <div class="row mb-5">
+    <div class="col-md-4 mb-3">
+      <div class="border rounded p-4 h-100">
+        <h4 class="font-weight-bold">One-Time Pairing</h4>
+        <p>The first browser that successfully consumes the Pairing Link becomes the paired browser. The link is consumed immediately and cannot pair another browser.</p>
+      </div>
+    </div>
+    <div class="col-md-4 mb-3">
+      <div class="border rounded p-4 h-100">
+        <h4 class="font-weight-bold">Cashier PIN Preserved</h4>
+        <p>Device trust does not replace cashier identity. Odoo POS employee PIN verification remains mandatory before entering the selling interface.</p>
+      </div>
+    </div>
+    <div class="col-md-4 mb-3">
+      <div class="border rounded p-4 h-100">
+        <h4 class="font-weight-bold">POS Session Confinement</h4>
+        <p>Device-authenticated sessions are confined to the configured POS. Backend navigation and attempts to open another POS configuration are blocked and audited.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="text-center my-5">
+    <img class="img-fluid rounded border" src="pairing_flow.png" alt="Device pairing flow"/>
+  </div>
+
+  <div class="row my-5">
+    <div class="col-md-6 mb-4">
+      <h3 class="font-weight-bold">Security by design</h3>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item">256-bit URL-safe pairing secrets</li>
+        <li class="list-group-item">SHA-256 hashes stored on persistent device records</li>
+        <li class="list-group-item">Separate Secure + HttpOnly device credential cookie</li>
+        <li class="list-group-item">Credential versioning for reset and revoke</li>
+        <li class="list-group-item">Optional IP/CIDR restriction</li>
+        <li class="list-group-item">Rate limiting for invalid pairing or credential attempts</li>
+      </ul>
+    </div>
+    <div class="col-md-6 mb-4">
+      <h3 class="font-weight-bold">Operations ready</h3>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item">Managed minimum-permission POS service user</li>
+        <li class="list-group-item">Device status: Unpaired, Paired, Disabled, Revoked, Expired</li>
+        <li class="list-group-item">Generate or rotate one-time Pairing Links</li>
+        <li class="list-group-item">Reset Pairing and revoke device access</li>
+        <li class="list-group-item">Built-in Device Access test</li>
+        <li class="list-group-item">90-day default audit-log retention</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="text-center my-5">
+    <img class="img-fluid rounded border" src="security_layers.png" alt="Security layers"/>
+  </div>
+
+  <div class="row my-5">
+    <div class="col-lg-10 mx-auto">
+      <h3 class="font-weight-bold text-center mb-4">Audit visibility</h3>
+      <p class="text-center">Track pairing, successful device access, invalid tokens, expired credentials, resets, revocations, blocked Backend navigation, blocked POS switching, and cashier PIN-success metadata. Raw employee PIN values are never recorded by this module.</p>
+    </div>
+  </div>
+
+  <div class="text-center my-5">
+    <img class="img-fluid rounded border" src="admin_overview.png" alt="Administration overview"/>
+  </div>
+
+  <div class="row my-5">
+    <div class="col-md-6 mb-4">
+      <div class="border rounded p-4 h-100">
+        <h3 class="font-weight-bold">Requirements</h3>
+        <p>Odoo 19 with Point of Sale and Employee Login. The module depends on <code>pos_hr</code> and <code>web</code>.</p>
+        <p>No external cloud service, activation server, or third-party API is required.</p>
+      </div>
+    </div>
+    <div class="col-md-6 mb-4">
+      <div class="border rounded p-4 h-100">
+        <h3 class="font-weight-bold">Data handling</h3>
+        <p>Device configuration, credential hashes, IP/User-Agent metadata, and audit events remain in the customer's Odoo database. The module does not transmit customer data to FlexSys or another external service.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="alert alert-info my-5">
+    <h4 class="font-weight-bold">Important security boundary</h4>
+    <p class="mb-0">Device Pairing binds a browser profile through a protected credential cookie. It is not TPM/MDM hardware attestation. Protect cashier workstations with normal endpoint controls such as OS account security, disk encryption, kiosk policies, and device management where required.</p>
+  </div>
+
+  <div class="row my-5">
+    <div class="col-lg-10 mx-auto">
+      <h3 class="font-weight-bold">Typical setup</h3>
+      <ol>
+        <li>Create a Device Access record and select the target POS.</li>
+        <li>Run <strong>Test Device Access</strong>.</li>
+        <li>Generate a short-lived <strong>Pairing Link</strong>.</li>
+        <li>Open the link once in the cashier terminal's normal browser profile.</li>
+        <li>The browser is paired and is redirected to the POS login screen.</li>
+        <li>The cashier enters their normal Odoo employee PIN.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="text-center border-top pt-4 mt-5">
+    <p class="font-weight-bold mb-1">Odoo 19 • Point of Sale • FlexSys</p>
+    <p class="text-muted mb-1">Secure device access without replacing Odoo cashier verification.</p>
+    <p class="mb-0"><strong>Support:</strong> info@flexsyssa.com</p>
+  </div>
+</section>

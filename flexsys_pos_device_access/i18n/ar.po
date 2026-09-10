@@ -1,0 +1,448 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+# * flexsys_pos_device_access
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Device Access"
+msgstr "دخول الأجهزة"
+
+msgid "Devices"
+msgstr "الأجهزة"
+
+msgid "Access Logs"
+msgstr "سجل الدخول"
+
+msgid "Point of Sale"
+msgstr "نقطة البيع"
+
+msgid "POS Service User"
+msgstr "مستخدم خدمة نقطة البيع"
+
+msgid "Managed by FlexSys"
+msgstr "مُدار بواسطة FlexSys"
+
+msgid "Use FlexSys Managed User"
+msgstr "استخدام مستخدم FlexSys المُدار"
+
+msgid "Secure Device URL"
+msgstr "رابط الجهاز الآمن"
+
+msgid "Generate Secure Link"
+msgstr "إنشاء رابط آمن"
+
+msgid "Rotate Secure Link"
+msgstr "تدوير الرابط الآمن"
+
+msgid "Revoke Access"
+msgstr "إلغاء الوصول"
+
+msgid "Test Device Access"
+msgstr "اختبار دخول الجهاز"
+
+msgid "Device Access Status"
+msgstr "حالة دخول الجهاز"
+
+msgid "Not Configured"
+msgstr "غير مُعد"
+
+msgid "Active"
+msgstr "نشط"
+
+msgid "Disabled"
+msgstr "معطل"
+
+msgid "Revoked"
+msgstr "ملغى"
+
+msgid "Expired"
+msgstr "منتهي"
+
+msgid "Expiry Policy"
+msgstr "سياسة انتهاء الصلاحية"
+
+msgid "No Expiry"
+msgstr "بدون انتهاء"
+
+msgid "30 Days"
+msgstr "30 يومًا"
+
+msgid "90 Days"
+msgstr "90 يومًا"
+
+msgid "Custom Date"
+msgstr "تاريخ مخصص"
+
+msgid "Access Expires At"
+msgstr "تنتهي صلاحية الوصول في"
+
+msgid "Allowed IP / CIDR"
+msgstr "IP / CIDR المسموح"
+
+msgid "Secure Device Link"
+msgstr "رابط الجهاز الآمن"
+
+msgid "Device Binding"
+msgstr "ربط الجهاز"
+
+msgid "Secure Access"
+msgstr "الوصول الآمن"
+
+msgid "Usage & Verification"
+msgstr "الاستخدام والتحقق"
+
+msgid "Advanced Security"
+msgstr "الأمان المتقدم"
+
+msgid "Token Metadata"
+msgstr "بيانات الرمز"
+
+msgid "Has Secure Link"
+msgstr "لديه رابط آمن"
+
+msgid "Without Secure Link"
+msgstr "بدون رابط آمن"
+
+msgid "Device Access Success"
+msgstr "نجاح دخول الجهاز"
+
+msgid "Invalid Token"
+msgstr "رمز غير صالح"
+
+msgid "Inactive / Revoked"
+msgstr "غير نشط / ملغى"
+
+msgid "Expired Token"
+msgstr "رمز منتهي الصلاحية"
+
+msgid "IP Denied"
+msgstr "IP مرفوض"
+
+msgid "POS Service User Invalid"
+msgstr "مستخدم خدمة نقطة البيع غير صالح"
+
+msgid "POS Configuration Invalid"
+msgstr "إعداد نقطة البيع غير صالح"
+
+msgid "Cashier PIN Verified"
+msgstr "تم التحقق من PIN الكاشير"
+
+msgid "Backend Access Blocked"
+msgstr "تم منع الوصول إلى Backend"
+
+msgid "Other POS Access Blocked"
+msgstr "تم منع الوصول إلى نقطة بيع أخرى"
+
+msgid "Secure Link Generated"
+msgstr "تم إنشاء الرابط الآمن"
+
+msgid "Secure Link Rotated"
+msgstr "تم تدوير الرابط الآمن"
+
+msgid "Secure Link Revoked"
+msgstr "تم إلغاء الرابط الآمن"
+
+msgid "Device Access Test Passed"
+msgstr "نجح اختبار دخول الجهاز"
+
+msgid "Device Access Test Failed"
+msgstr "فشل اختبار دخول الجهاز"
+
+msgid "Actor"
+msgstr "المنفذ"
+
+msgid "Blocked / Failed"
+msgstr "ممنوع / فاشل"
+
+msgid "Device ID"
+msgstr "معرّف الجهاز"
+
+msgid "Pairing Status"
+msgstr "حالة الربط"
+
+msgid "Unpaired"
+msgstr "غير مربوط"
+
+msgid "Paired"
+msgstr "مربوط"
+
+msgid "One-Time Pairing"
+msgstr "الربط لمرة واحدة"
+
+msgid "Paired Device"
+msgstr "الجهاز المربوط"
+
+msgid "Pairing Link Validity"
+msgstr "صلاحية رابط الربط"
+
+msgid "5 Minutes"
+msgstr "5 دقائق"
+
+msgid "10 Minutes"
+msgstr "10 دقائق"
+
+msgid "30 Minutes"
+msgstr "30 دقيقة"
+
+msgid "60 Minutes"
+msgstr "60 دقيقة"
+
+msgid "Generate Pairing Link"
+msgstr "إنشاء رابط ربط"
+
+msgid "Rotate Pairing Link"
+msgstr "تدوير رابط الربط"
+
+msgid "Reset Pairing"
+msgstr "إعادة تعيين الربط"
+
+msgid "Credential Expiry Policy"
+msgstr "سياسة انتهاء اعتماد الجهاز"
+
+msgid "Credential Expires At"
+msgstr "تنتهي صلاحية اعتماد الجهاز في"
+
+msgid "One-Time Device Pairing Link"
+msgstr "رابط ربط الجهاز لمرة واحدة"
+
+msgid "One-Time Pairing URL"
+msgstr "رابط الربط لمرة واحدة"
+
+msgid "Expires At"
+msgstr "ينتهي في"
+
+msgid "Device Pairing Success"
+msgstr "نجاح ربط الجهاز"
+
+msgid "Pairing Link Created"
+msgstr "تم إنشاء رابط الربط"
+
+msgid "Pairing Link Rotated"
+msgstr "تم تدوير رابط الربط"
+
+msgid "Pairing Link Expired"
+msgstr "انتهت صلاحية رابط الربط"
+
+msgid "Pairing Reuse Rejected"
+msgstr "تم رفض إعادة استخدام رابط الربط"
+
+msgid "Device Pairing Reset"
+msgstr "تمت إعادة تعيين ربط الجهاز"
+
+msgid "Invalid Device Credential"
+msgstr "اعتماد الجهاز غير صالح"
+
+msgid "Device Credential Expired"
+msgstr "انتهت صلاحية اعتماد الجهاز"
+
+msgid "Device Disabled"
+msgstr "الجهاز معطل"
+
+msgid "Device Revoked"
+msgstr "تم إلغاء الجهاز"
+
+msgid "Stale Device Session Blocked"
+msgstr "تم منع جلسة جهاز قديمة"
+
+msgid "Security Metadata"
+msgstr "بيانات الأمان"
+
+#. module: flexsys_pos_device_access
+#. odoo-javascript
+#: code:addons/flexsys_pos_device_access/static/src/app/login_screen_pin_audit.js:0
+msgid "Backend access is disabled"
+msgstr "الوصول إلى الواجهة الخلفية غير متاح"
+
+msgid "A POS Service User is required."
+msgstr "مستخدم خدمة نقطة البيع مطلوب."
+
+msgid "A system administrator cannot be used as the POS Service User."
+msgstr "لا يمكن استخدام مسؤول النظام كمستخدم خدمة نقطة البيع."
+
+msgid "A valid company is required to create the POS Service User."
+msgstr "يجب تحديد شركة صالحة لإنشاء مستخدم خدمة نقطة البيع."
+
+msgid "Close"
+msgstr "إغلاق"
+
+msgid "Company"
+msgstr "الشركة"
+
+msgid "Configuration is ready."
+msgstr "الإعدادات جاهزة."
+
+msgid "Device"
+msgstr "الجهاز"
+
+msgid "Device Access Logs"
+msgstr "سجلات دخول الأجهزة"
+
+msgid "Device Access Ready"
+msgstr "دخول الجهاز جاهز"
+
+msgid "Device Access test failed:"
+msgstr "فشل اختبار دخول الجهاز:"
+
+msgid "Device access is revoked."
+msgstr "تم إلغاء وصول الجهاز."
+
+msgid "Device is disabled."
+msgstr "الجهاز معطل."
+
+msgid "Device is not paired yet; a one-time Pairing Link is ready."
+msgstr "الجهاز غير مربوط بعد؛ رابط الربط لمرة واحدة جاهز."
+
+msgid "Device is not paired. Generate a one-time Pairing Link."
+msgstr "الجهاز غير مربوط. أنشئ رابط ربط لمرة واحدة."
+
+msgid "Device location, branch, owner, maintenance notes..."
+msgstr "موقع الجهاز، الفرع، المسؤول، ملاحظات الصيانة..."
+
+msgid "Employee"
+msgstr "الموظف"
+
+msgid "Employee Login is not enabled on the Point of Sale."
+msgstr "تسجيل دخول الموظفين غير مفعّل في نقطة البيع."
+
+msgid "Employee Login must be enabled on the Point of Sale so cashier PIN verification remains mandatory."
+msgstr "يجب تفعيل تسجيل دخول الموظفين في نقطة البيع حتى يبقى التحقق برمز PIN للكاشير إلزاميًا."
+
+msgid "Enable the device before generating a Pairing Link."
+msgstr "فعّل الجهاز قبل إنشاء رابط الربط."
+
+msgid "Event"
+msgstr "الحدث"
+
+msgid "FlexSys POS Service — %s"
+msgstr "خدمة FlexSys لنقطة البيع — %s"
+
+msgid "FlexSys managed POS Service User is assigned and ready."
+msgstr "تم تعيين مستخدم خدمة نقطة البيع المُدار بواسطة FlexSys وهو جاهز."
+
+msgid "IP"
+msgstr "عنوان IP"
+
+msgid "Invalid Allowed IP / CIDR entry: %s"
+msgstr "قيمة IP / CIDR المسموح غير صالحة: %s"
+
+msgid "New"
+msgstr "جديد"
+
+msgid "Notes"
+msgstr "ملاحظات"
+
+msgid "Optional: 203.0.113.10, 10.0.0.0/24"
+msgstr "اختياري: 203.0.113.10, 10.0.0.0/24"
+
+msgid "POS Device Access"
+msgstr "دخول أجهزة نقطة البيع"
+
+msgid "POS Service User is missing, invalid, or has insufficient POS access."
+msgstr "مستخدم خدمة نقطة البيع مفقود أو غير صالح أو لا يملك صلاحية كافية لنقطة البيع."
+
+msgid "Point of Sale belongs to a different company."
+msgstr "نقطة البيع تتبع شركة مختلفة."
+
+msgid "Point of Sale is missing or inactive."
+msgstr "نقطة البيع مفقودة أو غير نشطة."
+
+msgid "Reset this device pairing? The current browser credential and any open device session will become invalid immediately."
+msgstr "إعادة تعيين ربط هذا الجهاز؟ سيصبح اعتماد المتصفح الحالي وأي جلسة جهاز مفتوحة غير صالحين فورًا."
+
+msgid "Revoke this device? The paired browser and any open device session will be blocked immediately."
+msgstr "إلغاء هذا الجهاز؟ سيتم منع المتصفح المربوط وأي جلسة جهاز مفتوحة فورًا."
+
+msgid "Rotate this one-time Pairing Link? The previous unused pairing link will stop working immediately."
+msgstr "تدوير رابط الربط لمرة واحدة؟ سيتوقف رابط الربط السابق غير المستخدم عن العمل فورًا."
+
+msgid "Set a custom Credential Expires At date before generating the Pairing Link."
+msgstr "حدد تاريخ انتهاء مخصص لاعتماد الجهاز قبل إنشاء رابط الربط."
+
+msgid "Success"
+msgstr "نجاح"
+
+msgid "The POS Service User is not valid. Run Test Device Access or assign the managed service user."
+msgstr "مستخدم خدمة نقطة البيع غير صالح. شغّل اختبار دخول الجهاز أو عيّن المستخدم المُدار."
+
+msgid "The POS Service User must have Point of Sale access (User or Administrator)."
+msgstr "يجب أن يملك مستخدم خدمة نقطة البيع صلاحية نقطة البيع (مستخدم أو مسؤول)."
+
+msgid "The POS Service User must have access to the device company."
+msgstr "يجب أن يملك مستخدم خدمة نقطة البيع صلاحية الوصول إلى شركة الجهاز."
+
+msgid "The Point of Sale must be active with Employee Login enabled."
+msgstr "يجب أن تكون نقطة البيع نشطة مع تفعيل تسجيل دخول الموظفين."
+
+msgid "The Point of Sale must belong to the device company."
+msgstr "يجب أن تتبع نقطة البيع شركة الجهاز."
+
+msgid "The custom Credential Expires At date must be in the future."
+msgstr "يجب أن يكون تاريخ انتهاء اعتماد الجهاز المخصص في المستقبل."
+
+msgid "The managed FlexSys POS Service User unexpectedly has system administration rights."
+msgstr "مستخدم خدمة نقطة البيع المُدار بواسطة FlexSys لديه صلاحيات إدارة النظام بشكل غير متوقع."
+
+msgid "The paired device credential is expired."
+msgstr "انتهت صلاحية اعتماد الجهاز المربوط."
+
+msgid "This device is already paired. Reset Pairing before binding another browser/device."
+msgstr "هذا الجهاز مربوط بالفعل. أعد تعيين الربط قبل ربط متصفح أو جهاز آخر."
+
+msgid "This device is revoked. Reset Pairing before generating a new link."
+msgstr "تم إلغاء هذا الجهاز. أعد تعيين الربط قبل إنشاء رابط جديد."
+
+msgid "e.g. QT001 Cashier-01"
+msgstr "مثال: QT001 Cashier-01"
+
+msgid "Pairing Token"
+msgstr "رمز الربط"
+
+msgid "Pairing Token Hash"
+msgstr "بصمة رمز الربط"
+
+msgid "Pairing Token Hint"
+msgstr "تلميح رمز الربط"
+
+msgid "Pairing Token Created At"
+msgstr "تم إنشاء رمز الربط في"
+
+msgid "Pairing Token Expires At"
+msgstr "تنتهي صلاحية رمز الربط في"
+
+msgid "Pairing Token Used At"
+msgstr "تم استخدام رمز الربط في"
+
+msgid "Credential Hint"
+msgstr "تلميح اعتماد الجهاز"
+
+msgid "Credential Created At"
+msgstr "تم إنشاء اعتماد الجهاز في"
+
+msgid "Paired At"
+msgstr "تم الربط في"
+
+msgid "Paired IP"
+msgstr "عنوان IP عند الربط"
+
+msgid "Paired User Agent"
+msgstr "بيانات المتصفح عند الربط"
+
+msgid "Last Used At"
+msgstr "آخر استخدام في"
+
+msgid "Last IP"
+msgstr "آخر عنوان IP"
+
+msgid "Access Count"
+msgstr "عدد مرات الدخول"
+
+msgid "Last User Pin Success"
+msgstr "آخر موظف تحقق PIN بنجاح"
+
+msgid "Last User Pin Success At"
+msgstr "وقت آخر تحقق PIN ناجح"

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_flexsys_pos_device_access_log_list" model="ir.ui.view">
+        <field name="name">flexsys.pos.device.access.log.list</field>
+        <field name="model">flexsys.pos.device.access.log</field>
+        <field name="arch" type="xml">
+            <list string="Device Access Logs" create="0" edit="0" delete="0" decoration-success="success" decoration-danger="not success">
+                <field name="create_date"/>
+                <field name="success"/>
+                <field name="event"/>
+                <field name="device_id"/>
+                <field name="pos_config_id"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="employee_id" optional="show"/>
+                <field name="actor_user_id" optional="hide"/>
+                <field name="service_user_id" optional="hide"/>
+                <field name="ip_address"/>
+                <field name="details" optional="hide"/>
+                <field name="token_fingerprint" optional="hide"/>
+                <field name="user_agent" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_flexsys_pos_device_access_log_search" model="ir.ui.view">
+        <field name="name">flexsys.pos.device.access.log.search</field>
+        <field name="model">flexsys.pos.device.access.log</field>
+        <field name="arch" type="xml">
+            <search string="Device Access Logs">
+                <field name="device_id"/>
+                <field name="pos_config_id"/>
+                <field name="employee_id"/>
+                <field name="actor_user_id"/>
+                <field name="ip_address"/>
+                <field name="token_fingerprint"/>
+                <filter name="success" string="Success" domain="[('success', '=', True)]"/>
+                <filter name="failed" string="Blocked / Failed" domain="[('success', '=', False)]"/>
+                <group>
+                    <filter string="Device" name="group_device" context="{'group_by': 'device_id'}"/>
+                    <filter string="Event" name="group_event" context="{'group_by': 'event'}"/>
+                    <filter string="Employee" name="group_employee" context="{'group_by': 'employee_id'}"/>
+                    <filter string="IP" name="group_ip" context="{'group_by': 'ip_address'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_flexsys_pos_device_access_log" model="ir.actions.act_window">
+        <field name="name">Access Logs</field>
+        <field name="res_model">flexsys.pos.device.access.log</field>
+        <field name="view_mode">list</field>
+        <field name="search_view_id" ref="view_flexsys_pos_device_access_log_search"/>
+    </record>
+
+    <menuitem id="menu_flexsys_pos_device_access_log"
+              name="Access Logs"
+              parent="flexsys_pos_device_access.menu_flexsys_pos_device_access_root"
+              action="action_flexsys_pos_device_access_log"
+              sequence="20"
+              groups="point_of_sale.group_pos_manager"/>
+</odoo>

@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_flexsys_pos_device_list" model="ir.ui.view">
+        <field name="name">flexsys.pos.device.list</field>
+        <field name="model">flexsys.pos.device</field>
+        <field name="arch" type="xml">
+            <list string="POS Device Access"
+                  decoration-success="pairing_state == 'paired'"
+                  decoration-warning="pairing_state in ('unpaired', 'expired')"
+                  decoration-muted="pairing_state == 'disabled'"
+                  decoration-danger="pairing_state == 'revoked'">
+                <field name="name"/>
+                <field name="device_uid" optional="show"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="pos_config_id"/>
+                <field name="pairing_state" widget="badge"/>
+                <field name="paired_at" optional="show"/>
+                <field name="last_used_at"/>
+                <field name="last_ip" optional="hide"/>
+                <field name="last_user_pin_success" optional="hide"/>
+                <field name="last_user_pin_success_at" optional="hide"/>
+                <field name="access_count" optional="hide"/>
+                <field name="service_user_id" optional="hide"/>
+                <field name="active" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_flexsys_pos_device_search" model="ir.ui.view">
+        <field name="name">flexsys.pos.device.search</field>
+        <field name="model">flexsys.pos.device</field>
+        <field name="arch" type="xml">
+            <search string="POS Device Access">
+                <field name="name"/>
+                <field name="device_uid"/>
+                <field name="pos_config_id"/>
+                <field name="service_user_id"/>
+                <field name="company_id"/>
+                <filter name="paired" string="Paired" domain="[('credential_hash', '!=', False), ('revoked_at', '=', False), ('active', '=', True)]"/>
+                <filter name="unpaired" string="Unpaired" domain="[('credential_hash', '=', False), ('revoked_at', '=', False), ('active', '=', True)]"/>
+                <filter name="disabled" string="Disabled" domain="[('active', '=', False)]"/>
+                <filter name="revoked" string="Revoked" domain="[('revoked_at', '!=', False)]"/>
+                <group>
+                    <filter string="Point of Sale" name="group_pos" context="{'group_by': 'pos_config_id'}"/>
+                    <filter string="Company" name="group_company" context="{'group_by': 'company_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_flexsys_pos_device_form" model="ir.ui.view">
+        <field name="name">flexsys.pos.device.form</field>
+        <field name="model">flexsys.pos.device</field>
+        <field name="arch" type="xml">
+            <form string="POS Device Access">
+                <header>
+                    <button name="action_generate_pairing_link" type="object" string="Generate Pairing Link" class="btn-primary"
+                            invisible="not active or pairing_state != 'unpaired' or has_pairing_link"/>
+                    <button name="action_generate_pairing_link" type="object" string="Rotate Pairing Link" class="btn-primary"
+                            invisible="not active or pairing_state != 'unpaired' or not has_pairing_link"
+                            confirm="Rotate this one-time Pairing Link? The previous unused pairing link will stop working immediately."/>
+                    <button name="action_test_device_access" type="object" string="Test Device Access" class="btn-secondary"/>
+                    <button name="action_reset_pairing" type="object" string="Reset Pairing" class="btn-secondary"
+                            invisible="pairing_state == 'unpaired' and not revoked_at"
+                            confirm="Reset this device pairing? The current browser credential and any open device session will become invalid immediately."/>
+                    <button name="action_revoke_access" type="object" string="Revoke Access" class="btn-secondary"
+                            invisible="pairing_state == 'revoked'"
+                            confirm="Revoke this device? The paired browser and any open device session will be blocked immediately."/>
+                    <field name="active" widget="boolean_toggle"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button class="oe_stat_button" type="object" name="action_open_access_logs" icon="fa-shield">
+                            <field name="access_log_count" widget="statinfo" string="Access Logs"/>
+                        </button>
+                    </div>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" placeholder="e.g. QT001 Cashier-01"/></h1>
+                    </div>
+
+                    <group>
+                        <group string="Device Binding">
+                            <field name="device_uid" readonly="1"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="pos_config_id" options="{'no_create': True}"/>
+                            <field name="pairing_state" widget="badge" readonly="1"/>
+                        </group>
+                        <group string="One-Time Pairing">
+                            <field name="has_pairing_link" invisible="1"/>
+                            <field name="pairing_link_validity" invisible="pairing_state != 'unpaired'"/>
+                            <field name="pairing_token_hint" readonly="1" invisible="not pairing_token_hash"/>
+                            <field name="pairing_token_created_at" readonly="1" invisible="not pairing_token_hash"/>
+                            <field name="pairing_token_expires_at" readonly="1" invisible="not pairing_token_hash"/>
+                            <field name="pairing_token_used_at" readonly="1" invisible="not pairing_token_used_at"/>
+                        </group>
+                    </group>
+
+                    <group string="Paired Device">
+                        <group>
+                            <field name="paired_at" readonly="1"/>
+                            <field name="paired_ip" readonly="1"/>
+                            <field name="credential_hint" readonly="1" invisible="not credential_hash"/>
+                            <field name="credential_expiry_policy"/>
+                            <field name="credential_expires_at" readonly="credential_expiry_policy != 'custom'" invisible="credential_expiry_policy == 'never' and not credential_hash"/>
+                        </group>
+                        <group>
+                            <field name="last_used_at" readonly="1"/>
+                            <field name="last_ip" readonly="1"/>
+                            <field name="access_count" readonly="1"/>
+                            <field name="last_user_pin_success" readonly="1"/>
+                            <field name="last_user_pin_success_at" readonly="1"/>
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <page string="Notes">
+                            <field name="notes" placeholder="Device location, branch, owner, maintenance notes..."/>
+                        </page>
+                        <page string="Advanced Security">
+                            <group>
+                                <group string="POS Service User">
+                                    <field name="service_user_id" options="{'no_create': True}"/>
+                                    <field name="service_user_is_managed" readonly="1"/>
+                                    <button name="action_use_managed_service_user" type="object" string="Use FlexSys Managed User" class="btn-secondary"/>
+                                </group>
+                                <group string="Security Metadata">
+                                    <field name="allowed_ip" placeholder="Optional: 203.0.113.10, 10.0.0.0/24"/>
+                                    <field name="credential_version" readonly="1"/>
+                                    <field name="revoked_at" readonly="1"/>
+                                    <field name="revoked_by" readonly="1"/>
+                                    <field name="paired_user_agent" readonly="1" invisible="not paired_user_agent"/>
+                                </group>
+                            </group>
+                            <div class="alert alert-info" role="alert">
+                                <p><strong>Pairing Link binds the first browser. Device Credential identifies that browser. Employee PIN identifies the cashier.</strong></p>
+                                <p>The Pairing Link is one-time and short-lived. The raw device credential is stored only in a Secure HttpOnly cookie; Odoo stores its SHA-256 hash only.</p>
+                                <p>Reset Pairing invalidates the paired browser and any already-open device session. Revoke Access blocks the device until an administrator resets pairing.</p>
+                            </div>
+                        </page>
+                    </notebook>
+
+                    <!-- Legacy V1.0 fields retained invisibly for safe upgrade compatibility. -->
+                    <field name="token_hash" invisible="1"/>
+                    <field name="token_hint" invisible="1"/>
+                    <field name="token_created_at" invisible="1"/>
+                    <field name="token_revoked_at" invisible="1"/>
+                    <field name="token_expiry_policy" invisible="1"/>
+                    <field name="token_expires_at" invisible="1"/>
+                    <field name="credential_hash" invisible="1"/>
+                    <field name="pairing_token_hash" invisible="1"/>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_flexsys_pos_device" model="ir.actions.act_window">
+        <field name="name">Device Access</field>
+        <field name="res_model">flexsys.pos.device</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_flexsys_pos_device_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Create a secure POS device binding</p>
+            <p>Issue a one-time Pairing Link. The first browser that consumes it becomes the only paired browser for that device, while cashier PIN verification remains mandatory.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_flexsys_pos_device_access_root"
+              name="Device Access"
+              parent="point_of_sale.menu_point_config_product"
+              sequence="80"
+              groups="point_of_sale.group_pos_manager"/>
+    <menuitem id="menu_flexsys_pos_device"
+              name="Devices"
+              parent="menu_flexsys_pos_device_access_root"
+              action="action_flexsys_pos_device"
+              sequence="10"
+              groups="point_of_sale.group_pos_manager"/>
+</odoo>

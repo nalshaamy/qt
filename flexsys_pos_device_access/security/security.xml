@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="rule_flexsys_pos_device_company" model="ir.rule">
+        <field name="name">FlexSys POS Device: multi-company</field>
+        <field name="model_id" ref="model_flexsys_pos_device"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('point_of_sale.group_pos_manager'))]"/>
+    </record>
+
+    <record id="rule_flexsys_pos_device_log_company" model="ir.rule">
+        <field name="name">FlexSys POS Device Access Log: multi-company</field>
+        <field name="model_id" ref="model_flexsys_pos_device_access_log"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('point_of_sale.group_pos_manager'))]"/>
+    </record>
+</odoo>
