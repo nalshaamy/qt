@@ -1,0 +1,594 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+#	* flexsys_pos_device_access
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#. module: flexsys_pos_device_access
+msgid "Device Access"
+msgstr "دخول الأجهزة"
+
+#. module: flexsys_pos_device_access
+msgid "Devices"
+msgstr "الأجهزة"
+
+#. module: flexsys_pos_device_access
+msgid "Access Logs"
+msgstr "سجل الدخول"
+
+#. module: flexsys_pos_device_access
+msgid "Point of Sale"
+msgstr "نقطة البيع"
+
+#. module: flexsys_pos_device_access
+msgid "Linked POS User"
+msgstr "مستخدم نقطة البيع المرتبط"
+
+
+
+#. module: flexsys_pos_device_access
+msgid "Secure Device URL"
+msgstr "رابط الجهاز الآمن"
+
+#. module: flexsys_pos_device_access
+msgid "Generate Secure Link"
+msgstr "إنشاء رابط آمن"
+
+#. module: flexsys_pos_device_access
+msgid "Rotate Secure Link"
+msgstr "تدوير الرابط الآمن"
+
+#. module: flexsys_pos_device_access
+msgid "Revoke Access"
+msgstr "إلغاء الوصول"
+
+#. module: flexsys_pos_device_access
+msgid "Test Device Access"
+msgstr "اختبار دخول الجهاز"
+
+#. module: flexsys_pos_device_access
+msgid "Device Access Status"
+msgstr "حالة دخول الجهاز"
+
+#. module: flexsys_pos_device_access
+msgid "Not Configured"
+msgstr "غير مُعد"
+
+#. module: flexsys_pos_device_access
+msgid "Active"
+msgstr "نشط"
+
+#. module: flexsys_pos_device_access
+msgid "Disabled"
+msgstr "معطل"
+
+#. module: flexsys_pos_device_access
+msgid "Revoked"
+msgstr "ملغى"
+
+#. module: flexsys_pos_device_access
+msgid "Expired"
+msgstr "منتهي"
+
+#. module: flexsys_pos_device_access
+msgid "Expiry Policy"
+msgstr "سياسة انتهاء الصلاحية"
+
+#. module: flexsys_pos_device_access
+msgid "No Expiry"
+msgstr "بدون انتهاء"
+
+#. module: flexsys_pos_device_access
+msgid "30 Days"
+msgstr "30 يومًا"
+
+#. module: flexsys_pos_device_access
+msgid "90 Days"
+msgstr "90 يومًا"
+
+#. module: flexsys_pos_device_access
+msgid "Custom Date"
+msgstr "تاريخ مخصص"
+
+#. module: flexsys_pos_device_access
+msgid "Access Expires At"
+msgstr "تنتهي صلاحية الوصول في"
+
+#. module: flexsys_pos_device_access
+msgid "Allowed IP / CIDR"
+msgstr "IP / CIDR المسموح"
+
+#. module: flexsys_pos_device_access
+msgid "Secure Device Link"
+msgstr "رابط الجهاز الآمن"
+
+#. module: flexsys_pos_device_access
+msgid "Device Binding"
+msgstr "ربط الجهاز"
+
+#. module: flexsys_pos_device_access
+msgid "Secure Access"
+msgstr "الوصول الآمن"
+
+#. module: flexsys_pos_device_access
+msgid "Usage & Verification"
+msgstr "الاستخدام والتحقق"
+
+#. module: flexsys_pos_device_access
+msgid "Advanced Security"
+msgstr "الأمان المتقدم"
+
+#. module: flexsys_pos_device_access
+msgid "Token Metadata"
+msgstr "بيانات الرمز"
+
+#. module: flexsys_pos_device_access
+msgid "Has Secure Link"
+msgstr "لديه رابط آمن"
+
+#. module: flexsys_pos_device_access
+msgid "Without Secure Link"
+msgstr "بدون رابط آمن"
+
+#. module: flexsys_pos_device_access
+msgid "Device Access Success"
+msgstr "نجاح دخول الجهاز"
+
+#. module: flexsys_pos_device_access
+msgid "Invalid Token"
+msgstr "رمز غير صالح"
+
+#. module: flexsys_pos_device_access
+msgid "Inactive / Revoked"
+msgstr "غير نشط / ملغى"
+
+#. module: flexsys_pos_device_access
+msgid "Expired Token"
+msgstr "رمز منتهي الصلاحية"
+
+#. module: flexsys_pos_device_access
+msgid "IP Denied"
+msgstr "IP مرفوض"
+
+#. module: flexsys_pos_device_access
+msgid "POS Service User Invalid"
+msgstr "مستخدم خدمة نقطة البيع غير صالح"
+
+#. module: flexsys_pos_device_access
+msgid "POS Configuration Invalid"
+msgstr "إعداد نقطة البيع غير صالح"
+
+#. module: flexsys_pos_device_access
+msgid "Legacy Cashier PIN Event"
+msgstr "حدث PIN قديم للكاشير"
+
+#. module: flexsys_pos_device_access
+msgid "Backend Access Blocked"
+msgstr "تم منع الوصول إلى Backend"
+
+#. module: flexsys_pos_device_access
+msgid "Other POS Access Blocked"
+msgstr "تم منع الوصول إلى نقطة بيع أخرى"
+
+#. module: flexsys_pos_device_access
+msgid "Secure Link Generated"
+msgstr "تم إنشاء الرابط الآمن"
+
+#. module: flexsys_pos_device_access
+msgid "Secure Link Rotated"
+msgstr "تم تدوير الرابط الآمن"
+
+#. module: flexsys_pos_device_access
+msgid "Secure Link Revoked"
+msgstr "تم إلغاء الرابط الآمن"
+
+#. module: flexsys_pos_device_access
+msgid "Device Access Test Passed"
+msgstr "نجح اختبار دخول الجهاز"
+
+#. module: flexsys_pos_device_access
+msgid "Device Access Test Failed"
+msgstr "فشل اختبار دخول الجهاز"
+
+#. module: flexsys_pos_device_access
+msgid "Actor"
+msgstr "المنفذ"
+
+#. module: flexsys_pos_device_access
+msgid "Blocked / Failed"
+msgstr "ممنوع / فاشل"
+
+#. module: flexsys_pos_device_access
+msgid "Device ID"
+msgstr "معرّف الجهاز"
+
+#. module: flexsys_pos_device_access
+msgid "Pairing Status"
+msgstr "حالة الربط"
+
+#. module: flexsys_pos_device_access
+msgid "Unpaired"
+msgstr "غير مربوط"
+
+#. module: flexsys_pos_device_access
+msgid "Paired"
+msgstr "مربوط"
+
+#. module: flexsys_pos_device_access
+msgid "One-Time Pairing"
+msgstr "الربط لمرة واحدة"
+
+#. module: flexsys_pos_device_access
+msgid "Paired Device"
+msgstr "الجهاز المربوط"
+
+#. module: flexsys_pos_device_access
+msgid "Pairing Link Validity"
+msgstr "صلاحية رابط الربط"
+
+#. module: flexsys_pos_device_access
+msgid "5 Minutes"
+msgstr "5 دقائق"
+
+#. module: flexsys_pos_device_access
+msgid "10 Minutes"
+msgstr "10 دقائق"
+
+#. module: flexsys_pos_device_access
+msgid "30 Minutes"
+msgstr "30 دقيقة"
+
+#. module: flexsys_pos_device_access
+msgid "60 Minutes"
+msgstr "60 دقيقة"
+
+#. module: flexsys_pos_device_access
+msgid "Generate Pairing Link"
+msgstr "إنشاء رابط ربط"
+
+#. module: flexsys_pos_device_access
+msgid "Rotate Pairing Link"
+msgstr "تدوير رابط الربط"
+
+#. module: flexsys_pos_device_access
+msgid "Reset Pairing"
+msgstr "إعادة تعيين الربط"
+
+#. module: flexsys_pos_device_access
+msgid "Credential Expiry Policy"
+msgstr "سياسة انتهاء اعتماد الجهاز"
+
+#. module: flexsys_pos_device_access
+msgid "Credential Expires At"
+msgstr "تنتهي صلاحية اعتماد الجهاز في"
+
+#. module: flexsys_pos_device_access
+msgid "One-Time Device Pairing Link"
+msgstr "رابط ربط الجهاز لمرة واحدة"
+
+#. module: flexsys_pos_device_access
+msgid "One-Time Pairing URL"
+msgstr "رابط الربط لمرة واحدة"
+
+#. module: flexsys_pos_device_access
+msgid "Expires At"
+msgstr "ينتهي في"
+
+#. module: flexsys_pos_device_access
+msgid "Device Pairing Success"
+msgstr "نجاح ربط الجهاز"
+
+#. module: flexsys_pos_device_access
+msgid "Pairing Link Created"
+msgstr "تم إنشاء رابط الربط"
+
+#. module: flexsys_pos_device_access
+msgid "Pairing Link Rotated"
+msgstr "تم تدوير رابط الربط"
+
+#. module: flexsys_pos_device_access
+msgid "Pairing Link Expired"
+msgstr "انتهت صلاحية رابط الربط"
+
+#. module: flexsys_pos_device_access
+msgid "Pairing Reuse Rejected"
+msgstr "تم رفض إعادة استخدام رابط الربط"
+
+#. module: flexsys_pos_device_access
+msgid "Device Pairing Reset"
+msgstr "تمت إعادة تعيين ربط الجهاز"
+
+#. module: flexsys_pos_device_access
+msgid "Invalid Device Credential"
+msgstr "اعتماد الجهاز غير صالح"
+
+#. module: flexsys_pos_device_access
+msgid "Device Credential Expired"
+msgstr "انتهت صلاحية اعتماد الجهاز"
+
+#. module: flexsys_pos_device_access
+msgid "Device Disabled"
+msgstr "الجهاز معطل"
+
+#. module: flexsys_pos_device_access
+msgid "Device Revoked"
+msgstr "تم إلغاء الجهاز"
+
+#. module: flexsys_pos_device_access
+msgid "Stale Device Session Blocked"
+msgstr "تم منع جلسة جهاز قديمة"
+
+#. module: flexsys_pos_device_access
+msgid "Security Metadata"
+msgstr "بيانات الأمان"
+
+#. module: flexsys_pos_device_access
+#. odoo-javascript
+#: code:addons/flexsys_pos_device_access/static/src/app/login_screen_pin_audit.js:0
+msgid "Backend access is disabled"
+msgstr "الوصول إلى الواجهة الخلفية غير متاح"
+
+#. module: flexsys_pos_device_access
+msgid "Select an existing Linked POS User."
+msgstr "اختر مستخدم نقطة بيع مرتبطًا موجودًا مسبقًا."
+
+#. module: flexsys_pos_device_access
+msgid "A system administrator cannot be used as the Linked POS User."
+msgstr "لا يمكن استخدام مسؤول النظام كمستخدم نقطة البيع المرتبط."
+
+
+#. module: flexsys_pos_device_access
+msgid "Close"
+msgstr "إغلاق"
+
+#. module: flexsys_pos_device_access
+msgid "Company"
+msgstr "الشركة"
+
+#. module: flexsys_pos_device_access
+msgid "Configuration is ready."
+msgstr "الإعدادات جاهزة."
+
+#. module: flexsys_pos_device_access
+msgid "Device"
+msgstr "الجهاز"
+
+#. module: flexsys_pos_device_access
+msgid "Device Access Logs"
+msgstr "سجلات دخول الأجهزة"
+
+#. module: flexsys_pos_device_access
+msgid "Device Access Ready"
+msgstr "دخول الجهاز جاهز"
+
+#. module: flexsys_pos_device_access
+msgid "Device Access test failed:"
+msgstr "فشل اختبار دخول الجهاز:"
+
+#. module: flexsys_pos_device_access
+msgid "Device access is revoked."
+msgstr "تم إلغاء وصول الجهاز."
+
+#. module: flexsys_pos_device_access
+msgid "Device is disabled."
+msgstr "الجهاز معطل."
+
+#. module: flexsys_pos_device_access
+msgid "Device is not paired yet; a one-time Pairing Link is ready."
+msgstr "الجهاز غير مربوط بعد؛ رابط الربط لمرة واحدة جاهز."
+
+#. module: flexsys_pos_device_access
+msgid "Device is not paired. Generate a one-time Pairing Link."
+msgstr "الجهاز غير مربوط. أنشئ رابط ربط لمرة واحدة."
+
+#. module: flexsys_pos_device_access
+msgid "Device location, branch, owner, maintenance notes..."
+msgstr "موقع الجهاز، الفرع، المسؤول، ملاحظات الصيانة..."
+
+#. module: flexsys_pos_device_access
+msgid "Employee"
+msgstr "الموظف"
+
+#. module: flexsys_pos_device_access
+msgid "Employee Login is not enabled on the Point of Sale."
+msgstr "تسجيل دخول الموظفين غير مفعّل في نقطة البيع."
+
+#. module: flexsys_pos_device_access
+msgid "Employee Login must be enabled on the Point of Sale so cashier PIN verification remains mandatory."
+msgstr "يجب تفعيل تسجيل دخول الموظفين في نقطة البيع حتى يبقى التحقق برمز PIN للكاشير إلزاميًا."
+
+#. module: flexsys_pos_device_access
+msgid "Enable the device before generating a Pairing Link."
+msgstr "فعّل الجهاز قبل إنشاء رابط الربط."
+
+#. module: flexsys_pos_device_access
+msgid "Event"
+msgstr "الحدث"
+
+#. module: flexsys_pos_device_access
+msgid "FlexSys POS Service — %s"
+msgstr "خدمة FlexSys لنقطة البيع — %s"
+
+
+#. module: flexsys_pos_device_access
+msgid "IP"
+msgstr "عنوان IP"
+
+#. module: flexsys_pos_device_access
+msgid "Invalid Allowed IP / CIDR entry: %s"
+msgstr "قيمة IP / CIDR المسموح غير صالحة: %s"
+
+#. module: flexsys_pos_device_access
+msgid "New"
+msgstr "جديد"
+
+#. module: flexsys_pos_device_access
+msgid "Notes"
+msgstr "ملاحظات"
+
+#. module: flexsys_pos_device_access
+msgid "Optional: 203.0.113.10, 10.0.0.0/24"
+msgstr "اختياري: 203.0.113.10, 10.0.0.0/24"
+
+#. module: flexsys_pos_device_access
+msgid "POS Device Access"
+msgstr "دخول أجهزة نقطة البيع"
+
+#. module: flexsys_pos_device_access
+msgid "Linked POS User is missing, invalid, or has insufficient POS access."
+msgstr "مستخدم نقطة البيع المرتبط مفقود أو غير صالح أو لا يملك صلاحية كافية لنقطة البيع."
+
+#. module: flexsys_pos_device_access
+msgid "Point of Sale belongs to a different company."
+msgstr "نقطة البيع تتبع شركة مختلفة."
+
+#. module: flexsys_pos_device_access
+msgid "Point of Sale is missing or inactive."
+msgstr "نقطة البيع مفقودة أو غير نشطة."
+
+#. module: flexsys_pos_device_access
+msgid "Reset this device pairing? The current browser credential and any open device session will become invalid immediately."
+msgstr "إعادة تعيين ربط هذا الجهاز؟ سيصبح اعتماد المتصفح الحالي وأي جلسة جهاز مفتوحة غير صالحين فورًا."
+
+#. module: flexsys_pos_device_access
+msgid "Revoke this device? The paired browser and any open device session will be blocked immediately."
+msgstr "إلغاء هذا الجهاز؟ سيتم منع المتصفح المربوط وأي جلسة جهاز مفتوحة فورًا."
+
+#. module: flexsys_pos_device_access
+msgid "Rotate this one-time Pairing Link? The previous unused pairing link will stop working immediately."
+msgstr "تدوير رابط الربط لمرة واحدة؟ سيتوقف رابط الربط السابق غير المستخدم عن العمل فورًا."
+
+#. module: flexsys_pos_device_access
+msgid "Set a custom Credential Expires At date before generating the Pairing Link."
+msgstr "حدد تاريخ انتهاء مخصص لاعتماد الجهاز قبل إنشاء رابط الربط."
+
+#. module: flexsys_pos_device_access
+msgid "Success"
+msgstr "نجاح"
+
+#. module: flexsys_pos_device_access
+msgid "The POS Service User is not valid. Run Test Device Access or assign the managed service user."
+msgstr "مستخدم خدمة نقطة البيع غير صالح. شغّل اختبار دخول الجهاز أو عيّن المستخدم المُدار."
+
+#. module: flexsys_pos_device_access
+msgid "The Linked POS User must have Point of Sale access (User or Administrator)."
+msgstr "يجب أن يمتلك مستخدم نقطة البيع المرتبط صلاحية نقطة البيع."
+
+#. module: flexsys_pos_device_access
+msgid "The Linked POS User must have access to the device company."
+msgstr "يجب أن يكون لدى مستخدم نقطة البيع المرتبط صلاحية الوصول إلى شركة الجهاز."
+
+#. module: flexsys_pos_device_access
+msgid "The Point of Sale must be active with Employee Login enabled."
+msgstr "يجب أن تكون نقطة البيع نشطة مع تفعيل تسجيل دخول الموظفين."
+
+#. module: flexsys_pos_device_access
+msgid "The Point of Sale must belong to the device company."
+msgstr "يجب أن تتبع نقطة البيع شركة الجهاز."
+
+#. module: flexsys_pos_device_access
+msgid "The custom Credential Expires At date must be in the future."
+msgstr "يجب أن يكون تاريخ انتهاء اعتماد الجهاز المخصص في المستقبل."
+
+
+#. module: flexsys_pos_device_access
+msgid "The paired device credential is expired."
+msgstr "انتهت صلاحية اعتماد الجهاز المربوط."
+
+#. module: flexsys_pos_device_access
+msgid "This device is already paired. Reset Pairing before binding another browser/device."
+msgstr "هذا الجهاز مربوط بالفعل. أعد تعيين الربط قبل ربط متصفح أو جهاز آخر."
+
+#. module: flexsys_pos_device_access
+msgid "This device is revoked. Reset Pairing before generating a new link."
+msgstr "تم إلغاء هذا الجهاز. أعد تعيين الربط قبل إنشاء رابط جديد."
+
+#. module: flexsys_pos_device_access
+msgid "e.g. QT001 Cashier-01"
+msgstr "مثال: QT001 Cashier-01"
+
+#. module: flexsys_pos_device_access
+msgid "Pairing Token"
+msgstr "رمز الربط"
+
+#. module: flexsys_pos_device_access
+msgid "Pairing Token Hash"
+msgstr "بصمة رمز الربط"
+
+#. module: flexsys_pos_device_access
+msgid "Pairing Token Hint"
+msgstr "تلميح رمز الربط"
+
+#. module: flexsys_pos_device_access
+msgid "Pairing Token Created At"
+msgstr "تم إنشاء رمز الربط في"
+
+#. module: flexsys_pos_device_access
+msgid "Pairing Token Expires At"
+msgstr "تنتهي صلاحية رمز الربط في"
+
+#. module: flexsys_pos_device_access
+msgid "Pairing Token Used At"
+msgstr "تم استخدام رمز الربط في"
+
+#. module: flexsys_pos_device_access
+msgid "Credential Hint"
+msgstr "تلميح اعتماد الجهاز"
+
+#. module: flexsys_pos_device_access
+msgid "Credential Created At"
+msgstr "تم إنشاء اعتماد الجهاز في"
+
+#. module: flexsys_pos_device_access
+msgid "Paired At"
+msgstr "تم الربط في"
+
+#. module: flexsys_pos_device_access
+msgid "Paired IP"
+msgstr "عنوان IP عند الربط"
+
+#. module: flexsys_pos_device_access
+msgid "Paired User Agent"
+msgstr "بيانات المتصفح عند الربط"
+
+#. module: flexsys_pos_device_access
+msgid "Last Used At"
+msgstr "آخر استخدام في"
+
+#. module: flexsys_pos_device_access
+msgid "Last IP"
+msgstr "آخر عنوان IP"
+
+#. module: flexsys_pos_device_access
+msgid "Access Count"
+msgstr "عدد مرات الدخول"
+
+#. module: flexsys_pos_device_access
+msgid "Last User Pin Success"
+msgstr "آخر موظف تحقق PIN بنجاح"
+
+#. module: flexsys_pos_device_access
+msgid "Last User Pin Success At"
+msgstr "وقت آخر تحقق PIN ناجح"
+
+#. module: flexsys_pos_device_access
+msgid "Cashier Login Reported"
+msgstr "تم تسجيل دخول الكاشير"
+
+#. module: flexsys_pos_device_access
+msgid "Last Cashier Login"
+msgstr "آخر دخول للكاشير"
+
+#. module: flexsys_pos_device_access
+msgid "Last Cashier Login At"
+msgstr "وقت آخر دخول للكاشير"
+
+#. module: flexsys_pos_device_access
+#. odoo-python
+msgid "Linked POS User cannot load the complete assigned Point of Sale data. Verify the user's company access, Point of Sale permissions, and any custom module access rules."
+msgstr "لا يستطيع مستخدم نقطة البيع المرتبط تحميل بيانات نقطة البيع المحددة بالكامل. تحقق من صلاحية المستخدم للشركة ونقطة البيع وأي قواعد وصول أضافتها الموديولات المخصصة."
