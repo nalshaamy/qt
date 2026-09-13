@@ -1,4 +1,0 @@
-id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_flexsys_pos_device_manager,FlexSys POS Device manager,model_flexsys_pos_device,point_of_sale.group_pos_manager,1,1,1,1
-access_flexsys_pos_device_log_manager,FlexSys POS Device log manager,model_flexsys_pos_device_access_log,point_of_sale.group_pos_manager,1,0,0,0
-access_flexsys_pos_device_token_wizard_manager,FlexSys POS Device token wizard manager,model_flexsys_pos_device_token_wizard,point_of_sale.group_pos_manager,1,1,1,1
