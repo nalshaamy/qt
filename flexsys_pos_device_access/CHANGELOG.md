@@ -2,6 +2,8 @@
 
 ## 19.0.1.0.1 — Commercial Security Hardening
 
+- Pairing Link privacy: `?db=` is omitted when Odoo's hostname/dbfilter uniquely resolves the current database; shared hosts retain the explicit DB fallback.
+
 - Device entry now forces a fresh Odoo POS data bootstrap while still clearing any cached cashier identity so employee PIN verification remains mandatory.
 
 - Fixed Linked POS User company context so Odoo always loads the assigned `pos.config` instead of crashing on `currency_id` when the user's normal active company differs.

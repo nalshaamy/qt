@@ -4,7 +4,7 @@ import secrets
 from datetime import timedelta
 from urllib.parse import urlencode
 
-from odoo import api, fields, models, _
+from odoo import api, fields, http, models, _
 from odoo.exceptions import AccessError, ValidationError
 
 
@@ -376,15 +376,29 @@ class FlexSysPosDevice(models.Model):
     def _build_pairing_wizard(self, raw_token):
         self.ensure_one()
         base_url = self.env["ir.config_parameter"].sudo().get_param("web.base.url", "").rstrip("/")
-        # A fresh browser has no selected database. Custom module routes such as
-        # /flexsys/... are database-bound and are not visible to Odoo's no-db
-        # router. Start from Odoo's server-wide /web/login route so ensure_db()
-        # selects the originating database first. Keep the one-time secret in
-        # the URL fragment so it is not sent to /web/login or stored in its
-        # server access log. A tiny frontend bootstrap then forwards it to the
-        # database-bound pairing route.
-        query = urlencode({"db": self.env.cr.dbname})
-        url = f"{base_url}/web/login?{query}#flexsys_pair={raw_token}"
+        # A fresh browser has no selected database. Start from Odoo's
+        # server-wide /web/login route so ensure_db() can establish the DB
+        # before the database-bound FlexSys controller is used.
+        #
+        # Privacy rule:
+        # - If the current hostname resolves to exactly this one database
+        #   through Odoo's dbfilter/monodb logic, do not expose ?db= at all.
+        # - If the hostname can serve multiple databases (or detection is
+        #   inconclusive), include ?db=<dbname> as the compatibility fallback.
+        #
+        # The one-time pairing secret always stays in the URL fragment during
+        # this bootstrap, so it is not sent in the first /web/login request.
+        dbname = self.env.cr.dbname
+        try:
+            visible_dbs = http.db_list(force=True)
+        except Exception:
+            visible_dbs = []
+
+        if visible_dbs == [dbname]:
+            url = f"{base_url}/web/login#flexsys_pair={raw_token}"
+        else:
+            query = urlencode({"db": dbname})
+            url = f"{base_url}/web/login?{query}#flexsys_pair={raw_token}"
         wizard = self.env["flexsys.pos.device.token.wizard"].create({
             "device_id": self.id,
             "expires_at": self.pairing_token_expires_at,

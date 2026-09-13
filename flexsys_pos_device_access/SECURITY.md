@@ -94,3 +94,12 @@ info@flexsyssa.com
 ### Device-company session scope
 
 A Linked POS User may have access to multiple Odoo companies. FlexSys scopes only the generated device-bound session to the company of the assigned POS. It does not modify the user's default company on `res.users`. This keeps Odoo's POS record rules and company-dependent data aligned with the assigned terminal.
+
+
+### Database-name privacy in Pairing Links
+
+FlexSys does not treat the Odoo database name as an authentication secret. However, the commercial build avoids exposing it when Odoo can resolve the database from the hostname.
+
+If the hostname uniquely resolves to the current database, the Pairing Link omits the `db` query parameter. On shared multi-database hostnames, `?db=` is retained as a functional fallback because a fresh browser otherwise cannot select the intended database reliably.
+
+For internet-facing production deployments, use a strict hostname-based Odoo `dbfilter` and disable database listing after validating the routing.

@@ -109,10 +109,18 @@ The module license remains the value currently declared in `__manifest__.py`. It
 
 ## Multi-database hosts
 
-The first pairing URL starts from Odoo's server-wide login route:
+FlexSys automatically minimizes database-name exposure in Pairing Links.
 
-`/web/login?db=<database>#flexsys_pair=<one-time-secret>`
+- If Odoo's hostname / `dbfilter` resolves to exactly one database, the link is clean:
 
-This lets Odoo select the originating database for a completely fresh browser before the custom module route is used. The one-time secret is kept in the URL fragment during database selection, so it is not sent to `/web/login`. After the database is selected, a small frontend bootstrap forwards the browser to the database-bound pairing route automatically.
+  `/web/login#flexsys_pair=<one-time-secret>`
 
-Device credential cookies are namespaced per database, so two databases served from the same hostname do not overwrite each other's paired-device credential.
+- If the same hostname can serve multiple databases, FlexSys uses the required compatibility fallback:
+
+  `/web/login?db=<database>#flexsys_pair=<one-time-secret>`
+
+The one-time Pairing Token remains in the URL fragment during database selection and is not sent in the initial `/web/login` HTTP request.
+
+For production multi-database deployments, configure a hostname-specific Odoo `dbfilter` so each public hostname resolves to one database. Odoo also recommends disabling database listing once routing is correctly configured.
+
+Device credential cookies remain namespaced per database, so databases on the same hostname do not overwrite one another.

@@ -35,8 +35,6 @@
 - [ ] POS frontend receives a non-empty `pos.config` and initializes without `currency_id` errors
 - [ ] Device entry performs a fresh server POS-data load and does not reuse a stale empty `pos.config` cache
 - [ ] Browser A consumes one-time Pairing Link successfully
-- [ ] Multi-database host: generated Pairing Link starts at `/web/login?db=<database>` and carries the pairing secret in `#flexsys_pair=...`
-- [ ] Multi-database host: fresh browser selects the intended database without showing the Odoo login form, then continues to pairing
 - [ ] Credentials for two databases on the same hostname do not overwrite each other
 - [ ] Browser B cannot reuse the consumed Pairing Link
 - [ ] Employee PIN remains mandatory
@@ -50,3 +48,7 @@
 - [ ] Capture clean real Odoo 19 screenshots for the store page
 
 No upgrade-from-older-release test is required for the first publication because no prior commercial release has customers.
+
+- [ ] Unique hostname/dbfilter: Pairing Link omits `?db=` and pairing succeeds from a fresh browser
+- [ ] Shared multi-database hostname: Pairing Link includes the required `?db=<database>` fallback and pairing succeeds
+- [ ] Pairing secret remains in `#flexsys_pair=...` during the initial `/web/login` bootstrap

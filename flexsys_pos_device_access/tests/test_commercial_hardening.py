@@ -19,13 +19,6 @@ class TestFlexSysCommercialHardening(TransactionCase):
         self.assertIn("pin_success", selection)
 
 
-    def test_pairing_link_is_database_explicit(self):
-        """Pairing URLs must target the originating DB on multi-db hosts."""
-        import inspect
-        source = inspect.getsource(type(self.env["flexsys.pos.device"])._build_pairing_wizard)
-        self.assertIn('urlencode({"db": self.env.cr.dbname})', source)
-
-
     def test_linked_pos_user_is_required(self):
         field = self.env["flexsys.pos.device"]._fields["service_user_id"]
         self.assertTrue(field.required)
@@ -42,3 +35,16 @@ class TestFlexSysCommercialHardening(TransactionCase):
         import inspect
         source = inspect.getsource(type(self.env["flexsys.pos.device"])._service_user_is_valid)
         self.assertIn('.read(["id", "currency_id"], load=False)', source)
+
+
+    def test_pairing_link_hides_db_on_unique_hostname(self):
+        import inspect
+        source = inspect.getsource(type(self.env["flexsys.pos.device"])._build_pairing_wizard)
+        self.assertIn('if visible_dbs == [dbname]:', source)
+        self.assertIn('/web/login#flexsys_pair=', source)
+
+    def test_pairing_link_uses_db_fallback_on_shared_hostname(self):
+        import inspect
+        source = inspect.getsource(type(self.env["flexsys.pos.device"])._build_pairing_wizard)
+        self.assertIn('urlencode({"db": dbname})', source)
+        self.assertIn('/web/login?{query}#flexsys_pair=', source)
