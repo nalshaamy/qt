@@ -1,0 +1,2 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_flexsys_pos_reference_guard_log_manager,flexsys.pos.reference.guard.log manager,model_flexsys_pos_reference_guard_log,point_of_sale.group_pos_manager,1,0,0,0
