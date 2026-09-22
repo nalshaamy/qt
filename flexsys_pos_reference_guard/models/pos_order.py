@@ -62,6 +62,21 @@ class PosOrder(models.Model):
         }
 
     @api.model
+    def flexsys_can_recycle_empty_draft_ref(self, reference, config_id):
+        """Read-only preflight for a locally empty draft during Reload Data.
+
+        The browser must additionally prove that the draft has no lines,
+        payments, or other pending orders and that no other live POS tab
+        responds. This database check does not reserve a number: if another
+        request arrives concurrently, the normal create guard still repairs
+        any collision. Offline/failed checks must NEVER permit reuse.
+        """
+        config = self.env["pos.config"].browse(config_id).exists()
+        if not config or not self._flexsys_parse_client_reference(reference, config):
+            return False
+        return not bool(self.sudo().search([("pos_reference", "=", reference)], limit=1))
+
+    @api.model
     def _flexsys_lock_key(self, key):
         self.env.cr.execute(
             "SELECT pg_advisory_xact_lock(hashtext(%s))",

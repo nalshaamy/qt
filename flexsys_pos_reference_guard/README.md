@@ -1,6 +1,6 @@
 # FlexSys POS Reference Guard — Odoo 19
 
-Version: **19.0.1.3.0**
+Version: **19.0.1.4.0**
 
 ## Purpose
 
@@ -19,11 +19,17 @@ started a new sequence.
 `DeviceIdentifierSequence.useNext()` is monotonic. `unsynced_number_stack` is
 not reused. A harmless gap is preferred to a duplicated customer-facing number.
 
-### 2. Reload Data: preserve device identifier and counter
+### 2. Reload Data: preserve identity and conditionally reclaim an empty draft
 
 Reload Data keeps the existing `device_identifier` and `next_number` instead of
-starting a new browser namespace at 1. Only the numbering identity is restored;
-other local data is still reloaded/reset by Odoo.
+starting a new browser namespace at 1. A single *empty, unpaid, not-yet-synced*
+local draft holding the very last allocated number may be reclaimed **only**
+when (a) there are no other unsynced local orders, (b) a live-tab probe finds no
+other POS window, and (c) the server verifies the reference is absent. Otherwise
+the counter remains monotonic; gaps are preferable to duplicate fiscal receipts.
+On a verified one-step reclaim, the durable backup cookie is updated together
+with Local Storage, so it cannot silently undo the reclaim after restart.
+Other local data is still reloaded/reset by Odoo.
 
 
 ### 3. Durable browser backup across tab close/reopen
@@ -34,8 +40,7 @@ native Odoo localStorage entry disappears while the cookie remains, the module
 restores the same device identity and the highest known counter **before** Odoo
 can register a new device and restart at 1.
 
-The cookie contains no customer, product, payment, or fiscal data. Allocated
-numbers are never recycled.
+The cookie contains no customer, product, payment, or fiscal data. Allocated numbers are never recycled except the narrowly verified, last empty draft during Reload Data.
 
 ### 4. Backend duplicate guard: repair in the SAME device sequence
 
@@ -123,3 +128,18 @@ fiscal/payment data. The guard protects new orders without touching history.
 - Reconciliation keeps the highest counter when both native and backup state
   exist for the same device, preventing rollback.
 - No customer/payment data is stored in the backup cookie.
+
+## V1.4: draft reuse limits and test requirements
+
+This is a **conditional best-effort continuity feature**, NOT a guarantee of
+gapless statutory invoice numbers. POS allocates receipt numbers when opening a
+draft; offline orders, closed tabs, pending requests, and concurrent tabs can
+make unconditional reuse unsafe. The server-side collision guard stays enabled.
+
+On staging, verify (1) an online single-window empty draft can reclaim the last
+number after Reload Data, (2) drafts with product lines or payments never
+reclaim, (3) server-persisted or offline/pending orders never reclaim, (4) two
+active POS windows do not reclaim, (5) cookie/LocalStorage agree after reload,
+(6) the next two paid orders and printed receipts remain unique, and (7) the
+collision/audit scenario still works. A complete Odoo 19 regression, real device
+print, and tax-invoice numbering review are required before production rollout.
