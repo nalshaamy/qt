@@ -1,0 +1,43 @@
+# Translation of FlexSys Digital Menu to Arabic.
+msgid ""
+msgstr ""
+"Project-Id-Version: FlexSys Digital Menu 19.0\n"
+"Language: ar\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=6; plural=n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5;\n"
+
+msgid "None"
+msgstr "بدون"
+
+msgid "Featured"
+msgstr "مميز"
+
+msgid "Best Seller"
+msgstr "الأكثر مبيعًا"
+
+msgid "New"
+msgstr "جديد"
+
+msgid "Chef Recommendation"
+msgstr "توصية الشيف"
+
+msgid "Seasonal"
+msgstr "موسمي"
+
+msgid "Custom"
+msgstr "مخصص"
+
+msgid "Custom Badge (Arabic)"
+msgstr "الشارة المخصصة (عربي)"
+
+msgid "Custom Badge (English)"
+msgstr "الشارة المخصصة (إنجليزي)"
+
+msgid "Availability"
+msgstr "التوفر"
+
+msgid "Product Details"
+msgstr "تفاصيل المنتج"
+
+msgid "Menu Description"
+msgstr "وصف المنيو"
