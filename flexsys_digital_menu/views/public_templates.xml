@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="public_menu_page" name="FlexSys Digital Menu Public Page">
+        &lt;!DOCTYPE html&gt;
+        <html t-att-lang="menu.default_language" t-att-dir="'rtl' if menu.default_language == 'ar' else 'ltr'">
+            <head>
+                <meta charset="utf-8"/>
+                <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+                <meta name="theme-color" t-att-content="menu.theme_id.primary"/>
+                <meta name="robots" content="index,follow"/>
+                <title><t t-out="seo_title"/></title>
+                <link rel="preconnect" href="https://fonts.googleapis.com"/>
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
+                <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+                <link rel="stylesheet" href="/flexsys_digital_menu/static/src/public/menu.css"/>
+                <style t-out="':root{' + css_variables + '}'"/>
+            </head>
+            <body class="fsm-body" t-att-data-menu-slug="menu.slug" t-att-data-default-language="menu.default_language" t-att-data-data-url="data_url">
+                <div id="fsm-app" class="fsm-app" aria-live="polite">
+                    <header class="fsm-hero">
+                        <div class="fsm-hero-media" id="fsm-hero-media"></div>
+                        <div class="fsm-hero-overlay"></div>
+                        <div class="fsm-hero-content">
+                            <img t-if="menu.logo" t-att-src="logo_url" class="fsm-logo" t-att-alt="menu.name"/>
+                            <div class="fsm-header-copy">
+                                <h1 id="fsm-menu-title"><t t-out="menu.name"/></h1>
+                                <p id="fsm-menu-tagline"><t t-out="menu.tagline or ''"/></p>
+                            </div>
+                            <div class="fsm-header-actions">
+                                <select id="fsm-branch-select" class="fsm-select" aria-label="Branch"></select>
+                                <button id="fsm-language-toggle" class="fsm-icon-button" type="button" aria-label="Change language">EN</button>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main>
+                        <section class="fsm-control-slab">
+                            <div class="fsm-search-wrap">
+                                <span class="fsm-search-icon">⌕</span>
+                                <input id="fsm-search" class="fsm-search" type="search" autocomplete="off" placeholder="ابحث في المنيو"/>
+                            </div>
+                            <nav id="fsm-category-nav" class="fsm-category-nav" aria-label="Menu categories"></nav>
+                        </section>
+
+                        <section id="fsm-status" class="fsm-status" hidden="hidden"></section>
+                        <section id="fsm-featured" class="fsm-section fsm-featured" hidden="hidden"></section>
+                        <div id="fsm-sections"></div>
+                    </main>
+
+                    <footer class="fsm-footer">
+                        <span id="fsm-footer-name"><t t-out="menu.name"/></span>
+                    </footer>
+                </div>
+
+                <div id="fsm-sheet-backdrop" class="fsm-sheet-backdrop" hidden="hidden"></div>
+                <aside id="fsm-product-sheet" class="fsm-product-sheet" aria-modal="true" role="dialog" hidden="hidden">
+                    <button id="fsm-sheet-close" class="fsm-sheet-close" type="button" aria-label="Close">×</button>
+                    <div id="fsm-sheet-content"></div>
+                </aside>
+
+                <script defer="defer" src="/flexsys_digital_menu/static/src/public/menu.js"></script>
+            </body>
+        </html>
+    </template>
+    <template id="backend_preview_page" name="FlexSys Digital Menu Backend Preview">
+        &lt;!DOCTYPE html&gt;
+        <html>
+            <head>
+                <meta charset="utf-8"/>
+                <meta name="viewport" content="width=device-width, initial-scale=1"/>
+                <title>Preview — <t t-out="menu.name"/></title>
+                <style>
+                    *{box-sizing:border-box}body{margin:0;background:#111827;font-family:system-ui,sans-serif;color:#fff}.bar{height:64px;padding:10px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:#0b1220}.modes{display:flex;gap:8px}.modes button{border:1px solid #334155;background:#182235;color:#fff;border-radius:9px;padding:8px 13px;cursor:pointer}.modes button.active{background:#fff;color:#111827}.stage{height:calc(100vh - 64px);display:grid;place-items:center;padding:18px;overflow:auto}.frame{height:100%;background:#fff;border:0;border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.35);transition:width .18s ease}.frame.mobile{width:390px}.frame.tablet{width:820px}.frame.desktop{width:min(1440px,100%)}@media(max-width:600px){.bar{height:auto;align-items:flex-start;flex-direction:column}.stage{height:calc(100vh - 110px);padding:8px}.frame.mobile,.frame.tablet,.frame.desktop{width:100%}}
+                </style>
+            </head>
+            <body>
+                <div class="bar">
+                    <strong><t t-out="menu.name"/> — Preview</strong>
+                    <div class="modes">
+                        <button type="button" class="active" data-mode="mobile">Mobile</button>
+                        <button type="button" data-mode="tablet">Tablet</button>
+                        <button type="button" data-mode="desktop">Desktop</button>
+                    </div>
+                </div>
+                <div class="stage">
+                    <iframe id="fsm-preview-frame" class="frame mobile" t-att-src="content_url" title="Digital Menu Preview"></iframe>
+                </div>
+                <script>
+                    document.querySelectorAll('[data-mode]').forEach(function(button){button.addEventListener('click',function(){document.querySelectorAll('[data-mode]').forEach(function(b){b.classList.remove('active')});button.classList.add('active');document.getElementById('fsm-preview-frame').className='frame '+button.dataset.mode;});});
+                </script>
+            </body>
+        </html>
+    </template>
+
+</odoo>
