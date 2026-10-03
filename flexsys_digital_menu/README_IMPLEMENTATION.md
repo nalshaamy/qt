@@ -127,3 +127,11 @@ Digital Menu security groups now use the native Odoo 19 `res.groups.privilege` h
 - Kept the two-column compact mobile layout unchanged in principle.
 - Reduced the product-detail sheet width on desktop and changed the product hero image from a full-width oversized panel to a contained, rounded 280px media area.
 - Reduced product-detail image height to 220px on mobile, leaving more room for the product name, full description, pricing, details, and recommendation.
+
+## 19.0.1.0.9 — Odoo 19 Arabic PO Compatibility Fix
+
+- Rebuilt `i18n/ar.po` using the native Odoo 19 PO structure.
+- Every translated entry now includes the required `module: flexsys_digital_menu` extracted comment.
+- Added Odoo-recognized occurrences for field/view/code terms.
+- This fixes the Odoo 19 translation-loader crash during install/upgrade (`PoFileReader` failing on `match.groups()` when the module comment is missing).
+- Added static validation to catch missing module comments or malformed PO occurrences before packaging.

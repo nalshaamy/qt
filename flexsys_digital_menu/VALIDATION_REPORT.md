@@ -1,28 +1,33 @@
 # FlexSys Digital Menu — Validation Report
 
-**Version:** 19.0.1.0.8  
+**Version:** 19.0.1.0.9  
 **Module:** `flexsys_digital_menu`
 
-## Included UX batch
+## Runtime blocker fixed
 
-1. Product cards are smaller and denser on tablet/desktop.
-2. Cards no longer stretch excessively when a row contains only a few products.
-3. Card content padding, title size, teaser spacing, badges, and sold-out chip were tightened proportionally.
-4. Product-detail sheet width was reduced on desktop.
-5. Product-detail image is now a contained rounded image area instead of consuming most of the detail sheet.
-6. Detail image height is capped at 280px on desktop/tablet and 220px on mobile.
-7. Existing full-description, bilingual badge, compact header/footer, and recommendation behavior from 19.0.1.0.7 is preserved.
+Odoo.sh runtime on `19.0.1.0.8` failed while loading `i18n/ar.po` with:
+
+`AttributeError: 'NoneType' object has no attribute 'groups'`
+
+The Odoo 19 `PoFileReader` expects every PO entry to contain a module comment matching `module: <module_name>`. The previous hand-written Arabic PO file did not contain those comments.
+
+### Fix applied
+
+- Rebuilt `i18n/ar.po` in Odoo 19 format.
+- Added `#. module: flexsys_digital_menu` to every translation entry.
+- Added Odoo-recognized `#:` occurrences for code/model/model_terms entries.
+- Preserved Arabic translations for standard badges and Digital Menu backend labels.
 
 ## Static validation completed
 
 - Python byte-compilation: **PASS**
 - XML parsing: **PASS**
 - JavaScript syntax (`node --check`): **PASS**
-- Manifest version check: **PASS — 19.0.1.0.8**
-- Compact card CSS assertions: **PASS**
-- Product-detail image sizing assertions: **PASS**
+- Manifest version check: **PASS — 19.0.1.0.9**
+- Odoo 19 PO module-comment validation: **PASS**
+- Odoo 19 PO occurrence-pattern validation: **PASS**
 - ZIP integrity: **PASS**
 
 ## Runtime status
 
-Odoo 19 runtime browser validation was **not executed locally**. Required next step: **Upgrade on Odoo.sh Staging**, then verify card density and detail-image proportions on desktop, tablet, and mobile.
+The exact translation-loader crash has been addressed at its source. Full Odoo 19 runtime validation still requires an **Upgrade/Install on Odoo.sh Staging**.
