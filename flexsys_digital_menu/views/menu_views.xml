@@ -109,7 +109,7 @@
                                 <list editable="bottom">
                                     <field name="sequence" widget="handle"/>
                                     <field name="name"/>
-                                    <field name="pos_category_id"/>
+                                    <field name="source_pos_category_ids" widget="many2many_tags"/>
                                     <field name="icon"/>
                                     <field name="featured"/>
                                     <field name="visible"/>

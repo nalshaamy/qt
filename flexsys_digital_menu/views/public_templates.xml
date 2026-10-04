@@ -12,7 +12,7 @@
                 <link rel="preconnect" href="https://fonts.googleapis.com"/>
                 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
                 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
-                <link rel="stylesheet" href="/flexsys_digital_menu/static/src/public/menu.css?v=19.0.1.0.15"/>
+                <link rel="stylesheet" href="/flexsys_digital_menu/static/src/public/menu.css?v=19.0.1.0.16"/>
                 <style t-out="':root{' + css_variables + '}'"/>
             </head>
             <body class="fsm-body"
@@ -86,7 +86,7 @@
                 <div id="fsm-sheet-content"></div>
             </aside>
 
-            <script defer="defer" src="/flexsys_digital_menu/static/src/public/menu.js?v=19.0.1.0.15"></script>
+            <script defer="defer" src="/flexsys_digital_menu/static/src/public/menu.js?v=19.0.1.0.16"></script>
         </t>
     </template>
 
@@ -125,7 +125,7 @@
                     <t t-if="language == 'ar'">لا توجد عروض فعالة حاليًا.</t><t t-else="">No active offers are available right now.</t>
                 </div>
             </main>
-            <script defer="defer" src="/flexsys_digital_menu/static/src/public/brand_page.js?v=19.0.1.0.15"></script>
+            <script defer="defer" src="/flexsys_digital_menu/static/src/public/brand_page.js?v=19.0.1.0.16"></script>
         </t>
     </template>
 
@@ -171,7 +171,7 @@
                     </section>
                 </article>
             </main>
-            <script defer="defer" src="/flexsys_digital_menu/static/src/public/brand_page.js?v=19.0.1.0.15"></script>
+            <script defer="defer" src="/flexsys_digital_menu/static/src/public/brand_page.js?v=19.0.1.0.16"></script>
         </t>
     </template>
 

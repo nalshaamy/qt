@@ -34,6 +34,19 @@ class ProductTemplate(models.Model):
     digital_menu_custom_badge_ar = fields.Char(string="Custom Badge (Arabic)")
     digital_menu_custom_badge_en = fields.Char(string="Custom Badge (English)")
     digital_menu_notes = fields.Text(string="Internal Menu Notes")
+    digital_menu_recommendation_mode = fields.Selection(
+        [("automatic", "Automatic"), ("manual", "Manual")],
+        string="Recommended Product",
+        default="automatic",
+        required=True,
+        help="Automatic uses the current menu recommendation logic. Manual prioritizes the selected product when it is available in the same menu.",
+    )
+    digital_menu_recommended_product_id = fields.Many2one(
+        "product.template",
+        string="Recommended Product (Manual)",
+        domain="[('sale_ok', '=', True)]",
+        ondelete="set null",
+    )
 
     # Internal default availability. It intentionally is not shown as a second checkbox
     # in the simple product UI. Effective availability is calculated by the menu engine.
@@ -190,6 +203,13 @@ class ProductTemplate(models.Model):
             product.digital_menu_count = len(product.digital_menu_line_ids.mapped("menu_id"))
             product.digital_menu_branch_count = len(product.digital_menu_line_ids.mapped("pos_config_id"))
             product.digital_menu_is_featured = any(line._effective_featured_bool() for line in product.digital_menu_line_ids)
+
+
+    @api.constrains("digital_menu_recommendation_mode", "digital_menu_recommended_product_id")
+    def _check_digital_menu_recommended_product(self):
+        for product in self:
+            if product.digital_menu_recommended_product_id == product:
+                raise ValidationError(_("A product cannot recommend itself."))
 
     def action_preview_digital_menu(self):
         self.ensure_one()

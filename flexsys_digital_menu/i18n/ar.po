@@ -190,3 +190,28 @@ msgstr "ساعات العمل"
 #: model:ir.model.fields,field_description:flexsys_digital_menu.field_flexsys_menu__analytics_enabled
 msgid "Analytics"
 msgstr "الإحصائيات"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields,field_description:flexsys_digital_menu.field_flexsys_menu_category__source_pos_category_ids
+msgid "Source POS Categories"
+msgstr "فئات نقطة البيع المصدرية"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields,field_description:flexsys_digital_menu.field_product_template__digital_menu_recommendation_mode
+msgid "Recommended Product"
+msgstr "المنتج المقترح"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields,field_description:flexsys_digital_menu.field_product_template__digital_menu_recommended_product_id
+msgid "Recommended Product (Manual)"
+msgstr "المنتج المقترح (يدوي)"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields.selection,name:flexsys_digital_menu.selection__product_template__digital_menu_recommendation_mode__automatic
+msgid "Automatic"
+msgstr "تلقائي"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields.selection,name:flexsys_digital_menu.selection__product_template__digital_menu_recommendation_mode__manual
+msgid "Manual"
+msgstr "يدوي"

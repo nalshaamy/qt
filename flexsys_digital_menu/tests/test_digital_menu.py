@@ -230,4 +230,40 @@ class TestFlexSysDigitalMenu(TransactionCase):
         self.product.digital_menu_image = False
         payload = self.menu._public_payload(requested_lang="en")
         self.assertTrue(payload["products"][0]["image_url"].endswith(f"/product/{self.line.public_key}/image"))
+    def test_category_supports_multiple_pos_sources(self):
+        field = self.env["flexsys.menu.category"]._fields["source_pos_category_ids"]
+        self.assertEqual(field.type, "many2many")
+
+    def test_product_logo_fallback_is_marked_for_contain_rendering(self):
+        self.menu.state = "published"
+        image = Image.new("RGB", (32, 32), (20, 90, 65))
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        self.menu.logo = base64.b64encode(buffer.getvalue())
+        self.product.image_1920 = False
+        self.product.digital_menu_image = False
+        payload = self.menu._public_payload(requested_lang="en")
+        self.assertTrue(payload["products"][0]["image_is_fallback"])
+
+    def test_manual_recommended_product_is_exported_when_present_in_menu(self):
+        self.menu.state = "published"
+        other = self.env["product.template"].create({
+            "name": "Croissant",
+            "sale_ok": True,
+            "available_in_pos": True,
+            "list_price": 12.0,
+            "digital_menu_enabled": True,
+        })
+        other_line = self.env["flexsys.menu.product"].create({
+            "menu_id": self.menu.id,
+            "product_tmpl_id": other.id,
+            "category_id": self.category.id,
+        })
+        self.product.write({
+            "digital_menu_recommendation_mode": "manual",
+            "digital_menu_recommended_product_id": other.id,
+        })
+        payload = self.menu._public_payload(requested_lang="en")
+        source = next(item for item in payload["products"] if item["key"] == self.line.public_key)
+        self.assertEqual(source["recommended_key"], other_line.public_key)
 

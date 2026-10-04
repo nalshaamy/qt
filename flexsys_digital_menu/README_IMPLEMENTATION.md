@@ -248,3 +248,17 @@ The approved mockup remains a visual target rather than a literal screenshot of 
 - Reduced the backend Offer image widget to Odoo's compact avatar-style size, matching the normal product-image editing experience.
 - Products without their own menu/product image now automatically use the Digital Menu brand logo, falling back to the Odoo company logo when necessary. This fallback applies to public and backend preview routes.
 - Public CSS/JS cache version bumped to `19.0.1.0.15`.
+
+## 19.0.1.0.16 — Multi-source Categories, Recommendations & Media Polish
+
+- Replaced the daily **Source POS Category** control with **Source POS Categories** (`Many2many`). One public Digital Menu category can now group multiple POS categories.
+- The old single-source field is retained internally for non-destructive upgrades; existing values are migrated into the new Many2many relation.
+- When a menu-product line has no explicit Digital Menu category, the menu engine can infer the first matching public category from its configured source POS categories.
+- Product image payload now marks brand/company-logo fallbacks explicitly. Product cards, product details and recommendation cards render these fallback logos with `object-fit: contain` and padding so the full logo is visible without cropping.
+- Offer media was reduced and rebalanced: the menu offer hero uses a split text/image composition instead of stretching a small image across the full banner, and the dedicated Offers page uses compact fixed-size media closer to product-card proportions.
+- Added product-level **Recommended Product** control under Product Details:
+  - `Automatic` keeps the existing recommendation priority (same category → featured → sequence).
+  - `Manual` allows one specific product to be prioritized when that product is available in the same effective public menu payload.
+  - If the manual target is unavailable or not part of the current menu/branch, the frontend safely falls back to Automatic.
+- Public CSS/JS cache version bumped to `19.0.1.0.16`.
+

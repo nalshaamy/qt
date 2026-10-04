@@ -705,6 +705,12 @@ class FlexSysMenu(models.Model):
                 if availability == "sold_out" and menu.sold_out_behavior == "hide":
                     continue
                 category = line._effective_category()
+                # If no explicit Digital Menu category is assigned, allow the public
+                # category to be inferred from any configured Source POS Categories.
+                if not category:
+                    category = categories.filtered(
+                        lambda candidate: candidate.matches_product_pos_category(line.product_tmpl_id)
+                    )[:1]
                 if category and (category.menu_id != menu or not category.visible):
                     continue
                 if category:
@@ -722,13 +728,21 @@ class FlexSysMenu(models.Model):
                     })
                 price = min([item["price"] for item in variants], default=line._get_effective_price())
                 product = line.product_tmpl_id
+                has_product_image = bool(line._effective_image_source())
+                has_fallback_logo = bool((not has_product_image) and (menu.logo or menu.company_id.logo))
                 product_data = {
                     "key": line.public_key,
                     "category_key": category.public_key if category else "uncategorized",
                     "name": line._effective_name(),
                     "description": line._effective_description() if menu.show_descriptions else "",
-                    # If a product has no image, the public product-image route falls back to the brand/company logo.
-                    "image_url": f"{asset_base}/product/{line.public_key}/image" if menu.show_product_images and (line._effective_image_source() or menu.logo or menu.company_id.logo) else "",
+                    # If a product has no image, the route falls back to the brand/company logo.
+                    "image_url": f"{asset_base}/product/{line.public_key}/image" if menu.show_product_images and (has_product_image or has_fallback_logo) else "",
+                    "image_is_fallback": bool(has_fallback_logo),
+                    "_manual_recommended_template_id": (
+                        product.digital_menu_recommended_product_id.id
+                        if product.digital_menu_recommendation_mode == "manual" and product.digital_menu_recommended_product_id
+                        else False
+                    ),
                     "price": price,
                     "price_from": len(variants) > 1,
                     "variants": variants if menu.show_variants else [],
@@ -750,6 +764,17 @@ class FlexSysMenu(models.Model):
                 }
                 products.append(product_data)
                 public_product_by_template[product.id] = product_data
+
+        # Resolve optional manual recommendations only to another product that is actually
+        # present in the current effective public payload. If not present, frontend falls
+        # back to the automatic recommendation algorithm.
+        for product_data in products:
+            recommended_template_id = product_data.pop("_manual_recommended_template_id", False)
+            recommended = public_product_by_template.get(recommended_template_id) if recommended_template_id else None
+            if recommended and recommended.get("key") != product_data.get("key"):
+                product_data["recommended_key"] = recommended["key"]
+            else:
+                product_data["recommended_key"] = ""
 
         category_payload = [value for cid, value in category_map.items() if menu.empty_category_behavior == "show" or cid in used_category_ids]
         if any(product["category_key"] == "uncategorized" for product in products):

@@ -53,7 +53,7 @@
                             <field name="pricelist_id" domain="['|',('company_id','=',False),('company_id','=',company_id)]"/>
                         </group>
                         <group>
-                            <field name="image" widget="image" class="oe_avatar" options="{'preview_image': 'image'}"/>
+                            <field name="image" widget="image" class="oe_avatar" options="{'preview_image': 'image', 'size': [180, 180]}"/>
                         </group>
                     </group>
                     <group>

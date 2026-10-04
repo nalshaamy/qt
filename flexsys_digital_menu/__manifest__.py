@@ -1,7 +1,7 @@
 {
     "name": "FlexSys Digital Menu",
     "summary": "Smart white-label digital menu for Odoo POS",
-    "version": "19.0.1.0.15",
+    "version": "19.0.1.0.16",
     "category": "Point of Sale/Restaurant",
     "author": "FlexSys",
     "website": "https://flexsyssa.com",

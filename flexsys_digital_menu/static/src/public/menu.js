@@ -240,7 +240,7 @@
 
         const imageWrap = node("div", "fsm-card-image-wrap");
         if (product.image_url) {
-            const img = node("img", "fsm-card-image");
+            const img = node("img", `fsm-card-image${product.image_is_fallback ? " is-fallback" : ""}`);
             img.src = product.image_url;
             img.loading = "lazy";
             img.alt = product.name;
@@ -526,29 +526,24 @@
     }
 
     function recommendedProduct(product) {
-        const candidates = (state.data?.products || []).filter((item) => (
-            item.key !== product.key && item.availability === "available"
-        ));
-        if (!candidates.length) return null;
-
-        const sameCategory = candidates
-            .filter((item) => item.category_key === product.category_key)
-            .sort((a, b) => (a.sequence || 10) - (b.sequence || 10));
-        if (sameCategory.length) return sameCategory[0];
-
-        const featured = candidates
-            .filter((item) => item.featured)
-            .sort((a, b) => (a.featured_sequence || 10) - (b.featured_sequence || 10));
-        if (featured.length) return featured[0];
-
-        return candidates.sort((a, b) => (a.sequence || 10) - (b.sequence || 10))[0];
+        const candidates = (state.data?.products || []).filter((item) =>
+            item.key !== product.key && item.availability !== "sold_out"
+        );
+        if (product.recommended_key) {
+            const manual = candidates.find((item) => item.key === product.recommended_key);
+            if (manual) return manual;
+        }
+        return candidates.find((item) => item.category_key === product.category_key)
+            || candidates.find((item) => item.featured)
+            || candidates.sort((a, b) => (a.sequence || 10) - (b.sequence || 10))[0]
+            || null;
     }
 
     function recommendationCard(product) {
         const card = node("button", "fsm-recommendation-card");
         card.type = "button";
         if (product.image_url) {
-            const image = node("img", "fsm-recommendation-image");
+            const image = node("img", `fsm-recommendation-image${product.image_is_fallback ? " is-fallback" : ""}`);
             image.src = product.image_url;
             image.alt = product.name;
             image.loading = "lazy";
@@ -572,7 +567,7 @@
         const content = el("fsm-sheet-content");
         content.textContent = "";
         if (product.image_url) {
-            const image = node("img", "fsm-sheet-image");
+            const image = node("img", `fsm-sheet-image${product.image_is_fallback ? " is-fallback" : ""}`);
             image.src = product.image_url;
             image.alt = product.name;
             content.appendChild(image);

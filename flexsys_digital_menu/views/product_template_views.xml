@@ -43,6 +43,10 @@
                             <field name="digital_menu_vegan"/>
                             <field name="digital_menu_ingredients"/>
                             <field name="digital_menu_allergens"/>
+                            <field name="digital_menu_recommendation_mode"/>
+                            <field name="digital_menu_recommended_product_id"
+                                   options="{'no_create': True}"
+                                   invisible="digital_menu_recommendation_mode != 'manual'"/>
                         </group>
                     </group>
 
