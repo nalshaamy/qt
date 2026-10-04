@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="public_brand_shell" name="FlexSys Digital Brand Shell">
+        &lt;!DOCTYPE html&gt;
+        <html t-att-lang="language or menu.default_language" t-att-dir="'rtl' if (language or menu.default_language) == 'ar' else 'ltr'">
+            <head>
+                <meta charset="utf-8"/>
+                <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+                <meta name="theme-color" t-att-content="menu.theme_id.primary"/>
+                <meta name="robots" content="index,follow"/>
+                <title><t t-out="seo_title"/></title>
+                <link rel="preconnect" href="https://fonts.googleapis.com"/>
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
+                <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+                <link rel="stylesheet" href="/flexsys_digital_menu/static/src/public/menu.css?v=19.0.1.0.18"/>
+                <style t-out="':root{' + css_variables + '}'"/>
+            </head>
+            <body class="fsm-body"
+                  t-att-data-menu-slug="menu.slug"
+                  t-att-data-default-language="menu.default_language if is_menu_page else (language or menu.default_language)"
+                  t-att-data-data-url="data_url if is_menu_page else ''">
+                <div id="fsm-app" class="fsm-app">
+                    <header class="fsm-brand-header">
+                        <div class="fsm-brand-shell">
+                            <button id="fsm-nav-toggle" class="fsm-nav-toggle" type="button" aria-label="Open navigation" aria-expanded="false" hidden="hidden">☰</button>
+
+                            <div class="fsm-brand-core">
+                                <h1 id="fsm-menu-title" class="fsm-brand-name"><t t-out="menu.brand_name or menu.company_id.name or menu.name"/></h1>
+                                <p id="fsm-menu-tagline" class="fsm-brand-tagline" t-att-hidden="not menu.tagline"><t t-out="menu.tagline or ''"/></p>
+                            </div>
+
+                            <div class="fsm-header-actions">
+                                <select id="fsm-branch-select" class="fsm-select" aria-label="Branch" t-att-hidden="not is_menu_page"></select>
+                                <button id="fsm-language-toggle" class="fsm-icon-button" type="button" aria-label="Change language">
+                                    <t t-if="(language or menu.default_language) == 'ar'">EN</t>
+                                    <t t-else="">ع</t>
+                                </button>
+                            </div>
+
+                            <nav id="fsm-brand-nav" class="fsm-brand-nav" aria-label="Brand navigation" t-att-hidden="len(navigation or []) &lt;= 1">
+                                <t t-foreach="navigation or []" t-as="item">
+                                    <a t-att-href="item['url']"
+                                       t-att-class="'fsm-brand-nav-link' + (' is-active' if item.get('active') else '')">
+                                        <t t-out="item['label']"/>
+                                    </a>
+                                </t>
+                            </nav>
+                        </div>
+                    </header>
+
+                    <t t-out="0"/>
+
+                    <footer class="fsm-footer">
+                        <span id="fsm-footer-name">
+                            <t t-if="(language or menu.default_language) == 'ar'">جميع الحقوق محفوظة لـ </t>
+                            <t t-else="">All rights reserved to </t>
+                            <t t-out="menu.company_id.name or menu.name"/>
+                        </span>
+                    </footer>
+                </div>
+            </body>
+        </html>
+    </template>
+
+    <template id="public_menu_page" name="FlexSys Digital Menu Public Page">
+        <t t-call="flexsys_digital_menu.public_brand_shell">
+            <t t-set="is_menu_page" t-value="True"/>
+            <main>
+                <section id="fsm-control-slab" class="fsm-control-slab">
+                    <div class="fsm-search-wrap">
+                        <span class="fsm-search-icon">⌕</span>
+                        <input id="fsm-search" class="fsm-search" type="search" autocomplete="off" placeholder="ابحث في المنيو"/>
+                    </div>
+                    <nav id="fsm-category-nav" class="fsm-category-nav" aria-label="Menu categories"></nav>
+                </section>
+
+                <section id="fsm-status" class="fsm-status" hidden="hidden"></section>
+                <section id="fsm-banners" class="fsm-banners" hidden="hidden" aria-label="Promotional banner"></section>
+                <section id="fsm-offers" class="fsm-offers" hidden="hidden"></section>
+                <section id="fsm-featured" class="fsm-section fsm-featured" hidden="hidden"></section>
+                <div id="fsm-sections"></div>
+            </main>
+
+            <div id="fsm-sheet-backdrop" class="fsm-sheet-backdrop" hidden="hidden"></div>
+            <aside id="fsm-product-sheet" class="fsm-product-sheet" aria-modal="true" aria-hidden="true" role="dialog" tabindex="-1" hidden="hidden">
+                <button id="fsm-sheet-close" class="fsm-sheet-close" type="button" aria-label="Close">×</button>
+                <div id="fsm-sheet-content"></div>
+            </aside>
+
+            <script defer="defer" src="/flexsys_digital_menu/static/src/public/menu.js?v=19.0.1.0.18"></script>
+        </t>
+    </template>
+
+    <template id="public_offers_page" name="FlexSys Digital Menu Offers Page">
+        <t t-call="flexsys_digital_menu.public_brand_shell">
+            <t t-set="is_menu_page" t-value="False"/>
+            <main class="fsm-offers-page-main">
+                <header class="fsm-offers-page-heading">
+                    <h2><t t-if="language == 'ar'">العروض</t><t t-else="">Offers</t></h2>
+                    <p><t t-if="language == 'ar'">عروض متاحة لفترة محدودة</t><t t-else="">Limited-time offers</t></p>
+                </header>
+                <section class="fsm-offers-page-grid" t-if="offers">
+                    <t t-foreach="offers" t-as="offer">
+                        <article class="fsm-offer-page-card">
+                            <div class="fsm-offer-page-media" t-if="offer['image_url']">
+                                <img t-att-src="offer['image_url']" t-att-alt="offer['name']" loading="lazy"/>
+                            </div>
+                            <div class="fsm-offer-page-media fsm-offer-page-media-placeholder" t-else="">✦</div>
+                            <div class="fsm-offer-page-body">
+                                <span class="fsm-offer-page-kicker"><t t-if="language == 'ar'">عرض</t><t t-else="">Offer</t></span>
+                                <h3><t t-out="offer['name']"/></h3>
+                                <p class="fsm-offer-page-subtitle" t-if="offer['subtitle']"><t t-out="offer['subtitle']"/></p>
+                                <p class="fsm-offer-page-description" t-if="offer['description']"><t t-out="offer['description']"/></p>
+                                <div class="fsm-offer-page-pricing" t-if="offer['display_price']">
+                                    <strong><t t-out="offer['display_price']"/></strong>
+                                    <span t-if="offer['display_original_price'] and offer['display_original_price'] != offer['display_price']"><t t-out="offer['display_original_price']"/></span>
+                                </div>
+                                <a t-if="offer['product_keys']" t-att-href="offer['action_url']" class="fsm-offer-page-action">
+                                    <t t-if="language == 'ar'">عرض المنتجات</t><t t-else="">View products</t>
+                                </a>
+                            </div>
+                        </article>
+                    </t>
+                </section>
+                <div class="fsm-empty-brand-page" t-if="not offers">
+                    <t t-if="language == 'ar'">لا توجد عروض فعالة حاليًا.</t><t t-else="">No active offers are available right now.</t>
+                </div>
+            </main>
+            <script defer="defer" src="/flexsys_digital_menu/static/src/public/brand_page.js?v=19.0.1.0.18"></script>
+        </t>
+    </template>
+
+    <template id="public_brand_page" name="FlexSys Digital Brand Page">
+        <t t-call="flexsys_digital_menu.public_brand_shell">
+            <t t-set="is_menu_page" t-value="False"/>
+            <main class="fsm-brand-page-main">
+                <article class="fsm-brand-page-card">
+                    <header class="fsm-brand-page-heading">
+                        <h2><t t-out="page.title or page.name"/></h2>
+                        <p t-if="page.subtitle"><t t-out="page.subtitle"/></p>
+                    </header>
+                    <div class="fsm-brand-page-content" t-if="page.body_html" t-field="page.body_html"/>
+                    <section t-if="page.page_type == 'branches'" class="fsm-branches-grid">
+                        <t t-foreach="branches or []" t-as="branch">
+                            <article class="fsm-branch-card">
+                                <img t-if="branch['image_url']" t-att-src="branch['image_url']" class="fsm-branch-image" t-att-alt="branch['name']"/>
+                                <div class="fsm-branch-body">
+                                    <div class="fsm-branch-heading">
+                                        <h3><t t-out="branch['name']"/></h3>
+                                        <span t-if="branch['is_open'] == True" class="fsm-branch-status is-open"><t t-if="language == 'ar'">مفتوح الآن</t><t t-else="">Open now</t></span>
+                                        <span t-if="branch['is_open'] == False" class="fsm-branch-status is-closed"><t t-if="language == 'ar'">مغلق الآن</t><t t-else="">Closed now</t></span>
+                                    </div>
+                                    <p t-if="branch['description']" class="fsm-branch-description"><t t-out="branch['description']"/></p>
+                                    <p t-if="branch['address']" class="fsm-branch-address"><t t-out="branch['address']"/></p>
+                                    <div class="fsm-branch-actions" t-if="branch['map_url'] or branch['phone'] or branch['whatsapp']">
+                                        <a t-if="branch['map_url']" t-att-href="branch['map_url']" target="_blank" rel="noopener" class="fsm-branch-action"><t t-if="language == 'ar'">الاتجاهات</t><t t-else="">Directions</t></a>
+                                        <a t-if="branch['phone']" t-att-href="'tel:' + branch['phone']" class="fsm-branch-action"><t t-if="language == 'ar'">اتصال</t><t t-else="">Call</t></a>
+                                        <a t-if="branch['whatsapp']" t-att-href="'https://wa.me/' + branch['whatsapp'].replace('+','').replace(' ','')" target="_blank" rel="noopener" class="fsm-branch-action">WhatsApp</a>
+                                    </div>
+                                    <div t-if="branch['hours']" class="fsm-branch-hours">
+                                        <h4><t t-if="language == 'ar'">ساعات العمل</t><t t-else="">Working hours</t></h4>
+                                        <div t-foreach="branch['hours']" t-as="hour" class="fsm-branch-hour">
+                                            <span><t t-out="hour['day']"/></span>
+                                            <strong t-if="hour['closed']"><t t-if="language == 'ar'">مغلق</t><t t-else="">Closed</t></strong>
+                                            <strong t-else=""><t t-out="hour['from']"/> – <t t-out="hour['to']"/></strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </article>
+                        </t>
+                        <div t-if="not branches" class="fsm-empty-brand-page"><t t-if="language == 'ar'">لا توجد فروع منشورة حاليًا.</t><t t-else="">No branches are available yet.</t></div>
+                    </section>
+                </article>
+            </main>
+            <script defer="defer" src="/flexsys_digital_menu/static/src/public/brand_page.js?v=19.0.1.0.18"></script>
+        </t>
+    </template>
+
+    <template id="backend_preview_page" name="FlexSys Digital Menu Backend Preview">
+        &lt;!DOCTYPE html&gt;
+        <html>
+            <head>
+                <meta charset="utf-8"/>
+                <meta name="viewport" content="width=device-width, initial-scale=1"/>
+                <title>Preview — <t t-out="menu.name"/></title>
+                <style>
+                    *{box-sizing:border-box}body{margin:0;background:#111827;font-family:system-ui,sans-serif;color:#fff}.bar{height:64px;padding:10px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:#0b1220}.modes{display:flex;gap:8px}.modes button{border:1px solid #334155;background:#182235;color:#fff;border-radius:9px;padding:8px 13px;cursor:pointer}.modes button.active{background:#fff;color:#111827}.stage{height:calc(100vh - 64px);display:grid;place-items:center;padding:18px;overflow:auto}.frame{height:100%;background:#fff;border:0;border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.35);transition:width .18s ease}.frame.mobile{width:390px}.frame.tablet{width:820px}.frame.desktop{width:min(1440px,100%)}@media(max-width:600px){.bar{height:auto;align-items:flex-start;flex-direction:column}.stage{height:calc(100vh - 110px);padding:8px}.frame.mobile,.frame.tablet,.frame.desktop{width:100%}}
+                </style>
+            </head>
+            <body>
+                <div class="bar">
+                    <strong><t t-out="menu.name"/> — Preview</strong>
+                    <div class="modes">
+                        <button type="button" class="active" data-mode="mobile">Mobile</button>
+                        <button type="button" data-mode="tablet">Tablet</button>
+                        <button type="button" data-mode="desktop">Desktop</button>
+                    </div>
+                </div>
+                <div class="stage">
+                    <iframe id="fsm-preview-frame" class="frame mobile" t-att-src="content_url" title="Digital Menu Preview"></iframe>
+                </div>
+                <script>
+                    document.querySelectorAll('[data-mode]').forEach(function(button){button.addEventListener('click',function(){document.querySelectorAll('[data-mode]').forEach(function(b){b.classList.remove('active')});button.classList.add('active');document.getElementById('fsm-preview-frame').className='frame '+button.dataset.mode;});});
+                </script>
+            </body>
+        </html>
+    </template>
+</odoo>
