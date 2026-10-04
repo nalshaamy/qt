@@ -61,6 +61,44 @@ class FlexSysDigitalMenuController(http.Controller):
             headers.append(("Content-Disposition", f'inline; filename="{filename}"'))
         return request.make_response(raw, headers=headers)
 
+    @staticmethod
+    def _format_public_amount(amount, currency):
+        if amount is None:
+            return ""
+        decimals = int(currency.decimal_places if currency else 2)
+        number = f"{float(amount):,.{decimals}f}"
+        if decimals:
+            number = number.rstrip("0").rstrip(".")
+        symbol = (currency.symbol or currency.name) if currency else "SAR"
+        if currency and currency.position == "before":
+            return f"{symbol} {number}"
+        return f"{number} {symbol}"
+
+    def _offers_page_values(self, menu, requested_lang=None, preview=False):
+        lang_code, language = menu._language_code(requested_lang)
+        menu = menu.with_context(lang=lang_code)
+        payload = menu._public_payload(requested_lang=language, preview=preview)
+        currency = menu.currency_id
+        offers = []
+        for item in payload.get("offers", []):
+            offer = dict(item)
+            offer["display_price"] = self._format_public_amount(offer.get("price"), currency)
+            offer["display_original_price"] = self._format_public_amount(offer.get("original_price"), currency)
+            offer["action_url"] = (
+                f"/digital-menu/preview-content/{menu.id}?lang={language}&offer={offer['key']}"
+                if preview else f"/menu/{menu.slug}?lang={language}&offer={offer['key']}"
+            )
+            offers.append(offer)
+        return {
+            "menu": menu,
+            "offers": offers,
+            "css_variables": menu.css_variables(),
+            "seo_title": ("العروض" if language == "ar" else "Offers") + " — " + (menu.brand_name or menu.company_id.name or menu.name),
+            "logo_url": f"/menu/{menu.slug}/logo" if menu.logo else "",
+            "language": language,
+            "navigation": menu._public_navigation(language, active_key="offers", preview=preview),
+        }
+
     @http.route("/menu/<string:slug>", type="http", auth="public", methods=["GET"], csrf=False, sitemap=False)
     def public_menu(self, slug, **kwargs):
         menu = self._find_menu(slug)
@@ -77,6 +115,18 @@ class FlexSysDigitalMenuController(http.Controller):
         }
         response = request.render("flexsys_digital_menu.public_menu_page", values)
         response.headers["Cache-Control"] = "public, max-age=120, stale-while-revalidate=300"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
+    @http.route("/menu/<string:slug>/offers", type="http", auth="public", methods=["GET"], csrf=False, sitemap=False)
+    def public_offers(self, slug, lang=None, **kwargs):
+        menu = self._find_menu(slug)
+        if not menu:
+            return request.not_found()
+        values = self._offers_page_values(menu, requested_lang=lang, preview=False)
+        response = request.render("flexsys_digital_menu.public_offers_page", values)
+        response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=120"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         return response
@@ -146,6 +196,16 @@ class FlexSysDigitalMenuController(http.Controller):
             "navigation": menu._public_navigation(menu.default_language, active_key="menu", preview=True),
         })
 
+    @http.route("/digital-menu/preview-offers/<int:menu_id>", type="http", auth="user", methods=["GET"], sitemap=False)
+    def backend_preview_offers(self, menu_id, lang=None, **kwargs):
+        menu = self._get_preview_menu(menu_id)
+        if not menu:
+            return request.not_found()
+        return request.render(
+            "flexsys_digital_menu.public_offers_page",
+            self._offers_page_values(menu, requested_lang=lang, preview=True),
+        )
+
     @http.route("/digital-menu/preview-asset/<int:menu_id>/logo", type="http", auth="user", methods=["GET"], sitemap=False)
     def preview_logo(self, menu_id, **kwargs):
         menu = self._get_preview_menu(menu_id)
@@ -170,7 +230,9 @@ class FlexSysDigitalMenuController(http.Controller):
         if not menu:
             return request.not_found()
         line = request.env["flexsys.menu.product"].search([("menu_id", "=", menu.id), ("public_key", "=", public_key)], limit=1)
-        return self._binary_response(line._effective_image_source(), cache_seconds=0) if line else request.not_found()
+        if not line:
+            return request.not_found()
+        return self._binary_response(line._effective_image_source() or menu.logo or menu.company_id.logo, cache_seconds=0)
 
     @http.route("/digital-menu/preview-asset/<int:menu_id>/offer/<string:public_key>/image", type="http", auth="user", methods=["GET"], sitemap=False)
     def preview_offer_image(self, menu_id, public_key, **kwargs):
@@ -240,7 +302,7 @@ class FlexSysDigitalMenuController(http.Controller):
         ], limit=1)
         if not line:
             return request.not_found()
-        return self._binary_response(line._effective_image_source(), cache_seconds=900)
+        return self._binary_response(line._effective_image_source() or menu.logo or menu.company_id.logo, cache_seconds=900)
 
     @http.route(
         "/menu/<string:slug>/offer/<string:public_key>/image",

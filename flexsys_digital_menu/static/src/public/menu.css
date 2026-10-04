@@ -1,4 +1,4 @@
-/* FlexSys Digital Menu — public UI target 19.0.1.0.14 */
+/* FlexSys Digital Menu — public UI target 19.0.1.0.15 */
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 html.fsm-modal-open,body.fsm-modal-open{overflow:hidden!important;overscroll-behavior:none}
@@ -65,6 +65,27 @@ main{flex:1}
 .fsm-offer-dots{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);display:flex;gap:5px}
 .fsm-offer-dot{width:6px;height:6px;padding:0;border:0;border-radius:50%;background:color-mix(in srgb,var(--menu-text,#17201D) 25%,transparent);cursor:pointer}
 .fsm-offer-dot.is-active{width:17px;border-radius:999px;background:var(--menu-primary,#173F35)}
+
+/* ---------- Dedicated offers page ---------- */
+.fsm-offers-page-main{min-height:58vh;padding:24px 16px 42px;background:var(--menu-bg,#F6F7F4)}
+.fsm-offers-page-heading{width:min(1180px,100%);margin:0 auto 17px;text-align:center}
+.fsm-offers-page-heading h2{margin:0;font-size:1.5rem;line-height:1.35}
+.fsm-offers-page-heading p{margin:5px 0 0;color:var(--menu-text-muted,#67716D);font-size:.82rem}
+.fsm-offers-page-grid{width:min(1180px,100%);margin:0 auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.fsm-offer-page-card{display:grid;grid-template-columns:minmax(180px,42%) minmax(0,1fr);overflow:hidden;border:1px solid color-mix(in srgb,var(--menu-border,#D8E2DD) 82%,transparent);border-radius:20px;background:var(--menu-surface,#fff);box-shadow:0 7px 22px rgba(15,23,42,.05)}
+.fsm-offer-page-media{min-height:220px;background:var(--menu-primary-light,#EAF1EE);overflow:hidden}
+.fsm-offer-page-media img{display:block;width:100%;height:100%;min-height:220px;object-fit:cover}
+.fsm-offer-page-media-placeholder{display:grid;place-items:center;color:var(--menu-primary,#173F35);font-size:1.5rem}
+.fsm-offer-page-body{min-width:0;padding:19px 20px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;text-align:start}
+.fsm-offer-page-kicker{font-size:.68rem;font-weight:700;color:var(--menu-primary,#173F35)}
+.fsm-offer-page-body h3{margin:2px 0 0;font-size:1.2rem;line-height:1.45}
+.fsm-offer-page-subtitle{margin:5px 0 0;font-size:.82rem;font-weight:600}
+.fsm-offer-page-description{margin:7px 0 0;color:var(--menu-text-muted,#67716D);font-size:.78rem;line-height:1.7}
+.fsm-offer-page-pricing{display:flex;align-items:baseline;gap:8px;margin-top:10px}
+.fsm-offer-page-pricing strong{font-size:1.12rem;color:var(--menu-primary,#173F35)}
+.fsm-offer-page-pricing span{font-size:.72rem;color:var(--menu-text-muted,#67716D);text-decoration:line-through}
+.fsm-offer-page-action{margin-top:12px;display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:6px 14px;border-radius:999px;background:var(--menu-primary,#173F35);color:var(--menu-button-text,#fff);font-size:.74rem;font-weight:700;text-decoration:none}
+.fsm-section-all{padding-top:20px}
 
 /* ---------- Sections / product grid ---------- */
 .fsm-section{padding:25px 16px;scroll-margin-top:118px}
@@ -229,6 +250,8 @@ main{flex:1}
   .fsm-description-box{padding:12px 13px}.fsm-description-full{font-size:.84rem}
   .fsm-recommendation-card{grid-template-columns:70px 1fr auto}.fsm-recommendation-image,.fsm-recommendation-placeholder{width:70px;height:58px}
   .fsm-brand-page-main{padding:20px 10px 32px}.fsm-brand-page-heading h2{font-size:1.28rem}
+  .fsm-offers-page-main{padding:18px 10px 32px}.fsm-offers-page-heading h2{font-size:1.28rem}
+  .fsm-offers-page-grid{grid-template-columns:1fr;gap:11px}.fsm-offer-page-card{grid-template-columns:38% minmax(0,1fr);border-radius:16px}.fsm-offer-page-media,.fsm-offer-page-media img{min-height:148px}.fsm-offer-page-body{padding:12px 13px}.fsm-offer-page-body h3{font-size:.96rem}.fsm-offer-page-description{font-size:.7rem}.fsm-offer-page-action{min-height:31px;padding:5px 11px;font-size:.68rem}
   .fsm-branches-grid{grid-template-columns:1fr;gap:11px;margin-top:15px}.fsm-branch-image{height:150px}
   .fsm-footer{padding:7px 10px 9px;font-size:.68rem}
 }

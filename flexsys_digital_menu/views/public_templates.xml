@@ -12,7 +12,7 @@
                 <link rel="preconnect" href="https://fonts.googleapis.com"/>
                 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
                 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
-                <link rel="stylesheet" href="/flexsys_digital_menu/static/src/public/menu.css?v=19.0.1.0.14"/>
+                <link rel="stylesheet" href="/flexsys_digital_menu/static/src/public/menu.css?v=19.0.1.0.15"/>
                 <style t-out="':root{' + css_variables + '}'"/>
             </head>
             <body class="fsm-body"
@@ -86,7 +86,46 @@
                 <div id="fsm-sheet-content"></div>
             </aside>
 
-            <script defer="defer" src="/flexsys_digital_menu/static/src/public/menu.js?v=19.0.1.0.14"></script>
+            <script defer="defer" src="/flexsys_digital_menu/static/src/public/menu.js?v=19.0.1.0.15"></script>
+        </t>
+    </template>
+
+    <template id="public_offers_page" name="FlexSys Digital Menu Offers Page">
+        <t t-call="flexsys_digital_menu.public_brand_shell">
+            <t t-set="is_menu_page" t-value="False"/>
+            <main class="fsm-offers-page-main">
+                <header class="fsm-offers-page-heading">
+                    <h2><t t-if="language == 'ar'">العروض</t><t t-else="">Offers</t></h2>
+                    <p><t t-if="language == 'ar'">عروض متاحة لفترة محدودة</t><t t-else="">Limited-time offers</t></p>
+                </header>
+                <section class="fsm-offers-page-grid" t-if="offers">
+                    <t t-foreach="offers" t-as="offer">
+                        <article class="fsm-offer-page-card">
+                            <div class="fsm-offer-page-media" t-if="offer['image_url']">
+                                <img t-att-src="offer['image_url']" t-att-alt="offer['name']" loading="lazy"/>
+                            </div>
+                            <div class="fsm-offer-page-media fsm-offer-page-media-placeholder" t-else="">✦</div>
+                            <div class="fsm-offer-page-body">
+                                <span class="fsm-offer-page-kicker"><t t-if="language == 'ar'">عرض</t><t t-else="">Offer</t></span>
+                                <h3><t t-out="offer['name']"/></h3>
+                                <p class="fsm-offer-page-subtitle" t-if="offer['subtitle']"><t t-out="offer['subtitle']"/></p>
+                                <p class="fsm-offer-page-description" t-if="offer['description']"><t t-out="offer['description']"/></p>
+                                <div class="fsm-offer-page-pricing" t-if="offer['display_price']">
+                                    <strong><t t-out="offer['display_price']"/></strong>
+                                    <span t-if="offer['display_original_price'] and offer['display_original_price'] != offer['display_price']"><t t-out="offer['display_original_price']"/></span>
+                                </div>
+                                <a t-if="offer['product_keys']" t-att-href="offer['action_url']" class="fsm-offer-page-action">
+                                    <t t-if="language == 'ar'">عرض المنتجات</t><t t-else="">View products</t>
+                                </a>
+                            </div>
+                        </article>
+                    </t>
+                </section>
+                <div class="fsm-empty-brand-page" t-if="not offers">
+                    <t t-if="language == 'ar'">لا توجد عروض فعالة حاليًا.</t><t t-else="">No active offers are available right now.</t>
+                </div>
+            </main>
+            <script defer="defer" src="/flexsys_digital_menu/static/src/public/brand_page.js?v=19.0.1.0.15"></script>
         </t>
     </template>
 
@@ -132,7 +171,7 @@
                     </section>
                 </article>
             </main>
-            <script defer="defer" src="/flexsys_digital_menu/static/src/public/brand_page.js?v=19.0.1.0.14"></script>
+            <script defer="defer" src="/flexsys_digital_menu/static/src/public/brand_page.js?v=19.0.1.0.15"></script>
         </t>
     </template>
 

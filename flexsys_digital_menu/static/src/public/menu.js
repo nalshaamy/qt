@@ -6,7 +6,9 @@
     const defaultLanguage = body.dataset.defaultLanguage || "ar";
     const dataUrl = body.dataset.dataUrl || `/menu/${encodeURIComponent(slug)}/data`;
     if (!slug) return;
-    const requestedLanguage = new URLSearchParams(window.location.search).get("lang");
+    const initialParams = new URLSearchParams(window.location.search);
+    const requestedLanguage = initialParams.get("lang");
+    const requestedOffer = initialParams.get("offer") || "";
 
     const el = (id) => document.getElementById(id);
     const state = {
@@ -14,7 +16,7 @@
         branch: localStorage.getItem(`fsm:${slug}:branch`) || "",
         query: "",
         category: "all",
-        offer: "",
+        offer: requestedOffer,
         offerIndex: 0,
         data: null,
     };
@@ -150,6 +152,11 @@
         if (!response.ok) throw new Error("Unable to load menu");
         state.data = await response.json();
         if (state.data.menu.branch?.key) state.branch = state.data.menu.branch.key;
+        if (state.offer) {
+            const requestedIndex = (state.data.offers || []).findIndex((item) => item.key === state.offer);
+            if (requestedIndex >= 0) state.offerIndex = requestedIndex;
+            else state.offer = "";
+        }
         render();
         if (!trackedView) {
             trackedView = true;
@@ -310,6 +317,16 @@
             header.appendChild(showAll);
         }
         inner.appendChild(header);
+        const grid = node("div", "fsm-grid");
+        products.forEach((product) => grid.appendChild(productCard(product)));
+        inner.appendChild(grid);
+        wrapper.appendChild(inner);
+        return wrapper;
+    }
+
+    function plainProductGrid(products) {
+        const wrapper = node("section", "fsm-section fsm-section-all");
+        const inner = node("div", "fsm-section-inner");
         const grid = node("div", "fsm-grid");
         products.forEach((product) => grid.appendChild(productCard(product)));
         inner.appendChild(grid);
@@ -491,16 +508,8 @@
         }
 
         if (state.category === "all") {
-            const featuredProducts = filtered.filter((product) => product.featured).sort((a, b) => (a.featured_sequence || 10) - (b.featured_sequence || 10));
-            if (featuredProducts.length) {
-                featured.appendChild(section(t("featured"), featuredProducts, "featured"));
-                featured.hidden = false;
-            }
-
-            state.data.categories.forEach((category) => {
-                const products = filtered.filter((product) => product.category_key === category.key);
-                if (products.length) sections.appendChild(section(category.name, products, category.key, category.slab_background, category.image_url));
-            });
+            // "All" is intentionally one continuous product grid: no category headings and no duplicated featured section.
+            sections.appendChild(plainProductGrid(filtered));
         } else {
             const category = state.data.categories.find((item) => item.key === state.category);
             if (category) {

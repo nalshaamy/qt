@@ -1,61 +1,52 @@
 # FlexSys Digital Menu — Validation Report
 
-**Version:** 19.0.1.0.14  
-**Module:** `flexsys_digital_menu`  
-**Target:** Odoo 19 Enterprise / Odoo.sh
+**Version:** 19.0.1.0.15  
+**Target:** Odoo 19 Enterprise / Odoo.sh  
+**Validation type:** Static/source/package validation. Odoo runtime install/upgrade was not executed in this environment.
 
-## Scope of this build
+## Changes validated in this build
 
-This release implements the approved public UI target on top of the existing V1 feature set. It is primarily a presentation-layer release; the established product/menu/branch/pricelist/offer/analytics architecture remains intact.
+1. **All-products behavior**
+   - `All / الكل` renders one continuous product grid.
+   - Category headings are not rendered while `All` is active.
+   - Featured products are not duplicated in a separate Featured block while `All` is active.
+   - Selecting a specific category still renders only that category with its heading.
 
-### UI target changes
+2. **Dedicated Offers page**
+   - Public route added: `/menu/<slug>/offers`.
+   - Preview route added: `/digital-menu/preview-offers/<menu_id>`.
+   - Brand navigation now links Offers to the dedicated page, not `#fsm-offers`.
+   - Page content is sourced from the existing public payload, therefore only currently active offers are shown; on public routes that also means published offers only.
+   - Offer action links return to the menu with `?offer=<public_key>`, and the public menu frontend applies that offer automatically.
 
-- Compact centered Brand Shell with Brand Name and optional Tagline.
-- Desktop brand navigation and mobile hamburger navigation.
-- Compact search and pill category filters.
-- Large offer hero/banner with image, content, pricing, navigation arrows and dots.
-- Offers automatically appear in shared brand navigation when an active offer exists.
-- Four-column desktop Cards presentation.
-- Single-column horizontal Cards presentation on mobile.
-- Updated Compact and Image Focused layouts.
-- Refined product card typography, spacing, borders, shadows, badges and sold-out state.
-- Existing description teaser / read-more behavior preserved.
-- Refined desktop side sheet and mobile bottom sheet product details.
-- Refined Branch Page cards and working-hours presentation.
-- Compact company-rights footer retained.
-- No cart/add-to-order controls were added.
-- Public CSS/JS includes a version query to reduce stale-browser-cache issues after upgrade.
+3. **Offer image size in Odoo backend**
+   - Offer image field now uses Odoo's compact `oe_avatar` image presentation instead of expanding to an oversized form image.
 
-## Static validation performed
+4. **Product image fallback**
+   - If no menu-specific or Odoo product image exists, the product image endpoint returns the Digital Menu brand logo.
+   - If no Digital Menu logo exists, it falls back to the Odoo company logo.
+   - The same fallback is implemented for public and backend-preview image routes.
 
-- Python AST parse across module Python files: **PASS**
-- Python bytecode compilation: **PASS**
-- XML parse across module XML files: **PASS**
-- JavaScript syntax (`node --check`) for `menu.js` and `brand_page.js`: **PASS**
-- Manifest parse / version / installable checks: **PASS**
-- Manifest data-file existence checks: **PASS**
-- Odoo 19 Search View guard: no legacy `expand` / `string` attributes on `<search><group>`: **PASS**
-- Arabic PO per-entry `module: flexsys_digital_menu` marker guard: **PASS**
-- Approved UI contract guards for offer hero, mobile navigation, cards layout, branches and cache-busted assets: **PASS**
-- Generated Python cache files removed before packaging: **PASS**
+## Static checks executed
 
-## Odoo tests included
-
-The module test suite now also contains coverage that verifies an active offer is added to the public brand navigation with an anchor to the offers section.
-
-The Odoo TransactionCase suite is present but was **not executed against a live Odoo 19 registry in this environment**.
+- Python byte-code compilation: **PASS**
+- XML parse validation: **PASS** (16 XML files)
+- JavaScript syntax (`node --check`): **PASS**
+- Manifest parse/version: **PASS** (`19.0.1.0.15`)
+- Odoo 19 Arabic PO module-comment validation: **PASS**
+- Feature assertions for unified All grid, Offers route, compact offer image widget and logo fallback: **PASS**
+- Old Offers hash navigation (`#fsm-offers`) in executable source: **NONE FOUND**
+- Public CSS/JS cache-busting version updated to `19.0.1.0.15`: **PASS**
 
 ## Runtime status
 
-A real Odoo.sh Staging **Upgrade** remains required. Static checks cannot guarantee final browser layout, QWeb execution, registry migration, translated runtime content or database-specific interactions.
+**Not executed here.** Final acceptance still requires an Odoo.sh Staging module Upgrade and browser verification on desktop/mobile.
 
-### Recommended acceptance after upgrade
+Recommended runtime checks after upgrade:
 
-1. Hard refresh `/menu/<slug>` and confirm the centered Brand Shell and new search/category styling.
-2. Test desktop at 1440px+: offer hero, four product cards per row and featured section.
-3. Test Android/iPhone widths: hamburger navigation, single-column horizontal cards and product bottom sheet.
-4. Create two active offers and verify arrows/dots switch the hero offer.
-5. Verify **Offers / العروض** appears in brand navigation only while at least one active offer exists.
-6. Switch Cards / Compact / Image Focused and verify each remains usable.
-7. Open a Branches page and verify branch cards, status, contact/directions and working hours.
-8. Verify Arabic RTL and English LTR.
+- Open `/menu/<slug>` and press **All**: all products should appear in one grid with no category headings.
+- Select one category: only that category's products should appear.
+- Click **Offers / العروض** in the Brand navigation: `/menu/<slug>/offers` should open.
+- Verify expired, future or unpublished offers do not appear publicly.
+- Verify Offer image is compact in the Odoo Offer form.
+- Open a product with no image: the brand/company logo should appear automatically in its product card/details.

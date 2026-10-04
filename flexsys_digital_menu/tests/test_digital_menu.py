@@ -219,4 +219,15 @@ class TestFlexSysDigitalMenu(TransactionCase):
         navigation = self.menu._public_navigation("en")
         self.assertEqual(navigation[0]["key"], "menu")
         self.assertEqual(navigation[1]["key"], "offers")
-        self.assertTrue(navigation[1]["url"].endswith("#fsm-offers"))
+        self.assertEqual(navigation[1]["url"], "/menu/main/offers?lang=en")
+    def test_product_without_image_uses_brand_logo_route(self):
+        self.menu.state = "published"
+        image = Image.new("RGB", (32, 32), (20, 90, 65))
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        self.menu.logo = base64.b64encode(buffer.getvalue())
+        self.product.image_1920 = False
+        self.product.digital_menu_image = False
+        payload = self.menu._public_payload(requested_lang="en")
+        self.assertTrue(payload["products"][0]["image_url"].endswith(f"/product/{self.line.public_key}/image"))
+

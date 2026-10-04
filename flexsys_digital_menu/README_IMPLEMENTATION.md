@@ -238,3 +238,13 @@ This build applies the approved FlexSys Digital Menu visual target to the existi
 - Public CSS and JavaScript URLs now include a build version query (`19.0.1.0.14`) so browsers do not keep stale visual assets after an Odoo.sh upgrade.
 
 The approved mockup remains a visual target rather than a literal screenshot of runtime data: customer colors, images, text and available sections continue to come from Odoo and the Brand Engine.
+
+## 19.0.1.0.15 — Unified All Grid, Offers Page & Image Fallback
+
+- `All / الكل` now renders every matching product in one continuous grid with no category headings and no duplicated Featured block. Selecting a category still shows only that category with its heading.
+- Offers navigation now opens a real standalone `/menu/<slug>/offers` page instead of a hash jump. Only published, currently active offers are rendered.
+- Offer cards link back to the menu with the selected offer applied, so linked offer products can be browsed immediately.
+- Added a preview-safe Offers page route for backend menu previews.
+- Reduced the backend Offer image widget to Odoo's compact avatar-style size, matching the normal product-image editing experience.
+- Products without their own menu/product image now automatically use the Digital Menu brand logo, falling back to the Odoo company logo when necessary. This fallback applies to public and backend preview routes.
+- Public CSS/JS cache version bumped to `19.0.1.0.15`.

@@ -611,10 +611,12 @@ class FlexSysMenu(models.Model):
         lang_code, language = self._language_code(requested_lang)
         menu = self.sudo().with_company(self.company_id).with_context(lang=lang_code)
         suffix = f"?lang={language}" if language in ("ar", "en") else ""
+        menu_url = f"/digital-menu/preview-content/{menu.id}{suffix}" if preview else f"/menu/{menu.slug}{suffix}"
+        offers_url = f"/digital-menu/preview-offers/{menu.id}{suffix}" if preview else f"/menu/{menu.slug}/offers{suffix}"
         items = [{
             "key": "menu",
             "label": "المنيو" if language == "ar" else "Menu",
-            "url": f"/menu/{menu.slug}{suffix}",
+            "url": menu_url,
             "active": active_key == "menu",
         }]
         offer_records = self.env["flexsys.menu.offer"].sudo().with_company(menu.company_id).with_context(lang=lang_code).search(
@@ -624,7 +626,7 @@ class FlexSysMenu(models.Model):
             items.append({
                 "key": "offers",
                 "label": "العروض" if language == "ar" else "Offers",
-                "url": f"/menu/{menu.slug}{suffix}#fsm-offers",
+                "url": offers_url,
                 "active": active_key == "offers",
                 "type": "offers",
             })
@@ -725,7 +727,8 @@ class FlexSysMenu(models.Model):
                     "category_key": category.public_key if category else "uncategorized",
                     "name": line._effective_name(),
                     "description": line._effective_description() if menu.show_descriptions else "",
-                    "image_url": f"{asset_base}/product/{line.public_key}/image" if menu.show_product_images and line._effective_image_source() else "",
+                    # If a product has no image, the public product-image route falls back to the brand/company logo.
+                    "image_url": f"{asset_base}/product/{line.public_key}/image" if menu.show_product_images and (line._effective_image_source() or menu.logo or menu.company_id.logo) else "",
                     "price": price,
                     "price_from": len(variants) > 1,
                     "variants": variants if menu.show_variants else [],
