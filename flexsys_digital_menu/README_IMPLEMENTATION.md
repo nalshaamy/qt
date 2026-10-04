@@ -44,7 +44,7 @@ Set **Public Domain** to `qtcafe.sa` when the Odoo instance serves that hostname
 2. Commit/push to the Odoo.sh branch.
 3. Update the Apps list.
 4. Install **FlexSys Digital Menu**.
-5. Grant **Digital Menu Manager** to the responsible backend user.
+5. Set **Digital Menu → Administrator** for the responsible backend user.
 6. Point of Sale → Digital Menu → Create Menu.
 7. Upload logo → Generate Brand → organize categories/products → Publish.
 
@@ -135,3 +135,106 @@ Digital Menu security groups now use the native Odoo 19 `res.groups.privilege` h
 - Added Odoo-recognized occurrences for field/view/code terms.
 - This fixes the Odoo 19 translation-loader crash during install/upgrade (`PoFileReader` failing on `match.groups()` when the module comment is missing).
 - Added static validation to catch missing module comments or malformed PO occurrences before packaging.
+
+## 19.0.1.0.10
+
+- Changed category chips from scroll-only navigation to true filtering.
+- `All` shows all menu categories/products; a selected category shows only that category's products.
+- Reduced public hero/header, search/category slab, and footer vertical footprint again.
+- Footer now shows the linked Odoo company's name instead of the menu name.
+
+
+## 19.0.1.0.11
+- Public header uses Brand Name (fallback company name) and centers logo + brand identity.
+- Footer is localized as “All rights reserved to / جميع الحقوق محفوظة لـ” + company name.
+- Hero/footer text colors are chosen automatically for contrast with optional overrides in Branding.
+- Branding daily UI is simplified; Hero Image and SEO Title stay backward-compatible but are hidden from the daily Branding tab.
+- Important badges use a subtle pulse with reduced-motion protection.
+- Mobile product details use a viewport-safe fixed bottom sheet with higher z-index, scroll locking and safe-area support.
+
+## 19.0.1.0.12 — Lightweight Brand Shell + Page Engine
+
+- Replaced the previous hero-style public header with a compact, centered **Brand Shell**: logo → Brand Name → optional Tagline.
+- The language/branch controls remain independent from the centered brand identity, so the header stays visually balanced.
+- The public navigation is intentionally hidden when the menu is the only public page.
+- Added a lightweight `flexsys.brand.page` engine for future customer-facing pages such as **About Brand**, **Branches**, and custom pages.
+- Published Brand Pages automatically appear in the shared public navigation; draft/unpublished pages remain hidden.
+- Brand Pages inherit the same logo, Brand Name, Cairo typography, Brand Engine colors, text contrast, navigation, and company footer as the Digital Menu.
+- Current V1 remains menu-first and lightweight; no extra public page is created or exposed by default.
+- Generic future page route: `/menu/<menu-slug>/page/<page-slug>`.
+- Public navigation payload is language-aware and preserves Arabic/English context when moving between the menu and future Brand Pages.
+- The public menu route and data architecture remain backward-compatible.
+
+## 19.0.1.0.13 — Offers, Branch Pages, Layouts & Lightweight Analytics
+
+### Offers / Promotions
+- Added native `flexsys.menu.offer` records with image, bilingual title/description, publish state, date window and reusable Digital Menu schedules.
+- Offers may link to one or more Odoo products.
+- Optional **Offer Pricelist** uses the native Odoo pricelist engine; FlexSys does not create a parallel promotional-pricing engine.
+- When an offer pricelist is present, offer-filtered product cards/details use that pricelist price, including variant price mapping.
+- Active offers appear above the featured-products section; a one-product offer opens that product, while multi-product offers filter the menu to the offer products.
+
+### Structured Branch Pages
+- Extended `pos.config` with customer-facing branch metadata: public name, description, address, phone, WhatsApp, map URL / coordinates and branch image.
+- Added structured weekly working-hours records with overnight-hours support and live **Open now / Closed now** calculation in the menu timezone.
+- A Brand Page of type **Branches** automatically renders cards from the menu's configured POS branches.
+- Added a **Create / Open Branches Page** action; the page remains unpublished until the manager explicitly publishes it.
+- Map/directions links are validated to HTTP/HTTPS and WhatsApp numbers are sanitized for the public link.
+
+### Multiple Menu Layouts
+- Added three layout modes using the same Brand Engine and Design Tokens:
+  - **Cards** — existing balanced product cards.
+  - **Compact** — dense horizontal cards for larger catalogs.
+  - **Image Focused** — stronger product imagery with reduced card copy.
+- Layout selection is upgrade-safe: existing menus fall back to **Cards** automatically.
+
+### Lightweight Anonymous Analytics
+- Added anonymous events for menu views, product opens, category filters, searches, offer opens, language changes and branch changes.
+- No customer identity or raw IP address is stored.
+- Menu views are de-duplicated once per anonymous browser session per business day.
+- Backend summary shows views, product opens, searches, top product, top category, top search and Arabic-language share.
+- Search/product/category references are resolved server-side to readable labels.
+- Analytics retention defaults to 90 days and is configurable from 7–365 days; a daily cron deletes expired events.
+- Existing menus are upgrade-safe: analytics defaults effectively ON unless explicitly disabled.
+- If `flexsys_operations` is installed, Branch Pages can reuse its existing public branch name/address/coordinates/open flag as fallback values without adding a hard dependency between the modules.
+
+## 19.0.1.0.14 — Approved UI Target Implementation
+
+This build applies the approved FlexSys Digital Menu visual target to the existing functional architecture without adding cart/ordering behavior.
+
+### Public Brand Shell
+- Reworked the header into a light brand shell with centered **Brand Name + optional Tagline**.
+- Desktop navigation is centered below the identity; language/branch controls remain secondary.
+- Mobile uses a compact hamburger navigation with centered brand identity and a small language control.
+- Uploaded logo remains part of the Brand Engine but is no longer forced into the public header, matching the approved UI target.
+
+### Search and Categories
+- Search and category filters use the approved compact pill-based visual language.
+- The control area remains sticky and lightweight.
+- Category behavior is unchanged: **All** shows every product; selecting a category shows only that category.
+
+### Offers Hero
+- Replaced small offer cards with a large promotional hero/banner matching the approved target.
+- The banner supports offer image, title, subtitle, description, promotional price, original price and action.
+- Multiple active offers use previous/next controls and indicator dots.
+- Active offers automatically add an **Offers / العروض** item to the shared brand navigation, linking to the offer section.
+
+### Product Presentation
+- Cards layout now uses a clean four-column desktop grid similar to the approved target.
+- Product cards use tighter typography, spacing, rounded corners and subtle shadows.
+- Existing description teaser + **Read more about me / اقرأ عني أكثر** behavior is preserved.
+- Mobile Cards layout becomes a single-column horizontal card pattern for faster browsing.
+- Compact and Image Focused layouts remain supported and were visually aligned with the new system.
+- No cart/add button was introduced because ordering remains outside V1.
+
+### Product Details
+- Retained the viewport-safe mobile bottom sheet and desktop side sheet.
+- Media, spacing, full description, variants and recommendation use the same softer card language as the approved target.
+
+### Branch Pages
+- Branch cards were visually aligned with the approved target using image-led cards, compact status, directions/contact actions and working hours.
+
+### Cache / Upgrade UX
+- Public CSS and JavaScript URLs now include a build version query (`19.0.1.0.14`) so browsers do not keep stale visual assets after an Odoo.sh upgrade.
+
+The approved mockup remains a visual target rather than a literal screenshot of runtime data: customer colors, images, text and available sections continue to come from Odoo and the Brand Engine.

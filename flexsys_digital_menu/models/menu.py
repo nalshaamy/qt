@@ -5,6 +5,7 @@ import io
 import re
 import unicodedata
 import uuid
+from collections import Counter
 from datetime import datetime
 from urllib.parse import urlparse
 
@@ -20,6 +21,7 @@ from odoo.exceptions import UserError, ValidationError
 
 DOMAIN_RE = re.compile(r"^[A-Za-z0-9.-]+(?::[0-9]+)?$")
 SLUG_RE = re.compile(r"^[\w-]+$", re.UNICODE)
+LAYOUT_STYLES = [("cards", "Cards"), ("compact", "Compact"), ("image_focus", "Image Focused")]
 
 
 def _slugify(value):
@@ -101,10 +103,17 @@ class FlexSysMenu(models.Model):
     default_language = fields.Selection([("ar", "Arabic"), ("en", "English")], default="ar", required=True)
 
     theme_id = fields.Many2one("flexsys.menu.theme", required=True, default=lambda self: self._default_theme())
+    brand_name = fields.Char(translate=True, string="Brand Name", help="Public brand name. Falls back to the company name when empty.")
     logo = fields.Image(max_width=1600, max_height=1600)
     hero_image = fields.Image(max_width=2400, max_height=1600)
     tagline = fields.Char(translate=True)
     seo_title = fields.Char(translate=True)
+    layout_style_raw = fields.Selection(LAYOUT_STYLES, default="cards", string="Menu Layout (Stored)")
+    layout_style = fields.Selection(
+        LAYOUT_STYLES, compute="_compute_layout_style", inverse="_inverse_layout_style", string="Menu Layout"
+    )
+    header_text_color_override = fields.Char(string="Header Text Color", help="Optional #RRGGBB override. Leave empty for automatic contrast.")
+    footer_text_color_override = fields.Char(string="Footer Text Color", help="Optional #RRGGBB override. Leave empty for automatic contrast.")
 
     show_product_images = fields.Boolean(default=True)
     show_descriptions = fields.Boolean(default=True)
@@ -152,6 +161,27 @@ class FlexSysMenu(models.Model):
     category_ids = fields.One2many("flexsys.menu.category", "menu_id", string="Categories")
     product_line_ids = fields.One2many("flexsys.menu.product", "menu_id", string="Products")
     qr_ids = fields.One2many("flexsys.menu.qr", "menu_id", string="QR Codes")
+    page_ids = fields.One2many("flexsys.brand.page", "menu_id", string="Brand Pages")
+    offer_ids = fields.One2many("flexsys.menu.offer", "menu_id", string="Offers")
+    analytics_event_ids = fields.One2many("flexsys.menu.analytics.event", "menu_id", string="Analytics Events")
+
+    analytics_disabled = fields.Boolean(default=False, string="Analytics Disabled")
+    analytics_enabled = fields.Boolean(
+        compute="_compute_analytics_enabled", inverse="_inverse_analytics_enabled", string="Analytics"
+    )
+    analytics_retention_days_raw = fields.Integer(default=90, string="Analytics Retention (Days) (Stored)")
+    analytics_retention_days = fields.Integer(
+        compute="_compute_analytics_retention_days",
+        inverse="_inverse_analytics_retention_days",
+        string="Analytics Retention (Days)",
+    )
+    analytics_views = fields.Integer(compute="_compute_analytics_summary")
+    analytics_product_opens = fields.Integer(compute="_compute_analytics_summary")
+    analytics_searches = fields.Integer(compute="_compute_analytics_summary")
+    analytics_top_product = fields.Char(compute="_compute_analytics_summary")
+    analytics_top_category = fields.Char(compute="_compute_analytics_summary")
+    analytics_top_search = fields.Char(compute="_compute_analytics_summary")
+    analytics_arabic_share = fields.Float(compute="_compute_analytics_summary", digits=(5, 1))
 
     public_url = fields.Char(compute="_compute_public_url")
     product_count = fields.Integer(compute="_compute_counts")
@@ -162,6 +192,14 @@ class FlexSysMenu(models.Model):
         ("slug_company_unique", "unique(slug, company_id)", "Menu slug must be unique per company."),
     ]
 
+    @api.constrains("header_text_color_override", "footer_text_color_override")
+    def _check_text_color_overrides(self):
+        for menu in self:
+            for field_name in ("header_text_color_override", "footer_text_color_override"):
+                value = (menu[field_name] or "").strip()
+                if value and not re.match(r"^#[0-9A-Fa-f]{6}$", value):
+                    raise ValidationError(_("Text color overrides must use #RRGGBB format."))
+
     @api.model
     def _default_theme(self):
         return self.env.ref("flexsys_digital_menu.theme_auto_default", raise_if_not_found=False)
@@ -170,6 +208,15 @@ class FlexSysMenu(models.Model):
     def _compute_currency(self):
         for menu in self:
             menu.currency_id = menu.pricelist_id.currency_id or menu.company_id.currency_id
+
+    @api.depends("layout_style_raw")
+    def _compute_layout_style(self):
+        for menu in self:
+            menu.layout_style = menu.layout_style_raw or "cards"
+
+    def _inverse_layout_style(self):
+        for menu in self:
+            menu.layout_style_raw = menu.layout_style or "cards"
 
     @api.depends("state")
     def _compute_is_published(self):
@@ -239,6 +286,128 @@ class FlexSysMenu(models.Model):
                 raise ValidationError("The theme must belong to the menu company or be shared.")
             if any(schedule.company_id and schedule.company_id != menu.company_id for schedule in menu.schedule_ids):
                 raise ValidationError("Schedules must belong to the menu company or be shared.")
+
+    @api.depends("analytics_disabled")
+    def _compute_analytics_enabled(self):
+        for menu in self:
+            menu.analytics_enabled = not menu.analytics_disabled
+
+    def _inverse_analytics_enabled(self):
+        for menu in self:
+            menu.analytics_disabled = not menu.analytics_enabled
+
+    @api.depends("analytics_retention_days_raw")
+    def _compute_analytics_retention_days(self):
+        for menu in self:
+            menu.analytics_retention_days = menu.analytics_retention_days_raw or 90
+
+    def _inverse_analytics_retention_days(self):
+        for menu in self:
+            days = int(menu.analytics_retention_days or 90)
+            if days < 7 or days > 365:
+                raise ValidationError(_("Analytics retention must be between 7 and 365 days."))
+            menu.analytics_retention_days_raw = days
+
+    def _compute_analytics_summary(self):
+        Event = self.env["flexsys.menu.analytics.event"].sudo()
+        for menu in self:
+            if not menu.id:
+                menu.analytics_views = 0
+                menu.analytics_product_opens = 0
+                menu.analytics_searches = 0
+                menu.analytics_top_product = False
+                menu.analytics_top_category = False
+                menu.analytics_top_search = False
+                menu.analytics_arabic_share = 0.0
+                continue
+            base = [("menu_id", "=", menu.id)]
+            menu.analytics_views = Event.search_count(base + [("event_type", "=", "menu_view")])
+            menu.analytics_product_opens = Event.search_count(base + [("event_type", "=", "product_open")])
+            menu.analytics_searches = Event.search_count(base + [("event_type", "=", "search")])
+
+            def top_label(event_type, field_name):
+                records = Event.search(
+                    base + [("event_type", "=", event_type), (field_name, "!=", False)],
+                    order="event_at desc", limit=50000,
+                )
+                counts = Counter(value for value in records.mapped(field_name) if value)
+                return counts.most_common(1)[0][0] if counts else False
+
+            menu.analytics_top_product = top_label("product_open", "reference_label")
+            menu.analytics_top_category = top_label("category_filter", "reference_label")
+            menu.analytics_top_search = top_label("search", "search_term")
+            ar_count = Event.search_count(base + [("event_type", "=", "menu_view"), ("language", "=", "ar")])
+            menu.analytics_arabic_share = (ar_count / menu.analytics_views * 100.0) if menu.analytics_views else 0.0
+
+    def action_open_analytics(self):
+        self.ensure_one()
+        action = self.env.ref("flexsys_digital_menu.action_menu_analytics_events").read()[0]
+        action["domain"] = [("menu_id", "=", self.id)]
+        action["context"] = {"default_menu_id": self.id, "search_default_group_event_type": 1}
+        return action
+
+    def action_create_branches_page(self):
+        self.ensure_one()
+        page = self.page_ids.filtered(lambda p: p.page_type == "branches")[:1]
+        if not page:
+            page = self.page_ids.filtered(lambda p: p.slug == "branches")[:1]
+            if page and page.page_type != "branches":
+                raise UserError(_("A different Brand Page already uses the 'branches' slug. Rename it first."))
+        if not page:
+            page = self.env["flexsys.brand.page"].create({
+                "menu_id": self.id,
+                "name": _("Branches"),
+                "title": _("Our Branches"),
+                "slug": "branches",
+                "page_type": "branches",
+                "show_in_navigation": True,
+                "is_published": False,
+            })
+        return {"type": "ir.actions.act_window", "res_model": "flexsys.brand.page", "res_id": page.id, "view_mode": "form"}
+
+    @staticmethod
+    def _format_hour(value):
+        value = float(value or 0.0) % 24
+        hour = int(value)
+        minute = int(round((value - hour) * 60))
+        if minute == 60:
+            hour = (hour + 1) % 24
+            minute = 0
+        return f"{hour:02d}:{minute:02d}"
+
+    def _public_branches_payload(self, requested_lang=None):
+        self.ensure_one()
+        lang_code, language = self._language_code(requested_lang)
+        menu = self.sudo().with_company(self.company_id).with_context(lang=lang_code)
+        day_labels = {
+            "ar": ["الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"],
+            "en": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+        }
+        payload = []
+        for pos in menu.pos_config_ids.sorted(lambda p: (p.name or "", p.id)):
+            hours = []
+            for line in pos.digital_menu_hour_ids.sorted(lambda h: (int(h.weekday), h.sequence, h.time_from)):
+                day = day_labels.get(language, day_labels["en"])[int(line.weekday)]
+                hours.append({
+                    "day": day,
+                    "closed": bool(line.closed),
+                    "from": menu._format_hour(line.time_from),
+                    "to": menu._format_hour(line.time_to),
+                })
+            key = menu.branch_public_key(pos)
+            payload.append({
+                "key": key,
+                "name": pos._digital_menu_public_name(),
+                "description": pos.digital_menu_description or "",
+                "address": pos.digital_menu_address or (pos.operations_branch_address if "operations_branch_address" in pos._fields else "") or "",
+                "phone": pos.digital_menu_phone or "",
+                "whatsapp": re.sub(r"\D", "", pos.digital_menu_whatsapp or ""),
+                "map_url": pos._digital_menu_map_link(),
+                "image_url": f"/menu/{menu.slug}/branch/{key}/image" if pos.digital_menu_image else "",
+                "hours": hours,
+                "is_open": pos._digital_menu_open_status(menu.timezone),
+            })
+        return payload
 
     def branch_public_key(self, pos_config):
         self.ensure_one()
@@ -396,7 +565,15 @@ class FlexSysMenu(models.Model):
     def css_variables(self):
         self.ensure_one()
         theme = self.theme_id or self._default_theme()
-        return theme.css_variables() if theme else ""
+        if not theme:
+            return ""
+        hero_text = (self.header_text_color_override or "").strip() or _best_text(theme.background)
+        footer_text = (self.footer_text_color_override or "").strip() or _best_text(theme.background)
+        return ";".join(filter(None, [
+            theme.css_variables(),
+            f"--menu-hero-text:{hero_text}",
+            f"--menu-footer-text:{footer_text}",
+        ]))
 
     def _language_code(self, requested):
         self.ensure_one()
@@ -428,6 +605,46 @@ class FlexSysMenu(models.Model):
         if badge_type == "custom":
             return custom_badge or ""
         return labels.get(language or "en", labels["en"]).get(badge_type, "")
+
+    def _public_navigation(self, requested_lang=None, active_key="menu", preview=False):
+        self.ensure_one()
+        lang_code, language = self._language_code(requested_lang)
+        menu = self.sudo().with_company(self.company_id).with_context(lang=lang_code)
+        suffix = f"?lang={language}" if language in ("ar", "en") else ""
+        items = [{
+            "key": "menu",
+            "label": "المنيو" if language == "ar" else "Menu",
+            "url": f"/menu/{menu.slug}{suffix}",
+            "active": active_key == "menu",
+        }]
+        offer_records = self.env["flexsys.menu.offer"].sudo().with_company(menu.company_id).with_context(lang=lang_code).search(
+            [("menu_id", "=", menu.id)], order="sequence, id"
+        )
+        if any(offer.is_active_now(preview=preview) for offer in offer_records):
+            items.append({
+                "key": "offers",
+                "label": "العروض" if language == "ar" else "Offers",
+                "url": f"/menu/{menu.slug}{suffix}#fsm-offers",
+                "active": active_key == "offers",
+                "type": "offers",
+            })
+        domain = [
+            ("menu_id", "=", menu.id),
+            ("show_in_navigation", "=", True),
+            ("is_published", "=", True),
+        ]
+        pages = self.env["flexsys.brand.page"].sudo().with_company(menu.company_id).with_context(lang=lang_code).search(
+            domain, order="sequence, id"
+        )
+        for page in pages:
+            items.append({
+                "key": f"page:{page.slug}",
+                "label": page.name,
+                "url": f"/menu/{menu.slug}/page/{page.slug}{suffix}",
+                "active": active_key == f"page:{page.slug}",
+                "type": page.page_type,
+            })
+        return items
 
     def _public_payload(self, requested_lang=None, branch_key=None, preview=False):
         self.ensure_one()
@@ -474,6 +691,7 @@ class FlexSysMenu(models.Model):
         }
 
         products = []
+        public_product_by_template = {}
         used_category_ids = set()
         if active_now:
             for line in effective_lines:
@@ -502,7 +720,7 @@ class FlexSysMenu(models.Model):
                     })
                 price = min([item["price"] for item in variants], default=line._get_effective_price())
                 product = line.product_tmpl_id
-                products.append({
+                product_data = {
                     "key": line.public_key,
                     "category_key": category.public_key if category else "uncategorized",
                     "name": line._effective_name(),
@@ -514,6 +732,8 @@ class FlexSysMenu(models.Model):
                     "featured": line._effective_featured_bool(),
                     "featured_sequence": line.featured_sequence,
                     "badge": menu._badge_label(badge_type, custom_badge, language=language) if menu.show_badges else "",
+                    "badge_type": badge_type if menu.show_badges else "none",
+                    "badge_pulse": bool(menu.show_badges and badge_type in {"featured", "best_seller", "new", "chef"}),
                     "availability": availability,
                     "calories": (product.digital_menu_calories or 0) if menu.show_calories else 0,
                     "ingredients": (product.digital_menu_ingredients or "") if menu.show_ingredients else "",
@@ -524,7 +744,9 @@ class FlexSysMenu(models.Model):
                     "gluten_info": product.digital_menu_gluten_info or "unknown",
                     "sequence": line.sequence,
                     "search_text": " ".join(filter(None, [line._effective_name(), line._effective_description(), product.default_code or ""])),
-                })
+                }
+                products.append(product_data)
+                public_product_by_template[product.id] = product_data
 
         category_payload = [value for cid, value in category_map.items() if menu.empty_category_behavior == "show" or cid in used_category_ids]
         if any(product["category_key"] == "uncategorized" for product in products):
@@ -540,12 +762,57 @@ class FlexSysMenu(models.Model):
 
         currency = menu.currency_id
         branches = [
-            {"key": menu.branch_public_key(pos), "name": pos.name}
+            {"key": menu.branch_public_key(pos), "name": pos._digital_menu_public_name()}
             for pos in menu.pos_config_ids
         ]
+
+        offers = []
+        if active_now:
+            offer_records = self.env["flexsys.menu.offer"].sudo().with_company(menu.company_id).with_context(lang=lang_code).search(
+                [("menu_id", "=", menu.id)], order="sequence, id"
+            )
+            for offer in offer_records:
+                if not offer.is_active_now(preview=preview):
+                    continue
+                linked_products = [public_product_by_template.get(pid) for pid in offer.product_ids.ids if public_product_by_template.get(pid)]
+                linked_keys = [item["key"] for item in linked_products]
+                if offer.product_ids and not linked_keys:
+                    continue
+                offer_product_prices = {}
+                offer_variant_prices = {}
+                if offer.pricelist_id:
+                    for product_tmpl in offer.product_ids:
+                        product_data = public_product_by_template.get(product_tmpl.id)
+                        if not product_data:
+                            continue
+                        variant_prices = []
+                        for variant in product_tmpl.product_variant_ids:
+                            variant_key = hashlib.sha256(f"{product_data['key']}:{variant.id}".encode()).hexdigest()[:12]
+                            variant_price = offer.pricelist_id._get_product_price(variant, 1.0)
+                            offer_variant_prices[variant_key] = variant_price
+                            variant_prices.append(variant_price)
+                        if variant_prices:
+                            offer_product_prices[product_data["key"]] = min(variant_prices)
+                offer_price = offer_product_prices.get(linked_keys[0]) if len(linked_keys) == 1 else None
+                original_price = linked_products[0]["price"] if len(linked_products) == 1 else None
+                offers.append({
+                    "key": offer.public_key,
+                    "name": offer.name,
+                    "subtitle": offer.subtitle or "",
+                    "description": offer.description or "",
+                    "image_url": f"{asset_base}/offer/{offer.public_key}/image" if offer.image else "",
+                    "product_keys": linked_keys,
+                    "product_prices": offer_product_prices,
+                    "variant_prices": offer_variant_prices,
+                    "price": offer_price,
+                    "original_price": original_price,
+                    "has_pricelist": bool(offer.pricelist_id),
+                })
         return {
             "menu": {
                 "name": menu.name,
+                "brand_name": menu.brand_name or menu.company_id.name or menu.name,
+                "company_name": menu.company_id.name or menu.name,
                 "tagline": menu.tagline or "",
                 "slug": menu.slug,
                 "url": menu.public_url,
@@ -554,8 +821,11 @@ class FlexSysMenu(models.Model):
                 "active_now": active_now,
                 "logo_url": f"{asset_base}/logo" if menu.logo else "",
                 "hero_url": f"{asset_base}/hero" if menu.hero_image else "",
-                "branch": {"key": menu.branch_public_key(branch), "name": branch.name} if branch else None,
+                "branch": {"key": menu.branch_public_key(branch), "name": branch._digital_menu_public_name()} if branch else None,
                 "branches": branches,
+                "navigation": menu._public_navigation(language, active_key="menu", preview=preview),
+                "layout": menu.layout_style,
+                "analytics": bool(menu.analytics_enabled and not preview),
             },
             "display": {
                 "product_images": menu.show_product_images,
@@ -576,4 +846,5 @@ class FlexSysMenu(models.Model):
             },
             "categories": category_payload,
             "products": products,
+            "offers": offers,
         }

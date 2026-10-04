@@ -4,4 +4,8 @@ from . import menu_category
 from . import menu_product
 from . import menu_qr
 from . import menu
+from . import brand_page
 from . import product_template
+from . import menu_offer
+from . import pos_config
+from . import menu_analytics

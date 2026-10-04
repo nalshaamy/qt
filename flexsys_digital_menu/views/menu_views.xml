@@ -58,8 +58,10 @@
                         <button name="action_generate_qr" type="object" class="oe_stat_button" groups="flexsys_digital_menu.group_digital_menu_manager" icon="fa-qrcode">
                             <div class="o_stat_info"><span class="o_stat_text">Refresh QR</span></div>
                         </button>
+                        <button name="action_open_analytics" type="object" class="oe_stat_button" icon="fa-line-chart" invisible="not analytics_enabled">
+                            <field name="analytics_views" widget="statinfo" string="Views"/>
+                        </button>
                     </div>
-                    <field name="logo" widget="image" class="oe_avatar"/>
                     <div class="oe_title">
                         <label for="name"/>
                         <h1><field name="name" placeholder="QTCafe Main Menu"/></h1>
@@ -118,15 +120,26 @@
                         <page string="Branding" name="branding">
                             <group>
                                 <group>
+                                    <field name="brand_name" placeholder="QTCafe"/>
                                     <field name="theme_id"/>
-                                    <field name="tagline"/>
-                                    <field name="seo_title"/>
-                                </group>
-                                <group>
-                                    <field name="hero_image" widget="image"/>
+                                    <field name="layout_style"/>
+                                    <field name="tagline" placeholder="Coffee • Food • Moments"/>
                                     <button name="action_generate_brand" type="object" string="Generate Brand from Logo" groups="flexsys_digital_menu.group_digital_menu_manager" class="btn-primary" invisible="not logo"/>
                                 </group>
+                                <group>
+                                    <field name="logo" widget="image"/>
+                                </group>
                             </group>
+                            <separator string="Optional Text Color Overrides"/>
+                            <group>
+                                <group>
+                                    <field name="header_text_color_override" placeholder="#FFFFFF"/>
+                                </group>
+                                <group>
+                                    <field name="footer_text_color_override" placeholder="#17201D"/>
+                                </group>
+                            </group>
+                            <div class="text-muted">Leave text color overrides empty to let the Brand Engine select readable colors automatically from the theme.</div>
                             <separator string="Display Controls"/>
                             <group>
                                 <group>
@@ -143,15 +156,35 @@
                                     <field name="show_allergens"/>
                                 </group>
                             </group>
-                            <separator string="Theme Tokens"/>
-                            <group>
-                                <group>
-                                    <field name="theme_id" readonly="1"/>
-                                </group>
-                                <group>
-                                    <div class="text-muted">Cairo is the fixed public-menu font. Brand colors are generated from the uploaded logo and can be customized in Themes.</div>
-                                </group>
-                            </group>
+                        </page>
+
+                        <page string="Offers" name="offers">
+                            <div class="text-muted mb-3">Scheduled customer-facing offers. Use an Odoo pricelist when the offer needs a promotional price; no separate pricing engine is created.</div>
+                            <field name="offer_ids" context="{'default_menu_id': id}">
+                                <list editable="bottom" decoration-success="is_published">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="name"/>
+                                    <field name="pricelist_id" optional="show"/>
+                                    <field name="start_date" optional="show"/>
+                                    <field name="end_date" optional="show"/>
+                                    <field name="is_published"/>
+                                </list>
+                            </field>
+                        </page>
+
+                        <page string="Brand Pages" name="brand_pages">
+                            <div class="text-muted mb-3">Optional pages share the same brand shell as the menu. A Branches page can render branch data, hours and map links automatically.</div>
+                            <button name="action_create_branches_page" type="object" string="Create / Open Branches Page" class="btn-secondary" groups="flexsys_digital_menu.group_digital_menu_manager"/>
+                            <field name="page_ids" context="{'default_menu_id': id}">
+                                <list decoration-success="is_published">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="name"/>
+                                    <field name="page_type"/>
+                                    <field name="slug"/>
+                                    <field name="show_in_navigation"/>
+                                    <field name="is_published"/>
+                                </list>
+                            </field>
                         </page>
 
                         <page string="Availability &amp; Scheduling" name="availability">
@@ -167,6 +200,30 @@
                                     <field name="schedule_ids" widget="many2many_tags"/>
                                 </group>
                             </group>
+                        </page>
+
+                        <page string="Analytics" name="analytics">
+                            <group>
+                                <group string="Lightweight Analytics">
+                                    <field name="analytics_enabled"/>
+                                    <field name="analytics_retention_days" invisible="not analytics_enabled"/>
+                                    <button name="action_open_analytics" type="object" string="Open Analytics Events" class="btn-secondary" invisible="not analytics_enabled"/>
+                                </group>
+                                <group string="Summary" invisible="not analytics_enabled">
+                                    <field name="analytics_views" readonly="1"/>
+                                    <field name="analytics_product_opens" readonly="1"/>
+                                    <field name="analytics_searches" readonly="1"/>
+                                    <field name="analytics_arabic_share" readonly="1" string="Arabic Share %"/>
+                                </group>
+                            </group>
+                            <group invisible="not analytics_enabled">
+                                <group string="Top Activity">
+                                    <field name="analytics_top_product" readonly="1"/>
+                                    <field name="analytics_top_category" readonly="1"/>
+                                    <field name="analytics_top_search" readonly="1"/>
+                                </group>
+                            </group>
+                            <div class="text-muted">Analytics are anonymous: no customer identity, raw IP address or conversation data is stored. Old events are deleted automatically according to the retention setting.</div>
                         </page>
 
                         <page string="QR" name="qr">

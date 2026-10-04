@@ -73,3 +73,120 @@ msgstr "تفاصيل المنتج"
 #: model:ir.model.fields,field_description:flexsys_digital_menu.field_product_template__digital_menu_short_description
 msgid "Menu Description"
 msgstr "وصف المنيو"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields,field_description:flexsys_digital_menu.field_flexsys_menu__brand_name
+msgid "Brand Name"
+msgstr "اسم البراند"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields,field_description:flexsys_digital_menu.field_flexsys_menu__header_text_color_override
+msgid "Header Text Color"
+msgstr "لون نص الهيدر"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields,field_description:flexsys_digital_menu.field_flexsys_menu__footer_text_color_override
+msgid "Footer Text Color"
+msgstr "لون نص الفوتر"
+
+#. module: flexsys_digital_menu
+#: model_terms:ir.ui.view,arch_db:flexsys_digital_menu.view_flexsys_menu_form
+msgid "Optional Text Color Overrides"
+msgstr "ألوان النص الاختيارية"
+
+#. module: flexsys_digital_menu
+#: model_terms:ir.ui.view,arch_db:flexsys_digital_menu.view_flexsys_menu_form
+msgid "Leave text color overrides empty to let the Brand Engine select readable colors automatically from the theme."
+msgstr "اترك ألوان النص فارغة ليختار محرك الهوية ألوانًا مقروءة تلقائيًا حسب الثيم."
+
+
+#. module: flexsys_digital_menu
+#: model_terms:ir.ui.view,arch_db:flexsys_digital_menu.view_flexsys_menu_form
+msgid "Brand Pages"
+msgstr "صفحات البراند"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields.selection,name:flexsys_digital_menu.selection__flexsys_brand_page__page_type__about
+msgid "About Brand"
+msgstr "عن البراند"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields.selection,name:flexsys_digital_menu.selection__flexsys_brand_page__page_type__branches
+msgid "Branches"
+msgstr "الفروع"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields.selection,name:flexsys_digital_menu.selection__flexsys_brand_page__page_type__custom
+msgid "Custom Page"
+msgstr "صفحة مخصصة"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields,field_description:flexsys_digital_menu.field_flexsys_brand_page__is_published
+msgid "Published"
+msgstr "منشورة"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields,field_description:flexsys_digital_menu.field_flexsys_brand_page__show_in_navigation
+msgid "Show in Navigation"
+msgstr "إظهار في التنقل"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields,field_description:flexsys_digital_menu.field_flexsys_brand_page__body_html
+msgid "Content"
+msgstr "المحتوى"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields,field_description:flexsys_digital_menu.field_flexsys_menu__layout_style
+msgid "Menu Layout"
+msgstr "تصميم المنيو"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields.selection,name:flexsys_digital_menu.selection__flexsys_menu__layout_style__cards
+msgid "Cards"
+msgstr "بطاقات"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields.selection,name:flexsys_digital_menu.selection__flexsys_menu__layout_style__compact
+msgid "Compact"
+msgstr "مضغوط"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields.selection,name:flexsys_digital_menu.selection__flexsys_menu__layout_style__image_focus
+msgid "Image Focused"
+msgstr "تركيز على الصور"
+
+#. module: flexsys_digital_menu
+#: model_terms:ir.ui.view,arch_db:flexsys_digital_menu.view_flexsys_menu_form
+#: model:ir.actions.act_window,name:flexsys_digital_menu.action_menu_offers
+msgid "Offers"
+msgstr "العروض"
+
+#. module: flexsys_digital_menu
+#: model:ir.actions.act_window,name:flexsys_digital_menu.action_menu_analytics_events
+msgid "Analytics"
+msgstr "الإحصائيات"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields,field_description:flexsys_digital_menu.field_pos_config__digital_menu_public_name
+msgid "Public Branch Name"
+msgstr "اسم الفرع للعميل"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields,field_description:flexsys_digital_menu.field_pos_config__digital_menu_address
+msgid "Public Address"
+msgstr "عنوان الفرع"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields,field_description:flexsys_digital_menu.field_pos_config__digital_menu_phone
+msgid "Public Phone"
+msgstr "هاتف الفرع"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields,field_description:flexsys_digital_menu.field_pos_config__digital_menu_hour_ids
+msgid "Working Hours"
+msgstr "ساعات العمل"
+
+#. module: flexsys_digital_menu
+#: model:ir.model.fields,field_description:flexsys_digital_menu.field_flexsys_menu__analytics_enabled
+msgid "Analytics"
+msgstr "الإحصائيات"

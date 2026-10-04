@@ -53,9 +53,34 @@
         <field name="groups" eval="[(4, ref('flexsys_digital_menu.group_digital_menu_user'))]"/>
         <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="rule_brand_page_company" model="ir.rule">
+        <field name="name">Digital Menu Brand Pages: allowed companies</field>
+        <field name="model_id" ref="model_flexsys_brand_page"/>
+        <field name="groups" eval="[(4, ref('flexsys_digital_menu.group_digital_menu_user'))]"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
     <record id="rule_menu_qr_company" model="ir.rule">
         <field name="name">Digital Menu QR: allowed companies</field>
         <field name="model_id" ref="model_flexsys_menu_qr"/>
+        <field name="groups" eval="[(4, ref('flexsys_digital_menu.group_digital_menu_user'))]"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="rule_menu_offer_company" model="ir.rule">
+        <field name="name">Digital Menu Offers: allowed companies</field>
+        <field name="model_id" ref="model_flexsys_menu_offer"/>
+        <field name="groups" eval="[(4, ref('flexsys_digital_menu.group_digital_menu_user'))]"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_menu_analytics_company" model="ir.rule">
+        <field name="name">Digital Menu Analytics: allowed companies</field>
+        <field name="model_id" ref="model_flexsys_menu_analytics_event"/>
+        <field name="groups" eval="[(4, ref('flexsys_digital_menu.group_digital_menu_user'))]"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_menu_branch_hour_company" model="ir.rule">
+        <field name="name">Digital Menu Branch Hours: allowed companies</field>
+        <field name="model_id" ref="model_flexsys_menu_branch_hour"/>
         <field name="groups" eval="[(4, ref('flexsys_digital_menu.group_digital_menu_user'))]"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>

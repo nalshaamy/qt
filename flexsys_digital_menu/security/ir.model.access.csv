@@ -12,3 +12,11 @@ access_menu_schedule_manager,flexsys.menu.schedule manager,model_flexsys_menu_sc
 access_menu_qr_user,flexsys.menu.qr user,model_flexsys_menu_qr,flexsys_digital_menu.group_digital_menu_user,1,0,0,0
 access_menu_qr_manager,flexsys.menu.qr manager,model_flexsys_menu_qr,flexsys_digital_menu.group_digital_menu_manager,1,1,1,1
 access_menu_setup_wizard,flexsys.menu.setup.wizard,model_flexsys_menu_setup_wizard,flexsys_digital_menu.group_digital_menu_manager,1,1,1,1
+access_brand_page_user,flexsys.brand.page user,model_flexsys_brand_page,flexsys_digital_menu.group_digital_menu_user,1,1,1,0
+access_brand_page_manager,flexsys.brand.page manager,model_flexsys_brand_page,flexsys_digital_menu.group_digital_menu_manager,1,1,1,1
+access_menu_offer_user,flexsys.menu.offer user,model_flexsys_menu_offer,flexsys_digital_menu.group_digital_menu_user,1,1,1,0
+access_menu_offer_manager,flexsys.menu.offer manager,model_flexsys_menu_offer,flexsys_digital_menu.group_digital_menu_manager,1,1,1,1
+access_menu_analytics_user,flexsys.menu.analytics.event user,model_flexsys_menu_analytics_event,flexsys_digital_menu.group_digital_menu_user,1,0,0,0
+access_menu_analytics_manager,flexsys.menu.analytics.event manager,model_flexsys_menu_analytics_event,flexsys_digital_menu.group_digital_menu_manager,1,0,0,1
+access_menu_branch_hour_user,flexsys.menu.branch.hour user,model_flexsys_menu_branch_hour,flexsys_digital_menu.group_digital_menu_user,1,0,0,0
+access_menu_branch_hour_manager,flexsys.menu.branch.hour manager,model_flexsys_menu_branch_hour,flexsys_digital_menu.group_digital_menu_manager,1,1,1,1

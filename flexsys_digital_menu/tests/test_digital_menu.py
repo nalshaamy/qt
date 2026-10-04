@@ -78,6 +78,7 @@ class TestFlexSysDigitalMenu(TransactionCase):
         self.menu.state = "published"
         payload = self.menu._public_payload(requested_lang="en")
         self.assertEqual(payload["menu"]["slug"], "main")
+        self.assertEqual(payload["menu"]["company_name"], self.env.company.name)
         self.assertTrue(payload["products"])
         product = payload["products"][0]
         self.assertIn("key", product)
@@ -109,4 +110,113 @@ class TestFlexSysDigitalMenu(TransactionCase):
         ar_payload = self.menu._public_payload(requested_lang="ar")
         self.assertEqual(en_payload["products"][0]["badge"], "Our Pick")
         self.assertEqual(ar_payload["products"][0]["badge"], "اختيارنا")
+    def test_public_payload_uses_brand_name_with_company_fallback(self):
+        self.menu.state = "published"
+        payload = self.menu._public_payload(requested_lang="en")
+        self.assertEqual(payload["menu"]["brand_name"], self.env.company.name)
+        self.menu.brand_name = "QTCafe"
+        payload = self.menu._public_payload(requested_lang="en")
+        self.assertEqual(payload["menu"]["brand_name"], "QTCafe")
 
+    def test_important_badge_requests_subtle_pulse(self):
+        self.menu.state = "published"
+        self.product.digital_menu_default_badge = "best_seller"
+        payload = self.menu._public_payload(requested_lang="en")
+        product = payload["products"][0]
+        self.assertEqual(product["badge_type"], "best_seller")
+        self.assertTrue(product["badge_pulse"])
+
+    def test_text_color_overrides_are_exported_as_css_variables(self):
+        self.menu.header_text_color_override = "#FFFFFF"
+        self.menu.footer_text_color_override = "#111111"
+        variables = self.menu.css_variables()
+        self.assertIn("--menu-hero-text:#FFFFFF", variables)
+        self.assertIn("--menu-footer-text:#111111", variables)
+
+    def test_brand_navigation_hides_unpublished_pages(self):
+        self.menu.state = "published"
+        page = self.env["flexsys.brand.page"].create({
+            "menu_id": self.menu.id,
+            "name": "About",
+            "slug": "about",
+            "page_type": "about",
+            "is_published": False,
+        })
+        navigation = self.menu._public_navigation("en")
+        self.assertEqual([item["key"] for item in navigation], ["menu"])
+        page.is_published = True
+        navigation = self.menu._public_navigation("en")
+        self.assertEqual([item["key"] for item in navigation], ["menu", "page:about"])
+        self.assertEqual(navigation[1]["label"], "About")
+
+    def test_public_payload_exposes_brand_navigation(self):
+        self.menu.state = "published"
+        self.env["flexsys.brand.page"].create({
+            "menu_id": self.menu.id,
+            "name": "Branches",
+            "slug": "branches",
+            "page_type": "branches",
+            "is_published": True,
+        })
+        payload = self.menu._public_payload(requested_lang="en")
+        navigation = payload["menu"]["navigation"]
+        self.assertEqual(navigation[0]["key"], "menu")
+        self.assertTrue(navigation[0]["active"])
+        self.assertEqual(navigation[1]["url"], "/menu/main/page/branches?lang=en")
+
+    def test_brand_page_public_url_uses_menu_public_url(self):
+        page = self.env["flexsys.brand.page"].create({
+            "menu_id": self.menu.id,
+            "name": "About",
+            "slug": "about",
+        })
+        self.assertTrue(page.public_url.endswith("/menu/main/page/about"))
+
+    def test_menu_layout_is_exposed_to_public_frontend(self):
+        self.menu.state = "published"
+        self.menu.layout_style = "compact"
+        payload = self.menu._public_payload(requested_lang="en")
+        self.assertEqual(payload["menu"]["layout"], "compact")
+
+    def test_active_offer_is_exposed_without_parallel_pricing_engine(self):
+        self.menu.state = "published"
+        offer = self.env["flexsys.menu.offer"].create({
+            "menu_id": self.menu.id,
+            "name": "Coffee Pick",
+            "product_ids": [(6, 0, [self.product.id])],
+            "is_published": True,
+        })
+        payload = self.menu._public_payload(requested_lang="en")
+        self.assertEqual(len(payload["offers"]), 1)
+        self.assertEqual(payload["offers"][0]["key"], offer.public_key)
+        self.assertEqual(payload["offers"][0]["product_keys"], [self.line.public_key])
+        self.assertIsNone(payload["offers"][0]["price"])
+
+    def test_analytics_menu_view_is_deduplicated_per_session_and_day(self):
+        self.menu.state = "published"
+        Event = self.env["flexsys.menu.analytics.event"]
+        payload = {"language": "en", "session": "anonymous-test-session"}
+        Event.record_public_event(self.menu, "menu_view", payload)
+        Event.record_public_event(self.menu, "menu_view", payload)
+        self.assertEqual(Event.search_count([
+            ("menu_id", "=", self.menu.id), ("event_type", "=", "menu_view")
+        ]), 1)
+
+    def test_branches_page_can_be_created_without_publishing_it(self):
+        action = self.menu.action_create_branches_page()
+        page = self.env["flexsys.brand.page"].browse(action["res_id"])
+        self.assertEqual(page.page_type, "branches")
+        self.assertFalse(page.is_published)
+
+    def test_active_offer_is_added_to_brand_navigation(self):
+        self.menu.state = "published"
+        self.env["flexsys.menu.offer"].create({
+            "menu_id": self.menu.id,
+            "name": "Weekend Offer",
+            "product_ids": [(6, 0, [self.product.id])],
+            "is_published": True,
+        })
+        navigation = self.menu._public_navigation("en")
+        self.assertEqual(navigation[0]["key"], "menu")
+        self.assertEqual(navigation[1]["key"], "offers")
+        self.assertTrue(navigation[1]["url"].endswith("#fsm-offers"))
