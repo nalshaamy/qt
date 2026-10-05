@@ -281,11 +281,8 @@
         }
 
         const meta = node("div", "fsm-meta");
-        if (product.featured && product.badge_type !== "featured") {
-            const featuredMarker = makeBadge(t("featuredBadge"), true, true);
-            featuredMarker.classList.add("fsm-featured-marker");
-            meta.appendChild(featuredMarker);
-        }
+        // Featured is a ranking signal only. Visual marketing treatment is controlled
+        // exclusively by the configured Badge, preserving the pre-0.21 card design.
         if (product.badge) meta.appendChild(makeBadge(product.badge, false, Boolean(product.badge_pulse)));
         if (product.calories) meta.appendChild(makeBadge(`${product.calories} kcal`, true));
         if (product.vegetarian) meta.appendChild(makeBadge(t("vegetarian"), true));

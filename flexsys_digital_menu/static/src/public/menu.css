@@ -132,7 +132,6 @@ main{flex:1}
 .fsm-meta{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
 .fsm-badge{display:inline-flex;align-items:center;min-height:22px;padding:2px 8px;border-radius:999px;background:var(--menu-badge-bg,#C9A762);color:var(--menu-badge-text,#17201D);font-size:.65rem;font-weight:700}
 .fsm-badge.muted{background:var(--menu-primary-light,#EAF1EE);color:var(--menu-primary-dark,#102D26)}
-.fsm-featured-marker{border:1px solid color-mix(in srgb,var(--menu-primary,#173F35) 16%,transparent)}
 @keyframes fsm-badge-pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--menu-badge-bg,#C9A762) 28%,transparent)}55%{box-shadow:0 0 0 4px transparent}}
 .fsm-badge.pulse{animation:fsm-badge-pulse 2.8s ease-in-out infinite;will-change:box-shadow}
 .fsm-sold-out{position:absolute;inset-inline-end:10px;top:10px;z-index:2;background:rgba(15,20,18,.84);color:#fff;padding:4px 8px;border-radius:999px;font-size:.66rem;font-weight:700;box-shadow:0 3px 10px rgba(0,0,0,.12)}

@@ -1,27 +1,37 @@
-# FlexSys Digital Menu 19.0.1.0.21 — Validation Report
+# FlexSys Digital Menu 19.0.1.0.22 — Validation Report
 
 ## Scope
-Final polish / RC fix pack applied to the tested 19.0.1.0.20 staging baseline after Desktop, Galaxy and iPhone acceptance testing.
+Patch release built directly from 19.0.1.0.21 after Staging regression review.
 
-## Fixes included
-- Featured product card marker + Featured-first ordering in the continuous **All** grid.
-- Existing product badge and Featured marker can coexist.
-- Public JSON cache changed to immediate-refresh semantics for backend content edits.
-- Write-date revision tokens added to public logo/category/product/offer/banner asset URLs.
-- Explicit mobile banner override source selection.
-- Desktop-banner mobile fallback uses `contain` when no mobile override exists.
-- Centered product modal replaces side drawer / bottom sheet.
-- iPhone category scroller safe padding / snap fix.
-- Static CSS/JS cache-busting bumped to 19.0.1.0.21.
+## Runtime behavior changed
+- Removed the automatic `Featured / مميز` card chip introduced in 0.21.
+- `Featured` remains a ranking signal and featured products still sort first in the continuous **All** grid.
+- Explicit product `Badge` rendering is restored as the only marketing badge shown on product cards.
+- Existing badge pulse behavior is preserved through `badge_pulse` and `.fsm-badge.pulse`.
 
-## Static validation performed
-- Python compile: **PASS**
-- XML parse: **PASS**
-- JavaScript syntax (`menu.js`): **PASS**
-- Manifest syntax/version: **PASS**
-- Odoo 19 constraint style (`_sql_constraints` absent): **PASS**
-- Feature assertions for modal/banner/cache/featured fixes: **PASS**
-- ZIP structure/integrity: **PASS**
+## Preserved 0.21 fixes
+- Centered product modal.
+- Product/menu media revision URLs and cache invalidation.
+- Explicit mobile banner override selection.
+- Mobile banner `contain` fallback when no mobile override exists.
+- iOS category edge padding / horizontal scroll behavior.
 
-## Runtime status
-Not executed against an Odoo runtime from this environment. The next required step is an Upgrade on Staging followed by focused regression of: Featured/Badges, iPhone banner override, centered product modal, iPhone category edges, then Odoo.sh logs.
+## Static validation
+- Python compile: PASS
+- Manifest parse/version: PASS (`19.0.1.0.22`)
+- XML parse: PASS (17 XML files)
+- JavaScript syntax: PASS
+- Arabic PO structural parse: PASS
+- Legacy `_sql_constraints` scan: PASS (none found)
+- Featured auto-chip absent: PASS
+- Featured sorting retained: PASS
+- Explicit Badge + pulse path retained: PASS
+- Centered modal CSS retained: PASS
+- Static asset cache-busting updated to 0.22: PASS
+- ZIP integrity: PASS
+
+## Runtime validation still required on Odoo.sh Staging
+1. Confirm a Featured product sorts first but does **not** show an automatic `مميز` chip.
+2. Confirm configured Badge (Best Seller/New/Chef/etc.) renders in its previous position and pulses when applicable.
+3. Confirm centered modal, iPhone category scrolling, and banner mobile override remain unchanged.
+4. Review Odoo.sh logs after module upgrade.

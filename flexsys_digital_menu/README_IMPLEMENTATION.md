@@ -348,3 +348,12 @@ This release is based on the tested 19.0.1.0.20 staging baseline and addresses t
 - Small-screen brand-title sizing is slightly more defensive while preserving the current Android/iPhone product-card layouts.
 
 The Android and iPhone product grid/card behavior remains intentionally unchanged from the tested 0.20 baseline.
+
+
+## 19.0.1.0.22 — Badge Visual Regression Fix
+
+- Removed the 0.21 automatic `Featured / مميز` chip from product-card metadata.
+- `Featured` remains a ranking signal: featured products are still surfaced first inside the continuous **All** grid.
+- Restored the pre-0.21 visual contract: only the explicitly configured product **Badge** is rendered as a marketing badge.
+- Preserved the badge pulse animation (`badge_pulse`) and kept dietary/calorie metadata visually separate from marketing intent.
+- Retained all 0.21 fixes: centered product modal, media revision URLs/cache invalidation, explicit mobile banner override selection, mobile contain fallback, and iOS category-edge padding/scroll behavior.
