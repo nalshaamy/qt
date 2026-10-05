@@ -28,7 +28,7 @@ Odoo 19 Enterprise / Odoo.sh implementation of the FlexSys Digital Menu V1 speci
 - Public payload only exposes public keys; Odoo record IDs are not included.
 - Company record rules and Digital Menu User / Manager groups.
 - First-time setup wizard.
-- Responsive cards, category navigation, search, featured slab and product bottom sheet.
+- Responsive cards, category navigation, search, featured markers and a centered product modal.
 
 ## Public URL
 
@@ -330,3 +330,21 @@ Offer imagery remains part of a compact offer card:
 - Offer images remain bounded below normal product-card media size; promotional banners remain a separate fixed-ratio centered surface.
 - Public menu JSON cache window increased to 60s with stale-while-revalidate 180s; images continue to lazy-load and use async decoding where appropriate.
 - General section spacing/rhythm was tightened for Featured / Offers / Products while preserving the approved Production UI baseline.
+
+
+## 19.0.1.0.21 — Final Polish / RC Fix Pack
+
+This release is based on the tested 19.0.1.0.20 staging baseline and addresses the issues found during Desktop, Galaxy and iPhone acceptance testing:
+
+- Featured products now surface first in the **All** grid without duplicating sections.
+- Featured status has an explicit **Featured / مميز** marker on the product card, while a configured badge (Best Seller, New, Chef, etc.) may appear at the same time.
+- Public menu JSON is no longer browser-stale after backend edits.
+- Public binary asset URLs use write-date revision tokens (`?v=...`) so changed product/offer/banner/logo media receives a new browser URL immediately.
+- Mobile banner override selection is explicit in JavaScript instead of relying on browser source selection.
+- If no mobile banner override exists, the desktop creative automatically falls back to `contain` on mobile to prevent destructive cropping.
+- Video banners retain `autoplay + muted + loop + playsinline`, including the WebKit inline-video hint.
+- Product details use a centered, content-height modal on Desktop and Mobile instead of a side drawer / bottom sheet.
+- iPhone/Safari category scroller gets safe inline spacing, scroll snap, and end breathing room to prevent the first/last chip from being clipped.
+- Small-screen brand-title sizing is slightly more defensive while preserving the current Android/iPhone product-card layouts.
+
+The Android and iPhone product grid/card behavior remains intentionally unchanged from the tested 0.20 baseline.

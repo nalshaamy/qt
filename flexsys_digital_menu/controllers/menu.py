@@ -127,7 +127,7 @@ class FlexSysDigitalMenuController(http.Controller):
             return request.not_found()
         values = self._offers_page_values(menu, requested_lang=lang, preview=False)
         response = request.render("flexsys_digital_menu.public_offers_page", values)
-        response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=120"
+        response.headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         return response
@@ -282,7 +282,7 @@ class FlexSysDigitalMenuController(http.Controller):
         return request.make_json_response(
             payload,
             headers=[
-                ("Cache-Control", "public, max-age=60, stale-while-revalidate=180"),
+                ("Cache-Control", "no-store, max-age=0"),
                 ("X-Content-Type-Options", "nosniff"),
             ],
         )

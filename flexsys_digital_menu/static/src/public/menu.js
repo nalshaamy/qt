@@ -27,6 +27,7 @@
             search: "ابحث في المنيو",
             all: "الكل",
             featured: "الأكثر تميزًا",
+            featuredBadge: "مميز",
             unavailable: "المنيو غير متاح حاليًا",
             noResults: "لا توجد منتجات مطابقة لبحثك",
             soldOut: "غير متوفر حاليًا",
@@ -51,6 +52,7 @@
             search: "Search the menu",
             all: "All",
             featured: "Featured",
+            featuredBadge: "Featured",
             unavailable: "This menu is currently unavailable",
             noResults: "No products match your search",
             soldOut: "Sold out",
@@ -279,6 +281,11 @@
         }
 
         const meta = node("div", "fsm-meta");
+        if (product.featured && product.badge_type !== "featured") {
+            const featuredMarker = makeBadge(t("featuredBadge"), true, true);
+            featuredMarker.classList.add("fsm-featured-marker");
+            meta.appendChild(featuredMarker);
+        }
         if (product.badge) meta.appendChild(makeBadge(product.badge, false, Boolean(product.badge_pulse)));
         if (product.calories) meta.appendChild(makeBadge(`${product.calories} kcal`, true));
         if (product.vegetarian) meta.appendChild(makeBadge(t("vegetarian"), true));
@@ -401,8 +408,13 @@
         }
         if (state.bannerIndex >= banners.length) state.bannerIndex = 0;
         const banner = banners[state.bannerIndex];
+        const isMobileViewport = window.matchMedia("(max-width: 760px)").matches;
+        const hasMobileOverride = Boolean(banner.mobile_media_url);
+        const effectiveMediaUrl = isMobileViewport && hasMobileOverride ? banner.mobile_media_url : banner.media_url;
+        // A desktop creative used as mobile fallback must never be cropped by default.
+        const effectiveFit = isMobileViewport && !hasMobileOverride ? "contain" : (banner.fit || "contain");
         const inner = node("div", "fsm-banners-inner");
-        const frame = node("div", `fsm-banner-frame is-${banner.fit || "contain"}`);
+        const frame = node("div", `fsm-banner-frame is-${effectiveFit}${isMobileViewport && !hasMobileOverride ? " is-mobile-fallback" : ""}`);
         const mediaHost = banner.click_url ? document.createElement("a") : document.createElement("div");
         mediaHost.className = "fsm-banner-media-link";
         if (banner.click_url) {
@@ -421,33 +433,20 @@
             video.loop = true;
             video.autoplay = true;
             video.playsInline = true;
+            video.setAttribute("playsinline", "");
+            video.setAttribute("webkit-playsinline", "");
             video.preload = "metadata";
-            if (banner.mobile_media_url) {
-                const mobileSource = document.createElement("source");
-                mobileSource.src = banner.mobile_media_url;
-                mobileSource.media = "(max-width: 760px)";
-                video.appendChild(mobileSource);
-            }
-            const source = document.createElement("source");
-            source.src = banner.media_url;
-            video.appendChild(source);
+            video.src = effectiveMediaUrl;
             video.setAttribute("aria-label", banner.alt_text || banner.name || "Promotional video");
             mediaHost.appendChild(video);
+            video.play().catch(() => {});
         } else {
-            const picture = document.createElement("picture");
-            if (banner.mobile_media_url) {
-                const source = document.createElement("source");
-                source.media = "(max-width: 760px)";
-                source.srcset = banner.mobile_media_url;
-                picture.appendChild(source);
-            }
             const image = node("img", "fsm-banner-media");
-            image.src = banner.media_url;
+            image.src = effectiveMediaUrl;
             image.alt = banner.alt_text || banner.name || "";
             image.loading = "lazy";
             image.decoding = "async";
-            picture.appendChild(image);
-            mediaHost.appendChild(picture);
+            mediaHost.appendChild(image);
         }
         frame.appendChild(mediaHost);
 
@@ -626,8 +625,17 @@
         }
 
         if (state.category === "all") {
-            // "All" is intentionally one continuous product grid: no category headings and no duplicated featured section.
-            sections.appendChild(plainProductGrid(filtered));
+            // "All" stays one continuous grid. Featured products are surfaced first
+            // without duplicating them into a second section.
+            const ordered = [...filtered].sort((a, b) => {
+                if (Boolean(a.featured) !== Boolean(b.featured)) return a.featured ? -1 : 1;
+                if (a.featured && b.featured) {
+                    const featuredDelta = (a.featured_sequence || 10) - (b.featured_sequence || 10);
+                    if (featuredDelta) return featuredDelta;
+                }
+                return (a.sequence || 10) - (b.sequence || 10);
+            });
+            sections.appendChild(plainProductGrid(ordered));
         } else {
             const category = state.data.categories.find((item) => item.key === state.category);
             if (category) {

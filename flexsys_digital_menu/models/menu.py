@@ -658,6 +658,26 @@ class FlexSysMenu(models.Model):
         active_now = menu.is_active_now(include_draft=preview)
         asset_base = f"/digital-menu/preview-asset/{menu.id}" if preview else f"/menu/{menu.slug}"
 
+        def asset_url(path, *recordsets):
+            """Return an immutable-by-URL public asset reference.
+
+            Public binary responses may be cached aggressively.  The write-date token makes
+            a changed image/banner/logo a different browser URL immediately, while preview
+            assets stay uncached and simple.
+            """
+            base = f"{asset_base}/{path}"
+            if preview:
+                return base
+            revisions = []
+            for records in recordsets:
+                if not records:
+                    continue
+                for record in records:
+                    if record.write_date:
+                        revisions.append(record.write_date)
+            revision = max(revisions) if revisions else (menu.write_date or fields.Datetime.now())
+            return f"{base}?v={revision.strftime('%Y%m%d%H%M%S%f')}"
+
         all_lines = self.env["flexsys.menu.product"].sudo().with_company(menu.company_id).with_context(lang=lang_code).search(
             [("menu_id", "=", menu.id)], order="sequence, id"
         )
@@ -688,7 +708,7 @@ class FlexSysMenu(models.Model):
                 "icon": category.icon or "",
                 "featured": category.featured,
                 "slab_background": category.slab_background or "",
-                "image_url": f"{asset_base}/category/{category.public_key}/image" if category.image else "",
+                "image_url": asset_url(f"category/{category.public_key}/image", category) if category.image else "",
                 "sequence": category.sequence,
             }
             for category in categories
@@ -738,7 +758,7 @@ class FlexSysMenu(models.Model):
                     "name": line._effective_name(),
                     "description": line._effective_description() if menu.show_descriptions else "",
                     # If a product has no image, the route falls back to the brand/company logo.
-                    "image_url": f"{asset_base}/product/{line.public_key}/image" if menu.show_product_images and (has_product_image or has_fallback_logo) else "",
+                    "image_url": asset_url(f"product/{line.public_key}/image", line, product, menu, menu.company_id) if menu.show_product_images and (has_product_image or has_fallback_logo) else "",
                     "image_is_fallback": bool(has_fallback_logo),
                     "recommendation_mode": product.digital_menu_recommendation_mode or "disabled",
                     "_manual_recommended_template_id": (
@@ -810,14 +830,13 @@ class FlexSysMenu(models.Model):
             for banner in banner_records:
                 if not banner.is_active_now(preview=preview):
                     continue
-                banner_base = f"{asset_base}/banner/{banner.public_key}"
                 banners.append({
                     "key": banner.public_key,
                     "name": banner.name,
                     "alt_text": banner.alt_text or banner.name or menu.brand_name or menu.company_id.name or "",
                     "media_type": banner.media_type,
-                    "media_url": f"{banner_base}/media",
-                    "mobile_media_url": f"{banner_base}/mobile" if banner.mobile_media else "",
+                    "media_url": asset_url(f"banner/{banner.public_key}/media", banner),
+                    "mobile_media_url": asset_url(f"banner/{banner.public_key}/mobile", banner) if banner.mobile_media else "",
                     "fit": banner.fit_mode or "contain",
                     "click_url": banner.click_url or "",
                     "open_new_tab": bool(banner.open_new_tab),
@@ -857,7 +876,7 @@ class FlexSysMenu(models.Model):
                     "name": offer.name,
                     "subtitle": offer.subtitle or "",
                     "description": offer.description or "",
-                    "image_url": f"{asset_base}/offer/{offer.public_key}/image" if offer.image else "",
+                    "image_url": asset_url(f"offer/{offer.public_key}/image", offer) if offer.image else "",
                     "product_keys": linked_keys,
                     "product_prices": offer_product_prices,
                     "variant_prices": offer_variant_prices,
@@ -876,8 +895,8 @@ class FlexSysMenu(models.Model):
                 "language": language,
                 "languages": [code for code, enabled in (("ar", menu.language_ar), ("en", menu.language_en)) if enabled],
                 "active_now": active_now,
-                "logo_url": f"{asset_base}/logo" if menu.logo else "",
-                "hero_url": f"{asset_base}/hero" if menu.hero_image else "",
+                "logo_url": asset_url("logo", menu) if menu.logo else "",
+                "hero_url": asset_url("hero", menu) if menu.hero_image else "",
                 "branch": {"key": menu.branch_public_key(branch), "name": branch._digital_menu_public_name()} if branch else None,
                 "branches": branches,
                 "navigation": menu._public_navigation(language, active_key="menu", preview=preview),
