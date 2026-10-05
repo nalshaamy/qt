@@ -87,15 +87,19 @@
     function formatPrice(amount) {
         const currency = state.data?.currency?.code || "SAR";
         const locale = state.language === "ar" ? "ar-SA" : "en-US";
+        const decimals = Math.max(0, Math.min(4, Number(state.data?.currency?.decimal_places ?? 2)));
+        const numeric = Number(amount || 0);
         try {
             return new Intl.NumberFormat(locale, {
                 style: "currency",
                 currency,
-                minimumFractionDigits: state.data?.currency?.decimal_places ?? 2,
-                maximumFractionDigits: state.data?.currency?.decimal_places ?? 2,
-            }).format(Number(amount || 0));
+                minimumFractionDigits: 0,
+                maximumFractionDigits: decimals,
+            }).format(numeric);
         } catch (_) {
-            return `${Number(amount || 0).toFixed(2)} ${state.data?.currency?.symbol || currency}`;
+            const fixed = numeric.toFixed(decimals);
+            const plain = decimals ? fixed.replace(/\.?0+$/, "") : fixed;
+            return `${plain} ${state.data?.currency?.symbol || currency}`;
         }
     }
 
@@ -244,6 +248,7 @@
             const img = node("img", `fsm-card-image${product.image_is_fallback ? " is-fallback" : ""}`);
             img.src = product.image_url;
             img.loading = "lazy";
+            img.decoding = "async";
             img.alt = product.name;
             imageWrap.appendChild(img);
         } else {
@@ -347,6 +352,13 @@
             trackEvent("category_filter", { reference: "all" });
             renderOffers();
             renderProducts();
+            requestAnimationFrame(() => {
+                el("fsm-category-nav")?.querySelector(".fsm-category-chip.is-active")?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "nearest",
+                    inline: "center",
+                });
+            });
         });
         nav.appendChild(allButton);
 
@@ -364,6 +376,13 @@
                 trackEvent("category_filter", { reference: category.key });
                 renderOffers();
                 renderProducts();
+                requestAnimationFrame(() => {
+                    el("fsm-category-nav")?.querySelector(".fsm-category-chip.is-active")?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "nearest",
+                        inline: "center",
+                    });
+                });
                 window.scrollTo({ top: el("fsm-control-slab")?.offsetTop || 0, behavior: "smooth" });
             });
             nav.appendChild(button);
@@ -426,6 +445,7 @@
             image.src = banner.media_url;
             image.alt = banner.alt_text || banner.name || "";
             image.loading = "lazy";
+            image.decoding = "async";
             picture.appendChild(image);
             mediaHost.appendChild(picture);
         }
@@ -487,6 +507,7 @@
             image.src = offer.image_url;
             image.alt = offer.name;
             image.loading = "lazy";
+            image.decoding = "async";
             media.appendChild(image);
             hero.appendChild(media);
         }
@@ -650,6 +671,7 @@
             image.src = product.image_url;
             image.alt = product.name;
             image.loading = "lazy";
+            image.decoding = "async";
             card.appendChild(image);
         } else {
             card.appendChild(node("div", "fsm-recommendation-placeholder", "✦"));
@@ -673,6 +695,7 @@
             const image = node("img", `fsm-sheet-image${product.image_is_fallback ? " is-fallback" : ""}`);
             image.src = product.image_url;
             image.alt = product.name;
+            image.decoding = "async";
             content.appendChild(image);
         }
         const bodyContent = node("div", "fsm-sheet-body");

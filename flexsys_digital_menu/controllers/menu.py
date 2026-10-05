@@ -282,7 +282,7 @@ class FlexSysDigitalMenuController(http.Controller):
         return request.make_json_response(
             payload,
             headers=[
-                ("Cache-Control", "public, max-age=30, stale-while-revalidate=60"),
+                ("Cache-Control", "public, max-age=60, stale-while-revalidate=180"),
                 ("X-Content-Type-Options", "nosniff"),
             ],
         )

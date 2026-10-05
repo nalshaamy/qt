@@ -315,3 +315,18 @@ Offer imagery remains part of a compact offer card:
 ### Compatibility
 - Existing menus, offers and products require no migration to use banners.
 - Banners are opt-in: existing menus render exactly as before until a banner is created and published.
+
+
+## 19.0.1.0.20 — Production Polish & Stability
+
+- Production baseline polish only; no new transaction flow or breaking public route changes.
+- Product-card names are clamped to two lines for stable card heights; full names remain visible in product details.
+- Public prices suppress unnecessary trailing `.00` while preserving real fractional prices up to the currency precision.
+- Category chips remain a single smooth horizontal scroller on mobile with snap/active-chip centering.
+- `All / الكل` remains one continuous product grid with no category headings.
+- Badge pulse was softened to a subtle halo without scale animation and still respects reduced-motion preferences.
+- Product-detail image and internal spacing were tightened further without hiding the full description.
+- Brand/company logo fallbacks keep `contain` sizing with proportional padding across cards, details and recommendations.
+- Offer images remain bounded below normal product-card media size; promotional banners remain a separate fixed-ratio centered surface.
+- Public menu JSON cache window increased to 60s with stale-while-revalidate 180s; images continue to lazy-load and use async decoding where appropriate.
+- General section spacing/rhythm was tightened for Featured / Offers / Products while preserving the approved Production UI baseline.
