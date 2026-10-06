@@ -229,7 +229,7 @@ class TestFlexSysDigitalMenu(TransactionCase):
         self.product.image_1920 = False
         self.product.digital_menu_image = False
         payload = self.menu._public_payload(requested_lang="en")
-        self.assertTrue(payload["products"][0]["image_url"].endswith(f"/product/{self.line.public_key}/image"))
+        self.assertTrue(payload["products"][0]["image_url"].split("?", 1)[0].endswith(f"/product/{self.line.public_key}/image"))
     def test_category_supports_multiple_pos_sources(self):
         field = self.env["flexsys.menu.category"]._fields["source_pos_category_ids"]
         self.assertEqual(field.type, "many2many")
@@ -295,6 +295,29 @@ class TestFlexSysDigitalMenu(TransactionCase):
         self.assertEqual(source["recommendation_mode"], "automatic")
         self.assertFalse(source["recommended_key"])
 
+    def test_featured_and_badge_are_both_exported_for_public_card(self):
+        self.menu.state = "published"
+        self.product.write({
+            "digital_menu_featured_default": True,
+            "digital_menu_default_badge": "best_seller",
+        })
+        payload = self.menu._public_payload(requested_lang="en")
+        item = payload["products"][0]
+        self.assertTrue(item["featured"])
+        self.assertEqual(item["badge"], "Best Seller")
+        self.assertEqual(item["badge_type"], "best_seller")
+        self.assertTrue(item["badge_pulse"])
+
+    def test_public_asset_urls_are_revisioned(self):
+        self.menu.state = "published"
+        image = Image.new("RGB", (32, 32), (20, 90, 65))
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        self.menu.logo = base64.b64encode(buffer.getvalue())
+        payload = self.menu._public_payload(requested_lang="en")
+        self.assertIn("?v=", payload["menu"]["logo_url"])
+        self.assertIn("?v=", payload["products"][0]["image_url"])
+
 
 
     def test_active_promotional_banner_is_exposed_with_fixed_media_contract(self):
@@ -314,7 +337,8 @@ class TestFlexSysDigitalMenu(TransactionCase):
         item = payload["banners"][0]
         self.assertEqual(item["key"], banner.public_key)
         self.assertEqual(item["fit"], "contain")
-        self.assertTrue(item["media_url"].endswith(f"/banner/{banner.public_key}/media"))
+        self.assertTrue(item["media_url"].split("?", 1)[0].endswith(f"/banner/{banner.public_key}/media"))
+        self.assertIn("?v=", item["media_url"])
         self.assertFalse(item["mobile_media_url"])
 
     def test_unpublished_banner_is_not_public(self):

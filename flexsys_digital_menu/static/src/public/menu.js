@@ -27,6 +27,7 @@
             search: "ابحث في المنيو",
             all: "الكل",
             featured: "الأكثر تميزًا",
+            featuredBadge: "مميز",
             unavailable: "المنيو غير متاح حاليًا",
             noResults: "لا توجد منتجات مطابقة لبحثك",
             soldOut: "غير متوفر حاليًا",
@@ -51,6 +52,7 @@
             search: "Search the menu",
             all: "All",
             featured: "Featured",
+            featuredBadge: "Featured",
             unavailable: "This menu is currently unavailable",
             noResults: "No products match your search",
             soldOut: "Sold out",
@@ -87,15 +89,19 @@
     function formatPrice(amount) {
         const currency = state.data?.currency?.code || "SAR";
         const locale = state.language === "ar" ? "ar-SA" : "en-US";
+        const decimals = Math.max(0, Math.min(4, Number(state.data?.currency?.decimal_places ?? 2)));
+        const numeric = Number(amount || 0);
         try {
             return new Intl.NumberFormat(locale, {
                 style: "currency",
                 currency,
-                minimumFractionDigits: state.data?.currency?.decimal_places ?? 2,
-                maximumFractionDigits: state.data?.currency?.decimal_places ?? 2,
-            }).format(Number(amount || 0));
+                minimumFractionDigits: 0,
+                maximumFractionDigits: decimals,
+            }).format(numeric);
         } catch (_) {
-            return `${Number(amount || 0).toFixed(2)} ${state.data?.currency?.symbol || currency}`;
+            const fixed = numeric.toFixed(decimals);
+            const plain = decimals ? fixed.replace(/\.?0+$/, "") : fixed;
+            return `${plain} ${state.data?.currency?.symbol || currency}`;
         }
     }
 
@@ -244,6 +250,7 @@
             const img = node("img", `fsm-card-image${product.image_is_fallback ? " is-fallback" : ""}`);
             img.src = product.image_url;
             img.loading = "lazy";
+            img.decoding = "async";
             img.alt = product.name;
             imageWrap.appendChild(img);
         } else {
@@ -274,6 +281,8 @@
         }
 
         const meta = node("div", "fsm-meta");
+        // Featured is a ranking signal only. Visual marketing treatment is controlled
+        // exclusively by the configured Badge, preserving the pre-0.21 card design.
         if (product.badge) meta.appendChild(makeBadge(product.badge, false, Boolean(product.badge_pulse)));
         if (product.calories) meta.appendChild(makeBadge(`${product.calories} kcal`, true));
         if (product.vegetarian) meta.appendChild(makeBadge(t("vegetarian"), true));
@@ -347,6 +356,13 @@
             trackEvent("category_filter", { reference: "all" });
             renderOffers();
             renderProducts();
+            requestAnimationFrame(() => {
+                el("fsm-category-nav")?.querySelector(".fsm-category-chip.is-active")?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "nearest",
+                    inline: "center",
+                });
+            });
         });
         nav.appendChild(allButton);
 
@@ -364,6 +380,13 @@
                 trackEvent("category_filter", { reference: category.key });
                 renderOffers();
                 renderProducts();
+                requestAnimationFrame(() => {
+                    el("fsm-category-nav")?.querySelector(".fsm-category-chip.is-active")?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "nearest",
+                        inline: "center",
+                    });
+                });
                 window.scrollTo({ top: el("fsm-control-slab")?.offsetTop || 0, behavior: "smooth" });
             });
             nav.appendChild(button);
@@ -382,8 +405,13 @@
         }
         if (state.bannerIndex >= banners.length) state.bannerIndex = 0;
         const banner = banners[state.bannerIndex];
+        const isMobileViewport = window.matchMedia("(max-width: 760px)").matches;
+        const hasMobileOverride = Boolean(banner.mobile_media_url);
+        const effectiveMediaUrl = isMobileViewport && hasMobileOverride ? banner.mobile_media_url : banner.media_url;
+        // A desktop creative used as mobile fallback must never be cropped by default.
+        const effectiveFit = isMobileViewport && !hasMobileOverride ? "contain" : (banner.fit || "contain");
         const inner = node("div", "fsm-banners-inner");
-        const frame = node("div", `fsm-banner-frame is-${banner.fit || "contain"}`);
+        const frame = node("div", `fsm-banner-frame is-${effectiveFit}${isMobileViewport && !hasMobileOverride ? " is-mobile-fallback" : ""}`);
         const mediaHost = banner.click_url ? document.createElement("a") : document.createElement("div");
         mediaHost.className = "fsm-banner-media-link";
         if (banner.click_url) {
@@ -402,32 +430,20 @@
             video.loop = true;
             video.autoplay = true;
             video.playsInline = true;
+            video.setAttribute("playsinline", "");
+            video.setAttribute("webkit-playsinline", "");
             video.preload = "metadata";
-            if (banner.mobile_media_url) {
-                const mobileSource = document.createElement("source");
-                mobileSource.src = banner.mobile_media_url;
-                mobileSource.media = "(max-width: 760px)";
-                video.appendChild(mobileSource);
-            }
-            const source = document.createElement("source");
-            source.src = banner.media_url;
-            video.appendChild(source);
+            video.src = effectiveMediaUrl;
             video.setAttribute("aria-label", banner.alt_text || banner.name || "Promotional video");
             mediaHost.appendChild(video);
+            video.play().catch(() => {});
         } else {
-            const picture = document.createElement("picture");
-            if (banner.mobile_media_url) {
-                const source = document.createElement("source");
-                source.media = "(max-width: 760px)";
-                source.srcset = banner.mobile_media_url;
-                picture.appendChild(source);
-            }
             const image = node("img", "fsm-banner-media");
-            image.src = banner.media_url;
+            image.src = effectiveMediaUrl;
             image.alt = banner.alt_text || banner.name || "";
             image.loading = "lazy";
-            picture.appendChild(image);
-            mediaHost.appendChild(picture);
+            image.decoding = "async";
+            mediaHost.appendChild(image);
         }
         frame.appendChild(mediaHost);
 
@@ -487,6 +503,7 @@
             image.src = offer.image_url;
             image.alt = offer.name;
             image.loading = "lazy";
+            image.decoding = "async";
             media.appendChild(image);
             hero.appendChild(media);
         }
@@ -605,7 +622,20 @@
         }
 
         if (state.category === "all") {
-            // "All" is intentionally one continuous product grid: no category headings and no duplicated featured section.
+            // Featured is a dedicated top section, matching the established public-menu
+            // behavior. The normal All grid remains continuous and keeps its own order.
+            const featuredProducts = filtered
+                .filter((product) => product.featured)
+                .sort((a, b) => {
+                    const featuredDelta = (a.featured_sequence || 10) - (b.featured_sequence || 10);
+                    if (featuredDelta) return featuredDelta;
+                    return (a.sequence || 10) - (b.sequence || 10);
+                });
+            if (featuredProducts.length) {
+                featured.appendChild(section(t("featured"), featuredProducts, "featured"));
+                featured.hidden = false;
+            }
+
             sections.appendChild(plainProductGrid(filtered));
         } else {
             const category = state.data.categories.find((item) => item.key === state.category);
@@ -650,6 +680,7 @@
             image.src = product.image_url;
             image.alt = product.name;
             image.loading = "lazy";
+            image.decoding = "async";
             card.appendChild(image);
         } else {
             card.appendChild(node("div", "fsm-recommendation-placeholder", "✦"));
@@ -673,6 +704,7 @@
             const image = node("img", `fsm-sheet-image${product.image_is_fallback ? " is-fallback" : ""}`);
             image.src = product.image_url;
             image.alt = product.name;
+            image.decoding = "async";
             content.appendChild(image);
         }
         const bodyContent = node("div", "fsm-sheet-body");

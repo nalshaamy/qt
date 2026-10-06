@@ -28,7 +28,7 @@ Odoo 19 Enterprise / Odoo.sh implementation of the FlexSys Digital Menu V1 speci
 - Public payload only exposes public keys; Odoo record IDs are not included.
 - Company record rules and Digital Menu User / Manager groups.
 - First-time setup wizard.
-- Responsive cards, category navigation, search, featured slab and product bottom sheet.
+- Responsive cards, category navigation, search, featured markers and a centered product modal.
 
 ## Public URL
 
@@ -315,3 +315,56 @@ Offer imagery remains part of a compact offer card:
 ### Compatibility
 - Existing menus, offers and products require no migration to use banners.
 - Banners are opt-in: existing menus render exactly as before until a banner is created and published.
+
+
+## 19.0.1.0.20 — Production Polish & Stability
+
+- Production baseline polish only; no new transaction flow or breaking public route changes.
+- Product-card names are clamped to two lines for stable card heights; full names remain visible in product details.
+- Public prices suppress unnecessary trailing `.00` while preserving real fractional prices up to the currency precision.
+- Category chips remain a single smooth horizontal scroller on mobile with snap/active-chip centering.
+- `All / الكل` remains one continuous product grid with no category headings.
+- Badge pulse was softened to a subtle halo without scale animation and still respects reduced-motion preferences.
+- Product-detail image and internal spacing were tightened further without hiding the full description.
+- Brand/company logo fallbacks keep `contain` sizing with proportional padding across cards, details and recommendations.
+- Offer images remain bounded below normal product-card media size; promotional banners remain a separate fixed-ratio centered surface.
+- Public menu JSON cache window increased to 60s with stale-while-revalidate 180s; images continue to lazy-load and use async decoding where appropriate.
+- General section spacing/rhythm was tightened for Featured / Offers / Products while preserving the approved Production UI baseline.
+
+
+## 19.0.1.0.21 — Final Polish / RC Fix Pack
+
+This release is based on the tested 19.0.1.0.20 staging baseline and addresses the issues found during Desktop, Galaxy and iPhone acceptance testing:
+
+- Featured products now surface first in the **All** grid without duplicating sections.
+- Featured status has an explicit **Featured / مميز** marker on the product card, while a configured badge (Best Seller, New, Chef, etc.) may appear at the same time.
+- Public menu JSON is no longer browser-stale after backend edits.
+- Public binary asset URLs use write-date revision tokens (`?v=...`) so changed product/offer/banner/logo media receives a new browser URL immediately.
+- Mobile banner override selection is explicit in JavaScript instead of relying on browser source selection.
+- If no mobile banner override exists, the desktop creative automatically falls back to `contain` on mobile to prevent destructive cropping.
+- Video banners retain `autoplay + muted + loop + playsinline`, including the WebKit inline-video hint.
+- Product details use a centered, content-height modal on Desktop and Mobile instead of a side drawer / bottom sheet.
+- iPhone/Safari category scroller gets safe inline spacing, scroll snap, and end breathing room to prevent the first/last chip from being clipped.
+- Small-screen brand-title sizing is slightly more defensive while preserving the current Android/iPhone product-card layouts.
+
+The Android and iPhone product grid/card behavior remains intentionally unchanged from the tested 0.20 baseline.
+
+
+## 19.0.1.0.22 — Badge Visual Regression Fix
+
+- Removed the 0.21 automatic `Featured / مميز` chip from product-card metadata.
+- `Featured` remains a ranking signal: featured products are still surfaced first inside the continuous **All** grid.
+- Restored the pre-0.21 visual contract: only the explicitly configured product **Badge** is rendered as a marketing badge.
+- Preserved the badge pulse animation (`badge_pulse`) and kept dietary/calorie metadata visually separate from marketing intent.
+- Retained all 0.21 fixes: centered product modal, media revision URLs/cache invalidation, explicit mobile banner override selection, mobile contain fallback, and iOS category-edge padding/scroll behavior.
+
+## 19.0.1.0.23 — Featured Section + Badge Pulse Hotfix
+
+This is a deliberately narrow hotfix built directly from 19.0.1.0.22.
+
+- Restored the established **Featured / الأكثر تميزًا** section above the normal product grid when the public view is on **All / الكل**.
+- `Featured` remains controlled by the existing boolean and uses the existing `featured_sequence` ordering inside that section.
+- The normal **All** grid remains continuous and keeps its normal product order; no category headings were reintroduced.
+- Restored the pre-0.20 marketing Badge pulse: a subtle 1.025 scale plus halo, 2.2s loop.
+- Explicit product **Badge** behavior remains independent from `Featured`.
+- No Models, Controllers, Routes, Security, Banner, Offer, Modal, Category, Cache, Analytics, or Many2many logic was changed.
