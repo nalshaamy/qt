@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+  <t t-name="flexsys_pos_receipt.OrderReceipt" t-inherit="point_of_sale.OrderReceipt" t-inherit-mode="extension">
+    <xpath expr="//div[hasclass('pos-receipt')]" position="attributes">
+      <attribute name="class" add="flexsys-premium-receipt" separator=" "/>
+      <attribute name="t-att-dir">flexsysIsArabic ? 'rtl' : 'ltr'</attribute>
+    </xpath>
+    <xpath expr="//ReceiptHeader" position="after">
+      <div t-if="order.company.vat" class="flexsys-vat-top">
+        <span><t t-if="flexsysIsArabic">الرقم الضريبي:</t><t t-else="">VAT Number:</t></span>
+        <span dir="ltr" t-out="order.company.vat"/>
+      </div>
+    </xpath>
+    <xpath expr="//OrderDisplay[@mode=&quot;'receipt'&quot;]" position="before">
+      <div class="flexsys-products-title" aria-hidden="true">
+        <span class="flexsys-col-qty"><t t-if="flexsysIsArabic">الكمية</t><t t-else="">QTY</t></span>
+        <span class="flexsys-col-item"><t t-if="flexsysIsArabic">الصنف</t><t t-else="">ITEM</t></span>
+        <span class="flexsys-col-amount"><t t-if="flexsysIsArabic">المبلغ</t><t t-else="">AMOUNT</t></span>
+      </div>
+    </xpath>
+    <xpath expr="//span[hasclass('text-nowrap')][normalize-space()='Subtotal']" position="replace">
+      <span class="text-nowrap mw-100"><t t-if="flexsysIsArabic">المجموع قبل الضريبة</t><t t-else="">Subtotal</t></span>
+    </xpath>
+    <xpath expr="//span[@t-esc='tax_group.group_name']" position="replace">
+      <span t-esc="flexsysTaxName(tax_group.group_name)"/>
+    </xpath>
+    <xpath expr="//span[hasclass('label-total')]" position="replace">
+      <span class="label-total"><t t-if="flexsysIsArabic">الإجمالي</t><t t-else="">Total</t></span>
+    </xpath>
+    <xpath expr="//div[hasclass('d-flex')][.//div[hasclass('pos-config-name')]]" position="attributes">
+      <attribute name="class" add="flexsys-company-details" separator=" "/>
+      <attribute name="t-if">order.config.flexsys_show_company_footer</attribute>
+    </xpath>
+    <xpath expr="//div[@t-if='company.vat'][@t-out='vatText']" position="replace"/>
+  </t>
+  <t t-name="flexsys_pos_receipt.Orderline" t-inherit="point_of_sale.Orderline" t-inherit-mode="extension">
+    <xpath expr="//li[hasclass('price-per-unit')][@t-if='vals.displayPriceUnit']" position="attributes">
+      <attribute name="t-if">vals.displayPriceUnit &amp;&amp; !vals.isReceipt</attribute>
+    </xpath>
+  </t>
+</templates>

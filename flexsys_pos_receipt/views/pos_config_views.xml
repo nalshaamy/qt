@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <record id="flexsys_pos_config_form_receipt" model="ir.ui.view">
+    <field name="name">flexsys.pos.config.form.receipt</field>
+    <field name="model">pos.config</field>
+    <field name="inherit_id" ref="point_of_sale.pos_config_view_form"/>
+    <field name="arch" type="xml">
+      <xpath expr="//sheet" position="inside">
+        <group name="flexsys_pos_receipt_settings" string="FlexSys POS Receipt">
+          <field name="flexsys_show_company_footer"
+                 string="Show Company Details on POS Receipt"
+                 help="Show or hide company details at the bottom of the receipt. The VAT number stays visible at the top."/>
+        </group>
+      </xpath>
+    </field>
+  </record>
+</odoo>

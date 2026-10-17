@@ -1,0 +1,128 @@
+/* FlexSys POS Receipt 19.0.1.0.4 -- monochrome 80mm, preserve stock logo and fiscal QR */
+.pos-receipt.flexsys-premium-receipt {
+  color: #111; background: #fff; box-sizing: border-box;
+  font-family: Arial, "Noto Sans Arabic", sans-serif; font-size: 12px; line-height: 1.32;
+  padding: 6px 6px 9px; overflow-wrap: normal;
+  /* Never change .pos-receipt-logo; the store-approved original remains in control. */
+  .pos-receipt-qr img { max-width: 100%; height: auto; }
+  .pos-receipt-header, .pos-receipt-contact { text-align: center; line-height: 1.2; }
+  .pos-receipt-contact > div { margin-block: 1px; }
+  .pos-receipt .pt-3, & > .pt-3, .pos-receipt-taxes.pt-3 { padding-top: 4px !important; }
+  .pos-receipt-contact + div, .pos-receipt-header + div { margin-top: 2px; }
+  .pos-receipt-order-data { padding-top: 4px !important; }
+  .tracking-number.fs-1 { font-size: 28px !important; font-weight: 800; line-height: 1.1; margin: 3px auto; }
+  .flexsys-products-title { display: grid; grid-template-columns: 12% minmax(0, 1fr) 25%; gap: 3px;
+    padding: 5px 2px 4px; margin-top: 5px; border-top: 1px dashed #777; border-bottom: 1px dashed #777;
+    font-size: 10px; font-weight: 700; }
+  .flexsys-products-title .flexsys-col-item { text-align: start; }
+  .flexsys-products-title .flexsys-col-qty { text-align: center; }
+  .flexsys-products-title .flexsys-col-amount { text-align: end; }
+  /* Odoo Orderline remains responsible for quantity/line total/discount/taxes */
+  .orderline .line-details { display: grid !important; grid-template-columns: minmax(0, 1fr) max-content; gap: 4px; align-items: start; }
+  .orderline .product-name { min-width: 0 !important; max-width: 100%; overflow: visible !important;
+    text-overflow: clip !important; white-space: normal !important; overflow-wrap: anywhere; }
+  .orderline .product-name .text-wrap { white-space: normal !important; overflow-wrap: anywhere; }
+  .orderline .qty { flex: none; min-width: 18px; text-align: center; }
+  .orderline .product-price { min-width: 0; max-width: 95px; white-space: nowrap !important;
+    overflow-wrap: normal !important; direction: ltr; unicode-bidi: isolate; text-align: end; font-size: 11px; }
+  .pos-receipt-taxes { border-top: 1px dashed #888; padding-top: 5px !important; margin-top: 5px; }
+  .pos-receipt-taxes > div { margin: 2px 0; }
+  .pos-receipt-amount.receipt-total { display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 4px; margin: 6px 0 3px; background: #ececec !important; font-weight: 800; font-size: 15px; }
+  .font-monospace, .pos-receipt-right-align { white-space: nowrap; direction: ltr; unicode-bidi: isolate; }
+  .paymentlines { padding-block: 3px !important; border-bottom: 1px dashed #999; }
+  .flexsys-company-details { margin-top: 5px; padding-top: 5px !important; border-top: 1px dashed #999;
+    display: grid !important; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 7px !important;
+    direction: ltr; align-items: start; }
+  .flexsys-company-details > div { width: auto !important; min-width: 0; overflow-wrap: anywhere; }
+  .flexsys-company-details > div:first-child { text-align: start !important; }
+  .flexsys-company-details > div:nth-child(2) { text-align: end !important; }
+  .flexsys-vat-number { display: flex; gap: 2px; flex-direction: column; }
+  [dir='ltr'] { unicode-bidi: isolate; }
+  .footer-powered-by { font-size: 9px; }
+}
+@media print {
+  .pos-receipt.flexsys-premium-receipt { width: 72mm !important; max-width: 72mm !important;
+    min-width: 0 !important; box-shadow: none !important; margin: 0 auto !important;
+    padding: 2mm 1.2mm !important; print-color-adjust: exact; }
+}
+
+/* 19.0.1.0.4: RTL alignment and compact vertical rhythm.
+   Scoped to the printed receipt: do not change original logo or tax QR sizing. */
+.pos-receipt.flexsys-premium-receipt {
+  .pos-receipt-header { margin-bottom: 3px !important; padding-bottom: 0 !important; }
+  .pos-receipt-header .pos-receipt-contact { margin-top: 2px !important; margin-bottom: 2px !important; }
+  .pos-receipt-header .pos-receipt-qr { margin-block: 2px 4px !important; padding-block: 0 !important; }
+  .pos-receipt-order-data { margin-block: 2px 4px !important; }
+  .tracking-number { margin-block: 2px 3px !important; }
+  .flexsys-products-title {
+    grid-template-columns: minmax(32px, 16%) minmax(0, 1fr) minmax(74px, 27%);
+    column-gap: 6px; align-items: center;
+    white-space: nowrap; margin-top: 3px; padding-block: 4px;
+  }
+  .flexsys-col-qty { min-width: 0; }
+  .flexsys-col-item { min-width: 0; }
+  .flexsys-col-amount { min-width: 0; }
+  .orderline { min-width: 0; }
+  .orderline .product-name, .orderline .product-name .text-wrap {
+    min-width: 0; max-width: 100%; line-height: 1.28;
+    white-space: normal !important; overflow-wrap: anywhere;
+    word-break: normal; unicode-bidi: plaintext;
+  }
+  .orderline .qty { min-width: 22px !important; padding-inline: 3px; flex-shrink: 0; }
+  .orderline .product-price, .pos-receipt-right-align {
+    white-space: nowrap !important; direction: ltr !important;
+    unicode-bidi: isolate; font-variant-numeric: tabular-nums;
+  }
+  .pos-receipt-taxes { margin-top: 4px !important; padding-top: 4px !important; }
+  .pos-receipt-taxes > div { gap: 6px; min-width: 0; }
+  .pos-receipt-taxes > div > :first-child { min-width: 0; }
+  .pos-receipt-taxes > div > :last-child {
+    flex-shrink: 0; white-space: nowrap !important;
+    direction: ltr; unicode-bidi: isolate;
+  }
+  .flexsys-company-details { margin-top: 4px !important; padding-top: 5px !important;
+    gap: 9px !important; grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr); }
+  .flexsys-company-details > div { line-height: 1.35; }
+  .flexsys-vat-number { gap: 3px; }
+  .flexsys-vat-number span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+}
+.pos-receipt.flexsys-premium-receipt[dir="rtl"] {
+  .flexsys-products-title { direction: rtl; }
+  .flexsys-products-title .flexsys-col-qty { text-align: center; }
+  .flexsys-products-title .flexsys-col-item { text-align: right; }
+  .flexsys-products-title .flexsys-col-amount { direction: rtl; text-align: left; }
+  .pos-receipt-taxes > div { direction: rtl; }
+  .pos-receipt-taxes > div > :first-child { text-align: right; }
+  .pos-receipt-taxes > div > :last-child { text-align: left; }
+  .orderline .product-name { text-align: right; }
+  .flexsys-company-details > div:first-child { direction: rtl; text-align: right !important; }
+  .flexsys-company-details > div:nth-child(2) { direction: rtl; text-align: right !important; }
+}
+.pos-receipt.flexsys-premium-receipt[dir="ltr"] {
+  .flexsys-products-title { direction: ltr; }
+  .flexsys-products-title .flexsys-col-item { text-align: left; }
+  .flexsys-products-title .flexsys-col-amount { text-align: right; }
+  .orderline .product-name { text-align: left; }
+}
+
+/* v19.0.1.0.5: vendor identity top, optional company footer, compact fiscal QR */
+.pos-receipt.flexsys-premium-receipt {
+  .flexsys-vat-top {
+    display: flex; justify-content: center; align-items: baseline; gap: 5px;
+    flex-wrap: wrap; text-align: center; padding: 2px 0 3px; margin: 2px 0 1px;
+    font-size: 10px; line-height: 1.25; font-weight: 600;
+  }
+  .flexsys-vat-top span[dir="ltr"] { white-space: nowrap; unicode-bidi: isolate; font-variant-numeric: tabular-nums; }
+  /* Fiscal QR: limit rendered size only; preserve src, content, padding and scan contrast.
+     This does not touch the original store logo nor the separate portal QR. */
+  .pos-receipt-header img:not(.pos-receipt-logo):not(#posqrcode),
+  .pos-receipt-header .pos-receipt-qr img,
+  .pos-receipt-header img.zatca-qr,
+  .pos-receipt-header img.zatca_qr,
+  .pos-receipt-header img.qr-code {
+    width: 110px !important; height: 110px !important;
+    max-width: 110px !important; object-fit: contain;
+    image-rendering: pixelated;
+  }
+}

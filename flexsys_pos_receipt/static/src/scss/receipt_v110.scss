@@ -1,0 +1,56 @@
+/* 19.0.1.0.10: presentation-only refinements, scoped to printed receipt.
+   The Odoo fiscal QR payload, pricing, taxes and company logo remain untouched. */
+.pos-receipt.flexsys-premium-receipt {
+  --fs-qty: 12%; --fs-amount: 29%; --fs-gap: 5px;
+  .flexsys-products-title,
+  .orderline .line-details {
+    display: grid !important;
+    grid-template-columns: minmax(24px, 12%) minmax(0, 1fr) minmax(77px, 29%) !important;
+    column-gap: 5px !important;
+    box-sizing: border-box;
+    align-items: start;
+  }
+  .flexsys-products-title { padding-inline: 2px; }
+  .orderline .line-details > .qty {
+    grid-column: 1 !important; grid-row: 1;
+    justify-self: center; min-width: 0 !important;
+    margin: 0 !important; padding: 0 !important;
+    white-space: nowrap !important;
+  }
+  .orderline .line-details > .product-name {
+    grid-column: 2 !important; grid-row: 1;
+    display: block; min-width: 0 !important;
+    max-width: 100% !important; margin: 0 !important;
+    overflow-wrap: anywhere !important; white-space: normal !important;
+    unicode-bidi: plaintext; line-height: 1.35;
+  }
+  .orderline .line-details > .product-price {
+    grid-column: 3 !important; grid-row: 1;
+    min-width: 0 !important; max-width: none !important;
+    white-space: nowrap !important; direction: ltr !important;
+    unicode-bidi: isolate; text-align: end;
+    font-size: 10.5px; letter-spacing: -.15px;
+  }
+  .orderline .line-details > :not(.qty):not(.product-name):not(.product-price) {
+    grid-column: 2 / 4;
+  }
+  .pos-receipt-header { padding-bottom: 0 !important; margin-bottom: 1px !important; }
+  .pos-receipt-header .pos-receipt-contact { margin-block: 1px !important; }
+  .pos-receipt-header .pos-receipt-qr { margin-block: 0 2px !important; }
+  .pos-receipt-order-data { margin-block: 0 1px !important; padding-top: 0 !important; }
+  .tracking-number { margin-block: 0 1px !important; }
+  .flexsys-vat-top { margin-block: 1px !important; }
+  .flexsys-products-title { margin-top: 2px !important; }
+  .pos-receipt-taxes > div { display: flex !important; gap: 8px !important; }
+  .pos-receipt-taxes > div > :last-child { white-space: nowrap; direction: ltr; unicode-bidi: isolate; }
+}
+.pos-receipt.flexsys-premium-receipt[dir='rtl'] {
+  .flexsys-products-title, .orderline .line-details { direction: rtl !important; }
+  .orderline .line-details > .product-name { text-align: right !important; }
+  .orderline .line-details > .product-price { text-align: left !important; }
+}
+.pos-receipt.flexsys-premium-receipt[dir='ltr'] {
+  .flexsys-products-title, .orderline .line-details { direction: ltr !important; }
+  .orderline .line-details > .product-name { text-align: left !important; }
+  .orderline .line-details > .product-price { text-align: right !important; }
+}
