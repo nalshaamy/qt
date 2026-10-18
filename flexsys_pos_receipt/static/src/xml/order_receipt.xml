@@ -4,6 +4,7 @@
     <xpath expr="//div[hasclass('pos-receipt')]" position="attributes">
       <attribute name="class" add="flexsys-premium-receipt" separator=" "/>
       <attribute name="t-att-dir">'ltr'</attribute>
+      <attribute name="t-ref">flexsysReceipt</attribute>
       <attribute name="t-att-data-flexsys-rtl">flexsysIsArabic ? '1' : '0'</attribute>
     </xpath>
     <xpath expr="//ReceiptHeader" position="after">

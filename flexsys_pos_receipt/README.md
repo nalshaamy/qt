@@ -82,3 +82,10 @@ Browser PDF page headers/localhost footer are browser print settings, not receip
 - Preserve long mixed-language product modifiers and reduce header container spacing without changing logo/QR image dimensions.
 - Preserve 0.9 isolation: no POS loader overrides, pricelist or tax logic changes.
 - Runtime testing and fiscal QR scanning remain required.
+
+## 19.0.1.0.13 — STAGING only
+- Compact header and improve mixed RTL/LTR option wrapping without changing the logo or QR size.
+- Use Unicode 17 U+20C1 Saudi Riyal sign **only in rendered receipt numeric price text**. Original Odoo amounts and SAR currency records remain unchanged.
+- Experimental native glyph: some printer/browser fonts may show an unsupported glyph. To revert immediately, set `FLEX_SYS_RIYAL_SYMBOL_ENABLED = false` in `static/src/js/order_receipt.js`, upgrade and rebuild assets.
+- Test receipt opening and printing, RTL taxes, mixed modifiers, and scan ZATCA QR before production.
+- No override of `_load_pos_data_fields`.
