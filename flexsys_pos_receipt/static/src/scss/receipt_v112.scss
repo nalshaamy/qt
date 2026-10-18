@@ -1,0 +1,88 @@
+/* 19.0.1.0.12 - Presentation-only adjustments, intentionally last in asset order.
+   Keep original logo dimensions, fiscal QR data and POS loader untouched. */
+.pos-receipt.flexsys-premium-receipt {
+  /* Preserve the print surface's physical LTR coordinates in both languages. */
+  direction: ltr !important;
+
+  /* Avoid oversized blank blocks from receipt-header containers, not logo/QR dimensions. */
+  .pos-receipt-header {
+    margin-bottom: 0 !important;
+    padding-bottom: 0 !important;
+  }
+  .pos-receipt-header .pos-receipt-qr {
+    margin-top: 2px !important;
+    margin-bottom: 2px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+  .pos-receipt-header .pos-receipt-contact,
+  .pos-receipt-order-data {
+    margin-top: 1px !important;
+    margin-bottom: 1px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+  .tracking-number {
+    margin-top: 1px !important;
+    margin-bottom: 2px !important;
+  }
+
+  /* Keep original source text, attributes and POS variants intact. */
+  .orderline .line-details > .product-name > .text-wrap {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow-wrap: break-word !important;
+    word-break: normal !important;
+    white-space: normal !important;
+    line-height: 1.35 !important;
+  }
+  .orderline .line-details > .product-price,
+  .pos-receipt-right-align {
+    direction: ltr !important;
+    unicode-bidi: isolate !important;
+    white-space: nowrap !important;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Arabic receipt: the text is RTL, whereas monetary values stay LTR.
+   Do not reverse DOM order or change computed amount strings. */
+.pos-receipt.flexsys-premium-receipt[data-flexsys-rtl='1'] {
+  .orderline .line-details > .product-name > .text-wrap {
+    direction: rtl !important;
+    text-align: right !important;
+    unicode-bidi: plaintext;
+  }
+  .pos-receipt-taxes > div {
+    display: flex !important;
+    direction: rtl !important;
+    justify-content: space-between !important;
+    align-items: baseline !important;
+    gap: 8px !important;
+  }
+  .pos-receipt-taxes > div > :first-child {
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+    direction: rtl !important;
+    text-align: right !important;
+  }
+  .pos-receipt-taxes > div > :last-child {
+    flex: 0 0 auto !important;
+    direction: ltr !important;
+    unicode-bidi: isolate !important;
+    white-space: nowrap !important;
+    text-align: left !important;
+    font-variant-numeric: tabular-nums;
+  }
+  .pos-receipt-amount.receipt-total {
+    direction: rtl !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
+  }
+  .pos-receipt-amount.receipt-total .pos-receipt-right-align,
+  .paymentlines .pos-receipt-right-align {
+    direction: ltr !important;
+    unicode-bidi: isolate !important;
+    white-space: nowrap !important;
+  }
+}

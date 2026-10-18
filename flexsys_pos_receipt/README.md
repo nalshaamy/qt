@@ -75,3 +75,10 @@ Browser PDF page headers/localhost footer are browser print settings, not receip
 - Anchors paper's outer direction to LTR, with Arabic alignment applied inside text groups.
 - Leaves fiscal QR, logo, prices, taxes, discounts, notes, POS data loading and company-footer settings unchanged.
 - Not runtime-tested. Verify RTL/LTR receipts and printer width on Staging.
+
+
+## 19.0.1.0.12 (Staging)
+- Presentation-only: keep amount/currency groups LTR in Arabic receipt totals; separate RTL tax labels from values.
+- Preserve long mixed-language product modifiers and reduce header container spacing without changing logo/QR image dimensions.
+- Preserve 0.9 isolation: no POS loader overrides, pricelist or tax logic changes.
+- Runtime testing and fiscal QR scanning remain required.
