@@ -89,3 +89,11 @@ Browser PDF page headers/localhost footer are browser print settings, not receip
 - Experimental native glyph: some printer/browser fonts may show an unsupported glyph. To revert immediately, set `FLEX_SYS_RIYAL_SYMBOL_ENABLED = false` in `static/src/js/order_receipt.js`, upgrade and rebuild assets.
 - Test receipt opening and printing, RTL taxes, mixed modifiers, and scan ZATCA QR before production.
 - No override of `_load_pos_data_fields`.
+
+
+## 19.0.1.0.14 (STAGING)
+- Uses a *vector drawing* of the Saudi Riyal glyph, extracted from the user-authorized VIO module; does not redistribute its font files.
+- The receipt replaces visible SR currency labels adjacent to amounts with a small SVG image; underlying amount data, res.currency, tax and QR calculations are unchanged.
+- Fallback: set FLEX_SYS_RIYAL_SYMBOL_ENABLED = false in static/src/js/order_receipt.js and update assets to retain SR text.
+- Test browser receipt, PDF, Epson thermal printing, POS startup, and fiscal QR scanning.
+- Verify developer permission for bundled derivative artwork before public/commercial redistribution.

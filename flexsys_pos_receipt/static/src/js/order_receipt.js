@@ -5,27 +5,39 @@ import { localization } from "@web/core/l10n/localization";
 import { onMounted, onPatched, useRef } from "@odoo/owl";
 import { OrderReceipt } from "@point_of_sale/app/screens/receipt_screen/receipt/order_receipt";
 
-// Only presentation logic. Monetary amounts and fiscal QR continue to come from Odoo.
-// Visual-only receipt formatting. Switch to false if a device does not support U+20C1.
+// Receipt presentation only. No change to currency setup or fiscal calculations.
+// Switch to false to show Odoo's SR text instead of the new visual symbol.
 const FLEX_SYS_RIYAL_SYMBOL_ENABLED = true;
-const SAUDI_RIYAL_SYMBOL = "\u20c1";
+const SYMBOL_URL = "/flexsys_pos_receipt/static/src/img/saudi_riyal_mark.svg";
+
 function decorateReceiptCurrency(root) {
-    if (!FLEX_SYS_RIYAL_SYMBOL_ENABLED || !root) return;
+    if (!root || !FLEX_SYS_RIYAL_SYMBOL_ENABLED) return;
     const containers = root.querySelectorAll(
         ".orderline .product-price, .pos-receipt-taxes, .pos-receipt-amount, .paymentlines"
     );
     for (const container of containers) {
         const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-        const textNodes = [];
-        while (walker.nextNode()) textNodes.push(walker.currentNode);
-        for (const node of textNodes) {
-            // Only replace the currency label adjacent to a numeric price.
-            // Do not alter text such as item names, VAT number or fiscal QR.
-            const prior = node.nodeValue;
-            const next = prior
-                .replace(/(\d[\d,.]*)([ \u00a0]*)SR\b/g, `$1$2${SAUDI_RIYAL_SYMBOL}`)
-                .replace(/\bSR([ \u00a0]*)(\d)/g, `${SAUDI_RIYAL_SYMBOL}$1$2`);
-            if (next !== prior) node.nodeValue = next;
+        const nodes = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode);
+        for (const node of nodes) {
+            const text = node.nodeValue;
+            // Process numeric amounts only; do not modify product names or VAT numbers.
+            if (!/(?:\d[\d,.]*\s*SR\b|\bSR\s*\d)/.test(text)) continue;
+            const pattern = /\bSR\b/g;
+            const fragment = document.createDocumentFragment();
+            let start = 0;
+            for (const match of text.matchAll(pattern)) {
+                fragment.append(document.createTextNode(text.slice(start, match.index)));
+                const icon = document.createElement("img");
+                icon.className = "flexsys-riyal-symbol";
+                icon.src = SYMBOL_URL;
+                icon.alt = "SR";
+                icon.setAttribute("aria-label", "Saudi Riyal");
+                fragment.append(icon);
+                start = match.index + match[0].length;
+            }
+            fragment.append(document.createTextNode(text.slice(start)));
+            node.replaceWith(fragment);
         }
     }
 }
