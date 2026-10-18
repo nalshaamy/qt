@@ -1,0 +1,112 @@
+/* 19.0.1.0.11: Odoo 19 native Orderline structure:
+   .line-details > .product-name > (.qty + .text-wrap), sibling .product-price.
+   Scope to receipt component only; no POS model/loader/pricing changes. */
+.pos-receipt.flexsys-premium-receipt {
+  direction: ltr !important;
+  width: 72mm;
+  max-width: 72mm;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  --fs-qty-width: 29px;
+  --fs-price-width: 83px;
+  --fs-col-gap: 5px;
+
+  .flexsys-products-title {
+    display: grid !important;
+    grid-template-columns: var(--fs-qty-width) minmax(0,1fr) var(--fs-price-width) !important;
+    gap: var(--fs-col-gap) !important;
+    direction: ltr !important;
+  }
+  .orderline .line-details {
+    display: grid !important;
+    grid-template-columns: minmax(0,1fr) var(--fs-price-width) !important;
+    column-gap: var(--fs-col-gap) !important;
+    align-items: start !important;
+    direction: ltr !important;
+  }
+  .orderline .line-details > .product-name {
+    display: grid !important;
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+    grid-template-columns: var(--fs-qty-width) minmax(0,1fr) !important;
+    column-gap: var(--fs-col-gap) !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    white-space: normal !important;
+    text-overflow: clip !important;
+    align-items: start !important;
+    text-align: left !important;
+  }
+  .orderline .line-details > .product-name > .qty {
+    grid-column: 1 !important;
+    justify-self: center !important;
+    text-align: center !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    min-width: 0 !important;
+    width: auto !important;
+    white-space: nowrap !important;
+    direction: ltr !important;
+    unicode-bidi: isolate;
+  }
+  .orderline .line-details > .product-name > .text-wrap {
+    display: block !important;
+    grid-column: 2 !important;
+    margin: 0 !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    word-break: normal !important;
+    unicode-bidi: plaintext;
+    line-height: 1.35 !important;
+    text-align: left !important;
+  }
+  .orderline .line-details > .product-price {
+    display: block !important;
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    text-align: right !important;
+    direction: ltr !important;
+    unicode-bidi: isolate;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap !important;
+    font-size: 10.5px;
+  }
+  .orderline .line-details > .text-end { grid-column: 2; }
+  .pos-receipt-header { margin-bottom: 0 !important; padding-bottom: 0 !important; }
+  .pos-receipt-order-data { margin-top: 0 !important; padding-top: 0 !important; }
+  .tracking-number { margin-top: 0 !important; margin-bottom: 1px !important; }
+  .flexsys-vat-top { margin-block: 1px !important; }
+  .flexsys-products-title { margin-top: 1px !important; }
+}
+/* Arabic: keep the receipt's physical print origin left-anchored, but
+   Arabic labels and product names right-aligned inside stable columns. */
+.pos-receipt.flexsys-premium-receipt[data-flexsys-rtl='1'] {
+  .flexsys-products-title .flexsys-col-item { text-align: right !important; direction: rtl; }
+  .flexsys-products-title .flexsys-col-amount { text-align: right !important; }
+  .orderline .line-details > .product-name > .text-wrap {
+    direction: rtl !important;
+    text-align: right !important;
+    unicode-bidi: plaintext;
+  }
+  .pos-receipt-taxes > div { direction: rtl !important; }
+  .pos-receipt-taxes > div > :first-child { text-align: right !important; }
+  .pos-receipt-taxes > div > :last-child { text-align: left !important; direction:ltr; }
+}
+@media print {
+  .pos-receipt.flexsys-premium-receipt {
+    width: 72mm !important;
+    max-width: 72mm !important;
+    margin: 0 !important;
+    padding: 2mm 1.2mm !important;
+  }
+}

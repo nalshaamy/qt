@@ -67,3 +67,11 @@ Browser PDF page headers/localhost footer are browser print settings, not receip
 - Does not modify logo, tax QR data or amounts.
 - Customer label deliberately deferred until the precise Odoo 19 customer node can be verified; no potentially destructive XPath added.
 - Not runtime-tested; verify POS launch, discounted/multi-line receipts and scan the printed QR on staging.
+
+
+## 19.0.1.0.11 - Staging visual fix
+- Uses Odoo 19 real Orderline DOM hierarchy: quantity is **inside** product-name, not a sibling.
+- Aligns receipt-only 3-column header against nested quantity/name and sibling product-price.
+- Anchors paper's outer direction to LTR, with Arabic alignment applied inside text groups.
+- Leaves fiscal QR, logo, prices, taxes, discounts, notes, POS data loading and company-footer settings unchanged.
+- Not runtime-tested. Verify RTL/LTR receipts and printer width on Staging.

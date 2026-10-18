@@ -1,7 +1,7 @@
 {
  "name": "FlexSys POS Receipt",
  "summary": "Bilingual refined POS 80mm receipt layout for Odoo 19",
- "version": "19.0.1.0.10",
+ "version": "19.0.1.0.11",
  "category": "Point of Sale",
  "author": "FlexSys",
  "website": "https://flexsyssa.com",
@@ -12,8 +12,7 @@
   "flexsys_pos_receipt/static/src/js/order_receipt.js",
   "flexsys_pos_receipt/static/src/xml/order_receipt.xml",
   "flexsys_pos_receipt/static/src/scss/order_receipt.scss",
-  "flexsys_pos_receipt/static/src/scss/receipt_v106.scss",
-  "flexsys_pos_receipt/static/src/scss/receipt_v110.scss"
+  "flexsys_pos_receipt/static/src/scss/receipt_v111.scss"
  ]},
  "installable": True,
  "application": False
