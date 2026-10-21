@@ -116,7 +116,7 @@
   .flexsys-vat-top span[dir="ltr"] { white-space: nowrap; unicode-bidi: isolate; font-variant-numeric: tabular-nums; }
   /* Fiscal QR: limit rendered size only; preserve src, content, padding and scan contrast.
      This does not touch the original store logo nor the separate portal QR. */
-  .pos-receipt-header img:not(.pos-receipt-logo):not(#posqrcode),
+  .pos-receipt-header img:not(.pos-receipt-logo):not(#posqrcode):not(.flexsys-promo-image),
   .pos-receipt-header .pos-receipt-qr img,
   .pos-receipt-header img.zatca-qr,
   .pos-receipt-header img.zatca_qr,

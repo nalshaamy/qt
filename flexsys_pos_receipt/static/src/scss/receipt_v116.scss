@@ -1,0 +1,79 @@
+/* FlexSys 19.0.1.0.16 — marketing images and stable order-number hierarchy.
+ * Thermal TM-T20III: 80mm paper, printable 72mm. No global Odoo CSS. */
+.pos-receipt.flexsys-premium-receipt {
+  .flexsys-header-promo, .flexsys-footer-promo {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden;
+    text-align: center !important;
+    line-height: 1 !important;
+    margin: 3px auto !important;
+    padding: 0 !important;
+  }
+  .flexsys-header-promo img, .flexsys-footer-promo img {
+    display: block !important;
+    width: auto !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: 300px !important;
+    object-fit: contain;
+    margin: 0 auto !important;
+    image-rendering: auto;
+  }
+  .flexsys-footer-promo { margin-top: 6px !important; }
+  .flexsys-order-number-frame {
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    margin: 3px auto 5px !important;
+    padding: 4px 8px !important;
+    border: 1.7px solid #111 !important;
+    border-radius: 2px;
+    width: fit-content;
+    min-width: 110px;
+    max-width: 94%;
+    break-inside: avoid;
+  }
+  .flexsys-order-number-label {
+    display:block;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    line-height: 1.22 !important;
+  }
+  .flexsys-order-number-value {
+    display:block;
+    font-size: 29px !important;
+    font-weight: 800 !important;
+    line-height: 1.12 !important;
+    letter-spacing: 0.4px;
+    overflow-wrap: anywhere;
+  }
+  .flexsys-customer-label { font-size: inherit; font-weight: 700; }
+  .pos-receipt-customer { margin-top: 3px !important; }
+  .flexsys-thank-you {
+    white-space: pre-line;
+    font-weight: 600;
+    font-size: 14px !important;
+    line-height: 1.45;
+    margin: 6px auto 3px !important;
+    text-align: center !important;
+    overflow-wrap: anywhere;
+  }
+  /* Keep original receipt logo dimensions and ZATCA QR data untouched. */
+  .pos-receipt-order-data { padding-top: 2px !important; }
+  .orderline .line-details > .product-name > .text-wrap {
+    white-space: normal !important;
+    overflow-wrap: break-word !important;
+    word-break: normal !important;
+    line-height: 1.36 !important;
+  }
+}
+@media print {
+  .pos-receipt.flexsys-premium-receipt {
+    width: 72mm !important;
+    max-width: 72mm !important;
+    font-size: 14px !important;
+  }
+}

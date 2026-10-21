@@ -7,9 +7,24 @@
     <field name="arch" type="xml">
       <xpath expr="//sheet" position="inside">
         <group name="flexsys_pos_receipt_settings" string="FlexSys POS Receipt">
-          <field name="flexsys_show_company_footer"
-                 string="Show Company Details on POS Receipt"
-                 help="Show or hide company details at the bottom of the receipt. The VAT number stays visible at the top."/>
+          <group string="Receipt Footer / الفوتر">
+            <field name="flexsys_show_company_footer"/>
+            <field name="flexsys_currency_symbol_mode"/>
+            <field name="flexsys_show_thank_you"/>
+            <field name="flexsys_thank_you_ar" invisible="not flexsys_show_thank_you" placeholder="شكراً لزيارتكم"/>
+            <field name="flexsys_thank_you_en" invisible="not flexsys_show_thank_you" placeholder="Thank you for visiting"/>
+          </group>
+          <group string="Promotional Header Image / صورة الهيدر">
+            <field name="flexsys_show_header_image"/>
+            <field name="flexsys_header_image_position" invisible="not flexsys_show_header_image"/>
+            <field name="flexsys_header_image" widget="image" class="oe_avatar"
+                   options="{'size': [288, 350]}" invisible="not flexsys_show_header_image"/>
+          </group>
+          <group string="Promotional Footer Image / صورة الفوتر">
+            <field name="flexsys_show_footer_image"/>
+            <field name="flexsys_footer_image" widget="image" class="oe_avatar"
+                   options="{'size': [288, 350]}" invisible="not flexsys_show_footer_image"/>
+          </group>
         </group>
       </xpath>
     </field>

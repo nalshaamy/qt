@@ -8,6 +8,10 @@
       <attribute name="t-att-data-flexsys-rtl">flexsysIsArabic ? '1' : '0'</attribute>
     </xpath>
     <xpath expr="//ReceiptHeader" position="after">
+      <div t-if="flexsysDisplayOrderNumber" class="flexsys-order-number-frame text-center">
+        <span class="flexsys-order-number-label"><t t-if="flexsysIsArabic">رقم الطلب</t><t t-else="">Order Number</t></span>
+        <strong class="flexsys-order-number-value" dir="ltr" t-out="flexsysDisplayOrderNumber"/>
+      </div>
       <div t-if="order.company.vat" class="flexsys-vat-top">
         <span><t t-if="flexsysIsArabic">الرقم الضريبي:</t><t t-else="">VAT Number:</t></span>
         <span dir="ltr" t-out="order.company.vat"/>
@@ -31,9 +35,40 @@
     </xpath>
     <xpath expr="//div[hasclass('d-flex')][.//div[hasclass('pos-config-name')]]" position="attributes">
       <attribute name="class" add="flexsys-company-details" separator=" "/>
-      <attribute name="t-if">order.config.flexsys_show_company_footer</attribute>
+      <attribute name="t-if">flexsysSettings.show_company_footer</attribute>
     </xpath>
     <xpath expr="//div[@t-if='company.vat'][@t-out='vatText']" position="replace"/>
+    <xpath expr="//div[hasclass('footer-powered-by')]" position="after">
+      <div t-if="flexsysThankYouMessage" class="flexsys-thank-you text-center"
+           t-att-dir="flexsysIsArabic ? 'rtl' : 'ltr'" t-out="flexsysThankYouMessage"/>
+      <div t-if="flexsysSettings.footer_enabled &amp;&amp; flexsysSettings.footer_image"
+           class="flexsys-footer-promo text-center">
+        <img class="flexsys-promo-image" t-att-src="flexsysSettings.footer_image" alt="Receipt promotional footer"/>
+      </div>
+    </xpath>
+  </t>
+  <t t-name="flexsys_pos_receipt.ReceiptHeader" t-inherit="point_of_sale.ReceiptHeader" t-inherit-mode="extension">
+    <xpath expr="//img[hasclass('pos-receipt-logo')]" position="before">
+      <div t-if="flexsysSettings.header_enabled &amp;&amp; flexsysSettings.header_image &amp;&amp; flexsysSettings.header_position === 'above'"
+           class="flexsys-header-promo text-center">
+        <img class="flexsys-promo-image" t-att-src="flexsysSettings.header_image" alt="Receipt promotional header"/>
+      </div>
+    </xpath>
+    <xpath expr="//img[hasclass('pos-receipt-logo')]" position="after">
+      <div t-if="flexsysSettings.header_enabled &amp;&amp; flexsysSettings.header_image &amp;&amp; flexsysSettings.header_position === 'below'"
+           class="flexsys-header-promo text-center">
+        <img class="flexsys-promo-image" t-att-src="flexsysSettings.header_image" alt="Receipt promotional header"/>
+      </div>
+    </xpath>
+    <!-- Keep the distinct fiscal invoice reference for audit/ZATCA, not as a duplicate order number. -->
+    <xpath expr="//span[hasclass('ticket-name-prefix')]" position="replace">
+      <span class="ticket-name-prefix"><t t-if="flexsysIsArabic">رقم الفاتورة </t><t t-else="">Invoice No. </t></span>
+    </xpath>
+    <!-- Tracking number is displayed exactly once in the framed OrderReceipt section. -->
+    <xpath expr="//span[hasclass('tracking-number')]" position="replace"/>
+    <xpath expr="//div[hasclass('pos-receipt-customer')]/div[@t-if='order.partner_id.name']/t[@t-if='order.partner_id.parent_name']" position="before">
+      <span class="flexsys-customer-label"><t t-if="flexsysIsArabic">العميل: </t><t t-else="">Customer: </t></span>
+    </xpath>
   </t>
   <t t-name="flexsys_pos_receipt.Orderline" t-inherit="point_of_sale.Orderline" t-inherit-mode="extension">
     <xpath expr="//li[hasclass('price-per-unit')][@t-if='vals.displayPriceUnit']" position="attributes">

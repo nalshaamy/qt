@@ -1,0 +1,120 @@
+/*
+ * FlexSys POS Receipt 19.0.1.0.15 — Epson TM-T20III, 80 mm roll.
+ * Paper: 80 mm; head printable width 72 mm / 576 dots at 203 dpi.
+ * CSS is applied to the live receipt DOM captured for direct thermal printing,
+ * NOT only inside @media print. Keep 0.14 QR/logo and POS loader unchanged.
+ * This is a staging calibration baseline; verify native thermal test print.
+ */
+.pos-receipt.flexsys-premium-receipt {
+  box-sizing: border-box !important;
+  width: 72mm !important;
+  max-width: 72mm !important;
+  /* Keep existing print-position direction and horizontal padding intact. */
+  font-size: 14px !important;
+  line-height: 1.36 !important;
+
+  /* Receipt identity: legible, not as large as items or total. */
+  .pos-receipt-order-data,
+  .pos-receipt-contact,
+  .pos-receipt-header .pos-receipt-contact {
+    font-size: 11.5px !important;
+    line-height: 1.33 !important;
+  }
+  .tracking-number,
+  .tracking-number.fs-1 {
+    font-size: 29px !important;
+    font-weight: 800 !important;
+    line-height: 1.1 !important;
+  }
+  .flexsys-vat-top {
+    font-size: 11.5px !important;
+    line-height: 1.28 !important;
+  }
+
+  /* 3-column header still matches 0.11's native nested Orderline layout. */
+  .flexsys-products-title {
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    line-height: 1.3 !important;
+    padding-block: 5px !important;
+  }
+  .orderline {
+    font-size: 14px !important;
+    line-height: 1.35 !important;
+    padding-block: 4px !important;
+  }
+  .orderline .line-details > .product-name > .qty {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    line-height: 1.36 !important;
+  }
+  .orderline .line-details > .product-name > .text-wrap {
+    font-size: 14.5px !important;
+    font-weight: 500 !important;
+    line-height: 1.4 !important;
+    white-space: normal !important;
+    overflow-wrap: break-word !important;
+    word-break: normal !important;
+  }
+  .orderline .line-details > .product-price {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    line-height: 1.36 !important;
+    white-space: nowrap !important;
+    direction: ltr !important;
+    unicode-bidi: isolate !important;
+  }
+  /* Modifiers/discounts/notes stay visually secondary and wrap naturally. */
+  .orderline .info-list,
+  .orderline .info-list li,
+  .orderline .line-details ul:not(.product-name),
+  .orderline .line-details ul:not(.product-name) li {
+    font-size: 12px !important;
+    line-height: 1.34 !important;
+    white-space: normal !important;
+    overflow-wrap: break-word !important;
+  }
+
+  .pos-receipt-taxes,
+  .pos-receipt-taxes > div {
+    font-size: 14px !important;
+    line-height: 1.4 !important;
+  }
+  .pos-receipt-taxes > div {
+    padding-block: 2px !important;
+  }
+  .pos-receipt-amount.receipt-total {
+    font-size: 19px !important;
+    line-height: 1.24 !important;
+    font-weight: 800 !important;
+    padding: 8px 4px !important;
+  }
+  .paymentlines {
+    font-size: 13.5px !important;
+    line-height: 1.35 !important;
+    padding-block: 5px !important;
+  }
+  .footer,
+  .pos-receipt-footer {
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+  }
+
+  /* Scaled together with monetary amounts; never impact tax QR. */
+  img.flexsys-riyal-symbol {
+    width: 13px !important;
+    height: 14px !important;
+    min-width: 13px !important;
+    max-width: 13px !important;
+    vertical-align: -2px !important;
+  }
+}
+
+@media print {
+  .pos-receipt.flexsys-premium-receipt {
+    width: 72mm !important;
+    max-width: 72mm !important;
+    margin: 0 !important;
+    print-color-adjust: exact;
+  }
+}
