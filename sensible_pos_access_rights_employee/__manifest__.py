@@ -3,7 +3,7 @@
 # © 2025 Sensible Consulting Services (<https://sensiblecs.com/>)
 {
     'name': 'POS Access Rights Employee | Point of Sale Access Rights for Employees | Point of Sale Employee Access Management | POS Cashier Access Control | Point of Sale Cashier Permissions',
-    'version': '19.0.1.4',
+    'version': '19.0.1.4.1',
     'summary': '''The POS Employee Access Rights module enhances control over the POS interface by allowing 
         administrators to enable or disable key functionalities for each cashier. 
         It simplifies the management of multiple cashiers and ensures that POS operations are restricted based on user roles and responsibilities.
