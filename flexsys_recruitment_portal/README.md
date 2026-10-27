@@ -1,6 +1,6 @@
 # FlexSys Recruitment Portal — Odoo 19
 
-**Release candidate:** `19.0.1.0.0` · **Website:** `https://qtcafe.sa/careers`
+**Release candidate:** `19.0.1.0.1` · **Website:** `https://qtcafe.sa/careers`
 
 ## Deployment
 

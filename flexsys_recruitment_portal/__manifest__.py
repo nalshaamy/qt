@@ -1,7 +1,7 @@
 {
     'name': 'FlexSys Recruitment Portal',
     'summary': 'Public careers portal and brand-aware general applications for Odoo 19',
-    'version': '19.0.1.0.0',
+    'version': '19.0.1.0.1',
     'category': 'Human Resources/Recruitment',
     'author': 'FlexSys',
     'website': 'https://qtcafe.sa',
