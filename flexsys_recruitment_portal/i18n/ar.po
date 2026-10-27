@@ -1,0 +1,73 @@
+# Translation of FlexSys Recruitment Portal into Arabic
+msgid ""
+msgstr ""
+"Project-Id-Version: flexsys_recruitment_portal 19.0.1.0.0\n"
+"Language: ar\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"MIME-Version: 1.0\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=6; plural=n==0?0:n==1?1:n==2?2:n%100>=3 && n%100<=10?3:n%100>=11 && n%100<=99?4:5;\n"
+
+#: model_terms:ir.ui.view,arch_db:flexsys_recruitment_portal.careers_home
+msgid "Submit your application"
+msgstr "قدّم طلب التوظيف"
+
+#: model_terms:ir.ui.view,arch_db:flexsys_recruitment_portal.careers_home
+msgid "Your career starts here"
+msgstr "مسيرتك المهنية تبدأ هنا"
+
+#: model_terms:ir.ui.view,arch_db:flexsys_recruitment_portal.careers_home
+msgid "We welcome general job applications throughout the year, even when no open vacancies are advertised."
+msgstr "نستقبل طلبات التوظيف العامة طوال العام، حتى في حال عدم وجود وظائف شاغرة معلنة."
+
+#: model_terms:ir.ui.view,arch_db:flexsys_recruitment_portal.careers_apply
+msgid "Full name *"
+msgstr "الاسم الكامل *"
+
+#: model_terms:ir.ui.view,arch_db:flexsys_recruitment_portal.careers_apply
+msgid "Mobile number *"
+msgstr "رقم الجوال *"
+
+#: model_terms:ir.ui.view,arch_db:flexsys_recruitment_portal.careers_apply
+msgid "Email address"
+msgstr "البريد الإلكتروني"
+
+#: model_terms:ir.ui.view,arch_db:flexsys_recruitment_portal.careers_apply
+msgid "City *"
+msgstr "المدينة *"
+
+#: model_terms:ir.ui.view,arch_db:flexsys_recruitment_portal.careers_apply
+msgid "Career category *"
+msgstr "المجال الوظيفي المطلوب *"
+
+#: model_terms:ir.ui.view,arch_db:flexsys_recruitment_portal.careers_apply
+msgid "Education *"
+msgstr "المؤهل الدراسي *"
+
+#: model_terms:ir.ui.view,arch_db:flexsys_recruitment_portal.careers_apply
+msgid "Experience (years) *"
+msgstr "سنوات الخبرة *"
+
+#: model_terms:ir.ui.view,arch_db:flexsys_recruitment_portal.careers_apply
+msgid "Additional notes (optional)"
+msgstr "ملاحظات إضافية (اختياري)"
+
+#: model_terms:ir.ui.view,arch_db:flexsys_recruitment_portal.careers_apply
+msgid "Submit application"
+msgstr "إرسال طلب التوظيف"
+
+#: model_terms:ir.ui.view,arch_db:flexsys_recruitment_portal.careers_success
+msgid "Application received"
+msgstr "تم استلام الطلب"
+
+#: model_terms:ir.ui.view,arch_db:flexsys_recruitment_portal.careers_success
+msgid "Thank you for your interest. We may contact you when a suitable opportunity becomes available."
+msgstr "نشكرك على اهتمامك بالانضمام إلينا، وقد نتواصل معك عند توفر فرصة وظيفية مناسبة."
+
+#: model_terms:ir.ui.view,arch_db:flexsys_recruitment_portal.careers_success
+msgid "Back to Careers"
+msgstr "العودة إلى التوظيف"
+
+#: model_terms:ir.ui.view,arch_db:flexsys_recruitment_portal.careers_privacy
+msgid "Applicant privacy notice"
+msgstr "إشعار خصوصية المتقدمين"

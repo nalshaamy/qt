@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <record id="view_general_applicant_list" model="ir.ui.view">
+    <field name="name">flexsys.hr.applicant.general.list</field>
+    <field name="model">hr.applicant</field>
+    <field name="arch" type="xml">
+      <list string="General Applications">
+        <field name="flexsys_career_reference"/><field name="partner_name"/>
+        <field name="partner_phone"/><field name="email_from" optional="hide"/>
+        <field name="flexsys_career_category_id"/><field name="flexsys_career_city"/>
+        <field name="flexsys_career_education" optional="hide"/><field name="flexsys_career_experience_years" optional="hide"/>
+        <field name="flexsys_career_status" widget="badge"/><field name="flexsys_career_duplicate_candidate" optional="hide"/>
+        <field name="create_date"/><field name="company_id" groups="base.group_multi_company"/>
+      </list>
+    </field>
+  </record>
+  <record id="view_general_applicant_form_extra" model="ir.ui.view">
+    <field name="name">flexsys.hr.applicant.form.extra</field>
+    <field name="model">hr.applicant</field>
+    <field name="inherit_id" ref="hr_recruitment.hr_applicant_view_form"/>
+    <field name="arch" type="xml">
+      <xpath expr="//notebook" position="inside">
+        <page string="General Application" invisible="not flexsys_career_is_general" groups="hr_recruitment.group_hr_recruitment_user">
+          <group>
+            <field name="flexsys_career_is_general" invisible="1"/>
+            <field name="flexsys_career_reference" readonly="1"/>
+            <field name="flexsys_career_status"/>
+            <field name="flexsys_career_category_id"/>
+            <field name="flexsys_career_city"/>
+            <field name="flexsys_career_education"/>
+            <field name="flexsys_career_experience_years"/>
+            <field name="flexsys_career_duplicate_candidate" readonly="1"/>
+            <field name="flexsys_career_resume_id" readonly="1"/>
+            <field name="flexsys_career_privacy_version" readonly="1"/>
+            <field name="flexsys_career_acknowledged_at" readonly="1"/>
+            <field name="flexsys_career_retention_until"/>
+          </group>
+        </page>
+      </xpath>
+    </field>
+  </record>
+  <record id="action_general_applications" model="ir.actions.act_window">
+    <field name="name">General Applications</field>
+    <field name="res_model">hr.applicant</field>
+    <field name="view_mode">list,form,kanban,pivot,graph</field>
+    <field name="domain">[('flexsys_career_is_general','=',True)]</field>
+    <field name="context">{'default_flexsys_career_is_general': True, 'search_default_group_by_stage_id': 0}</field>
+    <field name="view_id" ref="view_general_applicant_list"/>
+  </record>
+  <record id="view_general_applicant_graph" model="ir.ui.view">
+    <field name="name">flexsys.hr.applicant.general.graph</field>
+    <field name="model">hr.applicant</field>
+    <field name="arch" type="xml"><graph string="General Applications Overview" type="bar">
+      <field name="flexsys_career_category_id" type="row"/>
+    </graph></field>
+  </record>
+  <record id="view_general_applicant_pivot" model="ir.ui.view">
+    <field name="name">flexsys.hr.applicant.general.pivot</field>
+    <field name="model">hr.applicant</field>
+    <field name="arch" type="xml"><pivot string="General Applications Analysis">
+      <field name="flexsys_career_category_id" type="row"/>
+      <field name="flexsys_career_city" type="col"/>
+    </pivot></field>
+  </record>
+  <record id="action_general_applications_dashboard" model="ir.actions.act_window">
+    <field name="name">General Applications Analysis</field>
+    <field name="res_model">hr.applicant</field>
+    <field name="view_mode">graph,pivot,list</field>
+    <field name="view_id" ref="view_general_applicant_graph"/>
+    <field name="domain">[('flexsys_career_is_general','=',True)]</field>
+  </record>
+  <record id="action_general_applications_retention" model="ir.actions.act_window">
+    <field name="name">Retention Review</field>
+    <field name="res_model">hr.applicant</field>
+    <field name="view_mode">list,form</field>
+    <field name="view_id" ref="view_general_applicant_list"/>
+    <field name="domain">[('flexsys_career_is_general','=',True),('flexsys_career_retention_until','!=',False),('flexsys_career_retention_until','&lt;=',context_today())]</field>
+  </record>
+</odoo>

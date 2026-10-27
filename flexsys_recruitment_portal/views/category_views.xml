@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <record id="view_career_category_list" model="ir.ui.view">
+    <field name="name">flexsys.career.category.list</field>
+    <field name="model">flexsys.career.category</field>
+    <field name="arch" type="xml">
+      <list><field name="sequence" widget="handle"/><field name="name"/><field name="company_id" groups="base.group_multi_company"/><field name="active"/></list>
+    </field>
+  </record>
+  <record id="view_career_category_form" model="ir.ui.view">
+    <field name="name">flexsys.career.category.form</field>
+    <field name="model">flexsys.career.category</field>
+    <field name="arch" type="xml"><form><sheet><group><field name="name"/><field name="company_id"/><field name="sequence"/><field name="active"/><field name="description"/></group></sheet></form></field>
+  </record>
+  <record id="action_career_categories" model="ir.actions.act_window">
+    <field name="name">Career Categories</field>
+    <field name="res_model">flexsys.career.category</field>
+    <field name="view_mode">list,form</field>
+  </record>
+</odoo>

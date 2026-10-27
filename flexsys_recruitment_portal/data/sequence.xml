@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+  <record id="career_reference_sequence" model="ir.sequence">
+    <field name="name">FlexSys General Career Applications</field>
+    <field name="code">flexsys.career.reference</field>
+    <field name="prefix">CR-%(year)s-</field>
+    <field name="padding">6</field>
+    <field name="implementation">standard</field>
+  </record>
+</odoo>

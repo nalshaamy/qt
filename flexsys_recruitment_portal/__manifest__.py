@@ -1,0 +1,31 @@
+{
+    'name': 'FlexSys Recruitment Portal',
+    'summary': 'Public careers portal and brand-aware general applications for Odoo 19',
+    'version': '19.0.1.0.0',
+    'category': 'Human Resources/Recruitment',
+    'author': 'FlexSys',
+    'website': 'https://qtcafe.sa',
+    'license': 'LGPL-3',
+    'depends': ['website', 'hr_recruitment', 'mail'],
+    'data': [
+        'security/security.xml',
+        'security/ir.model.access.csv',
+        'data/sequence.xml',
+        'data/categories.xml',
+        'data/cron.xml',
+        'views/category_views.xml',
+        'views/config_views.xml',
+        'views/applicant_views.xml',
+        'views/career_templates.xml',
+        'views/menus.xml',
+    ],
+    'assets': {
+        'flexsys_recruitment_portal.assets_careers': [
+            'flexsys_recruitment_portal/static/src/scss/careers.scss',
+            'flexsys_recruitment_portal/static/src/js/careers.js',
+        ],
+    },
+    'post_init_hook': 'post_init_hook',
+    'application': False,
+    'installable': True,
+}

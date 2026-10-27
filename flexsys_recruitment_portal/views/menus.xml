@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <menuitem id="career_root_menu" name="General Applications" sequence="75" groups="flexsys_recruitment_portal.group_career_viewer"/>
+  <menuitem id="career_dashboard_menu" name="Dashboard / Analysis" parent="career_root_menu" action="action_general_applications_dashboard" sequence="5"/>
+  <menuitem id="career_retention_menu" name="Retention Review" parent="career_root_menu" action="action_general_applications_retention" sequence="18" groups="flexsys_recruitment_portal.group_career_manager"/>
+  <menuitem id="career_application_menu" name="Applications" parent="career_root_menu" action="action_general_applications" sequence="10"/>
+  <menuitem id="career_category_menu" name="Career Categories" parent="career_root_menu" action="action_career_categories" sequence="20" groups="flexsys_recruitment_portal.group_career_manager"/>
+  <menuitem id="career_config_menu" name="Configuration" parent="career_root_menu" action="action_career_configs" sequence="30" groups="flexsys_recruitment_portal.group_career_manager"/>
+</odoo>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+  <record id="cron_career_purge_attempts" model="ir.cron">
+    <field name="name">FlexSys Careers: Clear Old Submission Attempts</field>
+    <field name="model_id" ref="model_flexsys_career_attempt"/>
+    <field name="state">code</field>
+    <field name="code">model._cron_purge_old_attempts()</field>
+    <field name="interval_number">1</field>
+    <field name="interval_type">days</field>
+    <field name="active">True</field>
+  </record>
+</odoo>

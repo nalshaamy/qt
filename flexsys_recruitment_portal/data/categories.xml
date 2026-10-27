@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+<!-- Initial categories are created by admins per-company, to prevent cross-company seeded records. -->
+</odoo>

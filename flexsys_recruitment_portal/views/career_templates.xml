@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <template id="careers_shell" name="FlexSys Careers Shell">
+    <html t-att-lang="language" t-att-dir="'rtl' if language.startswith('ar') else 'ltr'">
+      <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+        <meta name="robots" content="index, follow"/>
+        <meta name="color-scheme" content="light"/>
+        <title>Careers | <t t-out="config.company_id.name"/></title>
+        <t t-call-assets="flexsys_recruitment_portal.assets_careers"/>
+      </head>
+      <body class="fs-careers" t-att-style="brand_css">
+        <div class="fs-site">
+          <header class="fs-header">
+            <div class="fs-container fs-header-inner">
+              <a class="fs-brand" href="/careers" aria-label="Careers home">
+                <img src="/careers/logo" alt="Company logo" class="fs-logo"/>
+                <span t-out="config.company_id.name"/>
+              </a>
+              <nav aria-label="Main menu"><a href="/careers">Home</a><a href="/careers/apply">Apply</a></nav>
+            </div>
+          </header>
+          <main class="fs-main" id="main-content"><t t-out="0"/></main>
+          <footer class="fs-footer"><div class="fs-container fs-footer-inner"><span t-out="config.company_id.name"/><a href="/careers/privacy">Privacy policy</a></div></footer>
+        </div>
+      </body>
+    </html>
+  </template>
+  <template id="careers_home" name="Careers Landing Page">
+    <t t-call="flexsys_recruitment_portal.careers_shell">
+      <section class="fs-hero"><div class="fs-container fs-hero-inner">
+        <div class="fs-eyebrow">CAREERS</div>
+        <h1 t-out="config.hero_title"/>
+        <p class="fs-lead" t-out="config.hero_description"/>
+        <a class="fs-button fs-button-primary" href="/careers/apply" t-if="config.application_enabled">Submit your application</a>
+        <p class="fs-info" t-if="not config.application_enabled">Applications are temporarily closed.</p>
+      </div></section>
+      <section class="fs-container fs-feature-wrap"><div class="fs-feature">
+        <span class="fs-icon" aria-hidden="true">✦</span><h2>Your career starts here</h2>
+        <p>We welcome general job applications throughout the year, even when no open vacancies are advertised.</p>
+      </div></section>
+    </t>
+  </template>
+  <template id="careers_apply" name="Apply for Careers">
+    <t t-call="flexsys_recruitment_portal.careers_shell">
+      <section class="fs-container fs-form-section">
+        <div class="fs-form-intro"><span class="fs-eyebrow">GENERAL APPLICATION</span><h1>Join our team</h1>
+          <p>Share your details and resume for future job opportunities. All fields marked * are required.</p>
+        </div>
+        <div class="fs-alert fs-alert-danger" role="alert" t-if="error"><strong>Application not submitted.</strong> <span t-out="error"/></div>
+        <div class="fs-alert fs-alert-info" role="status" t-if="not config.application_enabled">Applications are temporarily closed.</div>
+        <form class="fs-form-card" action="/careers/submit" method="post" enctype="multipart/form-data" id="fs-career-form" t-if="config.application_enabled">
+          <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+          <input type="hidden" name="request_key" t-att-value="request_key"/>
+          <div class="fs-honeypot" aria-hidden="true"><label>Website URL<input name="website_url" type="text" tabindex="-1" autocomplete="off"/></label></div>
+          <div class="fs-form-grid">
+            <div class="fs-field fs-full"><label for="fs_name">Full name *</label><input type="text" id="fs_name" name="name" maxlength="120" minlength="2" required="required" autocomplete="name"/></div>
+            <div class="fs-field"><label for="fs_phone">Mobile number *</label><input type="tel" id="fs_phone" name="phone" maxlength="16" required="required" inputmode="tel" placeholder="05XXXXXXXX" autocomplete="tel"/></div>
+            <div class="fs-field"><label for="fs_email">Email address</label><input type="email" id="fs_email" name="email" maxlength="128" autocomplete="email"/></div>
+            <div class="fs-field"><label for="fs_city">City *</label><input type="text" id="fs_city" name="city" maxlength="80" required="required" autocomplete="address-level2"/></div>
+            <div class="fs-field"><label for="fs_category">Career category *</label><select id="fs_category" name="category_id" required="required">
+                <option value="">Choose a career category</option><t t-foreach="categories" t-as="category"><option t-att-value="category.id" t-out="category.name"/></t>
+              </select></div>
+            <div class="fs-field"><label for="fs_education">Education *</label><select id="fs_education" name="education" required="required">
+                <option value="">Select education level</option><option value="secondary">Secondary</option><option value="diploma">Diploma</option><option value="bachelor">Bachelor</option><option value="masters">Masters</option><option value="doctorate">Doctorate</option>
+              </select></div>
+            <div class="fs-field"><label for="fs_experience">Experience (years) *</label><input type="number" id="fs_experience" name="experience" min="0" max="60" required="required" value="0"/></div>
+            <div class="fs-field fs-full"><label for="fs_cv">Curriculum Vitae (PDF<t t-if="config.allow_docx"> or DOCX</t>) *</label><input type="file" id="fs_cv" name="cv" required="required" t-att-accept="'.pdf,.docx' if config.allow_docx else '.pdf'" t-att-data-max-bytes="config.max_cv_size * 1024 * 1024"/><small>Maximum <t t-out="config.max_cv_size"/> MiB. Your file is stored privately.</small></div>
+            <div class="fs-field fs-full"><label for="fs_notes">Additional notes (optional)</label><textarea id="fs_notes" name="notes" maxlength="1500" rows="4" placeholder="Anything else you would like us to know?"/></div>
+          </div>
+          <label class="fs-consent"><input type="checkbox" name="privacy_ack" value="yes" required="required"/><span>I acknowledge that I have read the <a href="/careers/privacy" target="_blank" rel="noopener noreferrer">privacy notice</a> and understand how my application data will be processed. *</span></label>
+          <button class="fs-button fs-button-primary fs-submit" type="submit">Submit application</button>
+          <p class="fs-form-help" id="fs-form-status" role="status" aria-live="polite"/>
+        </form>
+      </section>
+    </t>
+  </template>
+  <template id="careers_success" name="Career Submission Success">
+    <t t-call="flexsys_recruitment_portal.careers_shell">
+      <section class="fs-container fs-centered"><div class="fs-success-icon" aria-hidden="true">✓</div>
+        <h1>Application received</h1><p>Thank you for your interest. We may contact you when a suitable opportunity becomes available.</p>
+        <p class="fs-reference" t-if="reference">Reference: <strong t-out="reference"/></p>
+        <a href="/careers" class="fs-button fs-button-primary">Back to Careers</a>
+      </section>
+    </t>
+  </template>
+  <template id="careers_privacy" name="Career Application Privacy Notice">
+    <t t-call="flexsys_recruitment_portal.careers_shell">
+      <section class="fs-container fs-text-page"><h1>Applicant privacy notice</h1><p t-out="config.privacy_text"/>
+        <p>Notice version: <span t-out="config.privacy_version"/></p><p>For access, correction or deletion requests, contact the company through its official contact channels.</p>
+      </section>
+    </t>
+  </template>
+  <template id="careers_brand_preview" name="Careers Brand Visual Preview">
+    <html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+      <title>Career Brand Preview</title><t t-call-assets="flexsys_recruitment_portal.assets_careers"/></head>
+      <body class="fs-careers" t-att-style="brand_css">
+        <div class="fs-container" style="padding-block:2rem">
+          <p class="fs-eyebrow">PREVIEW — NOT PUBLISHED</p>
+          <img t-att-src="'/careers/brand-preview/%s/logo' % config.id" alt="Candidate logo" style="max-height:90px;max-width:220px;object-fit:contain"/>
+          <section class="fs-hero" style="border-radius:20px;margin-top:1.5rem"><div class="fs-container">
+            <h1 t-out="config.hero_title"/><p class="fs-lead" t-out="config.hero_description"/>
+            <button class="fs-button fs-button-primary" type="button">Submit application</button>
+          </div></section>
+          <div class="fs-form-card" style="margin-top:1.5rem"><h2>Sample application</h2>
+            <div class="fs-field"><label>Full name</label><input type="text" placeholder="Sample candidate"/></div>
+          </div>
+          <p style="margin-top:1.5rem">Return to Odoo to publish this visual identity.</p>
+        </div>
+      </body>
+    </html>
+  </template>
+</odoo>

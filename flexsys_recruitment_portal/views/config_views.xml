@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <record id="view_career_config_list" model="ir.ui.view">
+    <field name="name">flexsys.career.config.list</field>
+    <field name="model">flexsys.career.config</field>
+    <field name="arch" type="xml"><list><field name="website_id"/><field name="company_id"/><field name="portal_enabled"/><field name="application_enabled"/><field name="brand_revision"/></list></field>
+  </record>
+  <record id="view_career_config_form" model="ir.ui.view">
+    <field name="name">flexsys.career.config.form</field>
+    <field name="model">flexsys.career.config</field>
+    <field name="arch" type="xml">
+      <form string="FlexSys Recruitment Portal Settings">
+        <header>
+          <button name="action_setup_pool" type="object" string="Setup Talent Pool" class="btn-secondary" groups="flexsys_recruitment_portal.group_career_manager"/>
+          <button name="action_preview_brand" type="object" string="Generate Brand Preview" class="btn-secondary" groups="flexsys_recruitment_portal.group_career_manager"/>
+          <button name="action_open_brand_preview" type="object" string="Open Visual Preview" class="btn-secondary" groups="flexsys_recruitment_portal.group_career_manager"/>
+          <button name="action_publish_brand" type="object" string="Publish Brand" class="btn-primary" groups="flexsys_recruitment_portal.group_career_manager"/>
+        </header>
+        <sheet>
+          <group string="Site and company"><field name="website_id"/><field name="company_id"/><field name="portal_enabled"/><field name="application_enabled"/><field name="default_talent_pool_id"/></group>
+          <notebook>
+            <page string="Application">
+              <group><field name="max_cv_size"/><field name="allow_docx"/><field name="auto_acknowledgment"/><field name="retention_months"/><field name="privacy_version"/><field name="privacy_text"/></group>
+            </page>
+            <page string="Content"><group><field name="hero_title"/><field name="hero_description"/></group></page>
+            <page string="Brand Engine">
+              <group string="Logo and publishing">
+                <field name="brand_mode"/><field name="brand_logo" widget="image" readonly="1"/>
+                <field name="brand_logo_candidate" widget="image"/>
+                <field name="brand_manual_overrides" placeholder='{"primary":"#254b70"}'/>
+                <field name="brand_draft_palette" widget="text" readonly="1"/>
+                <field name="brand_palette_json" readonly="1"/>
+                <field name="brand_revision" readonly="1"/>
+                <field name="brand_last_generated_at" readonly="1"/>
+              </group>
+            </page>
+          </notebook>
+        </sheet>
+      </form>
+    </field>
+  </record>
+  <record id="action_career_configs" model="ir.actions.act_window">
+    <field name="name">Recruitment Portal Settings</field>
+    <field name="res_model">flexsys.career.config</field>
+    <field name="view_mode">list,form</field>
+  </record>
+</odoo>
