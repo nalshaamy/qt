@@ -73,7 +73,8 @@ def extract_primary(blob):
             image = source.convert('RGBA')
             image.thumbnail((160, 160))
             counts = Counter()
-            for r, g, b, alpha in image.getdata():
+            pixels = image.get_flattened_data() if hasattr(image, 'get_flattened_data') else image.getdata()
+            for r, g, b, alpha in pixels:
                 if alpha < 128:
                     continue
                 h, s, v = rgb_to_hsv(r/255, g/255, b/255)

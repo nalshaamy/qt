@@ -1,4 +1,4 @@
-"""Site-bound settings for the public recruitment portal.
+"""Company-bound settings for the standalone public recruitment portal.
 
 Staged logo never becomes public until Publish Brand is pressed.
 """
@@ -12,11 +12,11 @@ from ..services.brand_engine import (TOKENS, InvalidLogo, apply_overrides,
 
 class CareerConfiguration(models.Model):
     _name = 'flexsys.career.config'
-    _description = 'FlexSys Recruitment Website Configuration'
-    _rec_name = 'website_id'
+    _description = 'FlexSys Recruitment Portal Configuration'
+    _rec_name = 'company_id'
 
-    website_id = fields.Many2one('website', required=True, ondelete='cascade', default=lambda self: self.env['website'].get_current_website())
     company_id = fields.Many2one('res.company', required=True, ondelete='restrict', default=lambda self: self.env.company)
+    is_public_portal = fields.Boolean(compute='_compute_is_public_portal', string='Serving /careers')
     portal_enabled = fields.Boolean(default=True)
     application_enabled = fields.Boolean(default=True)
     default_talent_pool_id = fields.Many2one('hr.talent.pool', string='Default Talent Pool')
@@ -38,19 +38,40 @@ class CareerConfiguration(models.Model):
     brand_revision = fields.Integer(default=0, readonly=True)
     brand_last_generated_at = fields.Datetime(readonly=True)
 
-    _unique_website = models.Constraint('UNIQUE(website_id)', 'One careers configuration is allowed per website.')
+    _unique_company = models.Constraint('UNIQUE(company_id)', 'One careers configuration is allowed per company.')
 
-    @api.constrains('company_id', 'website_id', 'default_talent_pool_id', 'max_cv_size', 'retention_months')
+    @api.constrains('company_id', 'default_talent_pool_id', 'max_cv_size', 'retention_months')
     def _check_settings(self):
         for config in self:
-            if config.website_id.company_id != config.company_id:
-                raise ValidationError('Careers company must match the linked website company.')
             if config.default_talent_pool_id and config.default_talent_pool_id.company_id != config.company_id:
                 raise ValidationError('Talent pool belongs to another company.')
             if not 1 <= config.max_cv_size <= 10:
                 raise ValidationError('CV size must be between 1 and 10 MiB.')
             if not 0 <= config.retention_months <= 120:
                 raise ValidationError('Retention review period must be between 0 and 120 months.')
+
+    def _compute_is_public_portal(self):
+        selected = self.env['ir.config_parameter'].sudo().get_param(
+            'flexsys_recruitment_portal.public_config_id')
+        for record in self:
+            record.is_public_portal = str(record.id) == str(selected)
+
+    def action_set_public_portal(self):
+        """Select the company serving /careers for the *whole database*.
+
+        One hostname/path cannot infer the destination company from arbitrary
+        browser-supplied IDs. Store the selection on the server instead.
+        """
+        self.ensure_one()
+        if not self.env.user.has_group('flexsys_recruitment_portal.group_career_manager'):
+            from odoo.exceptions import AccessError
+            raise AccessError('Only Careers Managers may change the public portal company.')
+        if self.company_id not in self.env.companies:
+            from odoo.exceptions import AccessError
+            raise AccessError('The selected company is not permitted for this user.')
+        self.env['ir.config_parameter'].sudo().set_param(
+            'flexsys_recruitment_portal.public_config_id', str(self.id))
+        return {'type': 'ir.actions.client', 'tag': 'reload'}
 
     def _override_map(self):
         self.ensure_one()

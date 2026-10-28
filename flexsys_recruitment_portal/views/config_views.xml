@@ -3,7 +3,7 @@
   <record id="view_career_config_list" model="ir.ui.view">
     <field name="name">flexsys.career.config.list</field>
     <field name="model">flexsys.career.config</field>
-    <field name="arch" type="xml"><list><field name="website_id"/><field name="company_id"/><field name="portal_enabled"/><field name="application_enabled"/><field name="brand_revision"/></list></field>
+    <field name="arch" type="xml"><list><field name="company_id"/><field name="is_public_portal"/><field name="portal_enabled"/><field name="application_enabled"/><field name="brand_revision"/></list></field>
   </record>
   <record id="view_career_config_form" model="ir.ui.view">
     <field name="name">flexsys.career.config.form</field>
@@ -11,13 +11,14 @@
     <field name="arch" type="xml">
       <form string="FlexSys Recruitment Portal Settings">
         <header>
+          <button name="action_set_public_portal" type="object" string="Use for Public /careers" class="btn-primary" groups="flexsys_recruitment_portal.group_career_manager"/>
           <button name="action_setup_pool" type="object" string="Setup Talent Pool" class="btn-secondary" groups="flexsys_recruitment_portal.group_career_manager"/>
           <button name="action_preview_brand" type="object" string="Generate Brand Preview" class="btn-secondary" groups="flexsys_recruitment_portal.group_career_manager"/>
           <button name="action_open_brand_preview" type="object" string="Open Visual Preview" class="btn-secondary" groups="flexsys_recruitment_portal.group_career_manager"/>
           <button name="action_publish_brand" type="object" string="Publish Brand" class="btn-primary" groups="flexsys_recruitment_portal.group_career_manager"/>
         </header>
         <sheet>
-          <group string="Site and company"><field name="website_id"/><field name="company_id"/><field name="portal_enabled"/><field name="application_enabled"/><field name="default_talent_pool_id"/></group>
+          <group string="Portal company"><field name="company_id"/><field name="is_public_portal"/><field name="portal_enabled"/><field name="application_enabled"/><field name="default_talent_pool_id"/></group>
           <notebook>
             <page string="Application">
               <group><field name="max_cv_size"/><field name="allow_docx"/><field name="auto_acknowledgment"/><field name="retention_months"/><field name="privacy_version"/><field name="privacy_text"/></group>

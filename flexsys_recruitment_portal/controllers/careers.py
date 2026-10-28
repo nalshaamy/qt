@@ -25,11 +25,17 @@ _logger = logging.getLogger(__name__)
 class CareersController(http.Controller):
 
     def _config(self):
-        website = request.website
-        return request.env['flexsys.career.config'].sudo().search([
-            ('website_id', '=', website.id),
-            ('company_id', '=', website.company_id.id),
-        ], limit=1)
+        """Resolve a server-selected config, never a public form or hostname ID.
+
+        No `website` model or `request.website` is required. If the chosen
+        configuration has been removed, fail closed rather than leaking a
+        different company's candidate applications.
+        """
+        raw = request.env['ir.config_parameter'].sudo().get_param(
+            'flexsys_recruitment_portal.public_config_id')
+        if not raw or not str(raw).isdigit():
+            return request.env['flexsys.career.config'].browse()
+        return request.env['flexsys.career.config'].sudo().browse(int(raw)).exists()
 
     def _ctx(self, config, **values):
         context = dict(config=config, brand_css=safe_css(config.public_palette()),
@@ -37,14 +43,14 @@ class CareersController(http.Controller):
         context.update(values)
         return context
 
-    @http.route('/careers', type='http', auth='public', website=True, methods=['GET'], sitemap=True)
+    @http.route('/careers', type='http', auth='public', methods=['GET'])
     def careers_index(self, **kw):
         config = self._config()
         if not config or not config.portal_enabled:
             raise NotFound()
         return request.render('flexsys_recruitment_portal.careers_home', self._ctx(config))
 
-    @http.route('/careers/apply', type='http', auth='public', website=True, methods=['GET'], sitemap=True)
+    @http.route('/careers/apply', type='http', auth='public', methods=['GET'])
     def careers_apply(self, **kw):
         config = self._config()
         if not config or not config.portal_enabled:
@@ -54,14 +60,14 @@ class CareersController(http.Controller):
         return request.render('flexsys_recruitment_portal.careers_apply',
                               self._ctx(config, categories=categories, error=False, data={}))
 
-    @http.route('/careers/privacy', type='http', auth='public', website=True, methods=['GET'], sitemap=True)
+    @http.route('/careers/privacy', type='http', auth='public', methods=['GET'])
     def careers_privacy(self, **kw):
         config = self._config()
         if not config or not config.portal_enabled:
             raise NotFound()
         return request.render('flexsys_recruitment_portal.careers_privacy', self._ctx(config))
 
-    @http.route('/careers/logo', type='http', auth='public', website=True, methods=['GET'], sitemap=False)
+    @http.route('/careers/logo', type='http', auth='public', methods=['GET'])
     def careers_logo(self, **kw):
         config = self._config()
         if not config or not config.portal_enabled:
@@ -76,7 +82,7 @@ class CareersController(http.Controller):
             ('Cache-Control', 'public, max-age=3600'),
         ])
 
-    @http.route('/careers/success', type='http', auth='public', website=True, methods=['GET'], sitemap=False)
+    @http.route('/careers/success', type='http', auth='public', methods=['GET'])
     def careers_success(self, **kw):
         config = self._config()
         if not config or not config.portal_enabled:
@@ -115,8 +121,8 @@ class CareersController(http.Controller):
         response.status_code = status
         return response
 
-    @http.route('/careers/brand-preview/<int:config_id>', type='http', auth='user', website=True,
-                methods=['GET'], sitemap=False)
+    @http.route('/careers/brand-preview/<int:config_id>', type='http', auth='user',
+                methods=['GET'])
     def careers_brand_preview(self, config_id, **kw):
         if not request.env.user.has_group('flexsys_recruitment_portal.group_career_manager'):
             raise NotFound()
@@ -132,8 +138,8 @@ class CareersController(http.Controller):
             'config': config, 'brand_css': css,
         })
 
-    @http.route('/careers/brand-preview/<int:config_id>/logo', type='http', auth='user', website=True,
-                methods=['GET'], sitemap=False)
+    @http.route('/careers/brand-preview/<int:config_id>/logo', type='http', auth='user',
+                methods=['GET'])
     def careers_brand_preview_logo(self, config_id, **kw):
         if not request.env.user.has_group('flexsys_recruitment_portal.group_career_manager'):
             raise NotFound()
@@ -152,8 +158,8 @@ class CareersController(http.Controller):
         return request.make_response(raw, headers=[('Content-Type', mime),
                                                    ('X-Content-Type-Options', 'nosniff')])
 
-    @http.route('/careers/submit', type='http' , auth='public', website=True,
-                methods=['POST'], csrf=True, sitemap=False)
+    @http.route('/careers/submit', type='http' , auth='public',
+                methods=['POST'], csrf=True)
     def careers_submit(self, **form):
         config = self._config()
         if not config or not config.portal_enabled:
@@ -172,7 +178,7 @@ class CareersController(http.Controller):
 
         pool = config.default_talent_pool_id
         if not pool or pool.company_id != config.company_id:
-            _logger.error('Careers talent pool is missing for website %s', config.website_id.id)
+            _logger.error('Careers talent pool is missing for company %s', config.company_id.id)
             return self._render_error(config, 'Service temporarily unavailable.', 503)
         ledger = request.env['flexsys.career.submission'].sudo()
         existing = ledger.search([('request_key', '=', request_key), ('company_id', '=', config.company_id.id)], limit=1)

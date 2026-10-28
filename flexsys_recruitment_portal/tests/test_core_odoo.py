@@ -6,7 +6,7 @@ import base64
 from io import BytesIO
 from PIL import Image
 
-from odoo.tests import TransactionCase, tagged
+from odoo.tests import TransactionCase, HttpCase, tagged
 from odoo.exceptions import ValidationError
 
 
@@ -17,13 +17,15 @@ class TestFlexSysRecruitmentIntegration(TransactionCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.company = cls.env.company
-        cls.website = cls.env['website'].search([('company_id', '=', cls.company.id)], limit=1)
-        cls.config = cls.env['flexsys.career.config'].sudo().search([('website_id', '=', cls.website.id)], limit=1)
+        cls.config = cls.env['flexsys.career.config'].sudo().search([('company_id', '=', cls.company.id)], limit=1)
 
-    def test_initial_site_setup(self):
+    def test_initial_company_setup(self):
         self.assertTrue(self.config)
-        self.assertEqual(self.config.company_id, self.website.company_id)
+        self.assertEqual(self.config.company_id, self.company)
         self.assertTrue(self.config.default_talent_pool_id)
+        self.assertEqual(
+            int(self.env['ir.config_parameter'].sudo().get_param(
+                'flexsys_recruitment_portal.public_config_id')), self.config.id)
 
     def test_general_applicant_without_job(self):
         app = self.env['hr.applicant'].create({
@@ -46,11 +48,10 @@ class TestFlexSysRecruitmentIntegration(TransactionCase):
                 Ledger.create(vals)
 
     def test_cross_company_config_guard(self):
-        other = self.env['res.company'].create({'name': 'Another Example Company'})
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(Exception):
             with self.env.cr.savepoint():
                 self.env['flexsys.career.config'].sudo().create({
-                    'website_id': self.website.id, 'company_id': other.id,
+                    'company_id': self.company.id,
                 })
 
     def test_brand_publish_revision(self):
@@ -82,3 +83,24 @@ class TestFlexSysRecruitmentIntegration(TransactionCase):
         public = self.env.ref('base.public_user')
         self.assertFalse(self.env['hr.applicant'].with_user(public).has_access('read'))
         self.assertFalse(self.env['ir.attachment'].with_user(public).has_access('create'))
+
+
+@tagged('post_install', '-at_install')
+class TestPublicRoutesWithoutWebsite(HttpCase):
+    """Run against a real Odoo test database, ideally *without* website addon."""
+
+    def test_public_careers_home(self):
+        result = self.url_open('/careers')
+        self.assertEqual(result.status_code, 200)
+        self.assertIn('Careers', result.text)
+
+    def test_public_application_form(self):
+        result = self.url_open('/careers/apply')
+        self.assertEqual(result.status_code, 200)
+        self.assertIn('csrf_token', result.text)
+        self.assertIn('multipart/form-data', result.text)
+
+    def test_public_privacy(self):
+        result = self.url_open('/careers/privacy')
+        self.assertEqual(result.status_code, 200)
+        self.assertIn('privacy', result.text.lower())
