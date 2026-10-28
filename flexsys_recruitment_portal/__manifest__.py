@@ -1,11 +1,11 @@
 {
     'name': 'FlexSys Recruitment Portal',
     'summary': 'Public careers portal and brand-aware general applications for Odoo 19',
-    'version': '19.0.1.0.2',
+    'version': '19.0.1.0.4',
     'category': 'Human Resources/Recruitment',
     'author': 'FlexSys',
     'license': 'LGPL-3',
-    'depends': ['web', 'hr_recruitment'],
+    'depends': ['hr_recruitment'],
     'data': [
         'security/security.xml',
         'security/ir.model.access.csv',
@@ -18,12 +18,6 @@
         'views/career_templates.xml',
         'views/menus.xml',
     ],
-    'assets': {
-        'flexsys_recruitment_portal.assets_careers': [
-            'flexsys_recruitment_portal/static/src/scss/careers.scss',
-            'flexsys_recruitment_portal/static/src/js/careers.js',
-        ],
-    },
     'post_init_hook': 'post_init_hook',
     'application': False,
     'installable': True,

@@ -65,3 +65,21 @@ Refer to `QA_REPORT.md` alongside the package for exact evidence, test counts an
 - Multiple company configs are supported, but only one serves the shared `/careers` path at a time.
 - **Existing RC2 installations:** RC2 used a required `website_id` and allowed multiple configurations per website. If RC2 was installed and multiple websites for a single company are present, the supplied RC3 pre-migration removes the obsolete column's NOT NULL requirement and stops the upgrade if multiple configs belong to the same company. Preserve and manually reconcile conflicting branding/settings on a staging backup before retrying; the post-migration selects the single existing company configuration for `/careers`. RC2 install failures normally roll back installation.
 - **Removing a dependency does not uninstall an already installed Website addon.** Manage uninstallation separately after checking other modules depend on it.
+
+
+### RC4 hotfix — CSS isolation (19.0.1.0.3)
+
+The public careers pages use a browser-native stylesheet at
+`/flexsys_recruitment_portal/static/src/css/careers.css` and a normal
+`<script defer>` tag. They do **not** register SCSS or use `t-call-assets`,
+so no Odoo asset compilation is necessary for Careers. All selectors are
+scoped to `.fs-careers`. The logo has fixed HTML dimensions in case the
+stylesheet is temporarily unavailable. A page view may still expose an
+independent Odoo webclient IndexedDB quota error; resolve that through
+browser site storage and/or Odoo's own upstream fixes, not by modifying
+applicant data.
+
+
+### RC5 — minimal direct dependencies (19.0.1.0.4)
+
+The direct manifest dependency is only `hr_recruitment` (no direct `web` or `website` entry). Note: the core `web` addon is **still installed transitively** through official `hr` dependencies. See `QA_RC5.md`.

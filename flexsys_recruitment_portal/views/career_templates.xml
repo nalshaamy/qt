@@ -8,14 +8,15 @@
         <meta name="robots" content="index, follow"/>
         <meta name="color-scheme" content="light"/>
         <title>Careers | <t t-out="config.company_id.name"/></title>
-        <t t-call-assets="flexsys_recruitment_portal.assets_careers"/>
+        <link rel="stylesheet" href="/flexsys_recruitment_portal/static/src/css/careers.css?v=19.0.1.0.4"/>
+        <script defer="defer" src="/flexsys_recruitment_portal/static/src/js/careers.js?v=19.0.1.0.4"></script>
       </head>
       <body class="fs-careers" t-att-style="brand_css">
         <div class="fs-site">
           <header class="fs-header">
             <div class="fs-container fs-header-inner">
               <a class="fs-brand" href="/careers" aria-label="Careers home">
-                <img src="/careers/logo" alt="Company logo" class="fs-logo"/>
+                <img src="/careers/logo" alt="Company logo" class="fs-logo" width="52" height="52" style="width:52px;height:52px;max-width:52px;max-height:52px;object-fit:contain"/>
                 <span t-out="config.company_id.name"/>
               </a>
               <nav aria-label="Main menu"><a href="/careers">Home</a><a href="/careers/apply">Apply</a></nav>
@@ -94,7 +95,8 @@
   </template>
   <template id="careers_brand_preview" name="Careers Brand Visual Preview">
     <html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
-      <title>Career Brand Preview</title><t t-call-assets="flexsys_recruitment_portal.assets_careers"/></head>
+      <title>Career Brand Preview</title><link rel="stylesheet" href="/flexsys_recruitment_portal/static/src/css/careers.css?v=19.0.1.0.4"/>
+        <script defer="defer" src="/flexsys_recruitment_portal/static/src/js/careers.js?v=19.0.1.0.4"></script></head>
       <body class="fs-careers" t-att-style="brand_css">
         <div class="fs-container" style="padding-block:2rem">
           <p class="fs-eyebrow">PREVIEW — NOT PUBLISHED</p>

@@ -1,0 +1,361 @@
+/* FlexSys Careers standalone CSS: direct static link; NOT in Odoo asset pipeline. */
+.fs-careers {
+  --fs-brand-primary: #254b70;
+  --fs-brand-secondary: #edf3f8;
+  --fs-brand-accent: #173d5b;
+  --fs-brand-background: #fff;
+  --fs-brand-surface: #f6f8fb;
+  --fs-brand-text: #17202c;
+  --fs-brand-text-secondary: #4c5664;
+  --fs-brand-on-primary: #fff;
+  --fs-brand-button-hover: #173d5b;
+  --fs-brand-border: #737f8b;
+  --fs-brand-focus: #254b70;
+  --fs-brand-success: #166534;
+  --fs-brand-error: #b42318;
+  font-family: "Cairo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--fs-brand-background);
+  color: var(--fs-brand-text);
+  line-height: 1.6;
+  min-height: 100vh;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.fs-careers *, .fs-careers *::before, .fs-careers *::after {
+  box-sizing: border-box;
+}
+
+.fs-careers .fs-site {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.fs-careers a {
+  color: var(--fs-brand-primary);
+  text-decoration: none;
+}
+
+.fs-careers a:focus-visible, .fs-careers button:focus-visible, .fs-careers input:focus-visible, .fs-careers select:focus-visible, .fs-careers textarea:focus-visible {
+  outline: 3px solid var(--fs-brand-focus);
+  outline-offset: 2px;
+}
+
+.fs-careers .fs-container {
+  width: min(100% - 2rem,1000px);
+  margin-inline: auto;
+}
+
+.fs-careers .fs-header {
+  border-bottom: 1px solid var(--fs-brand-border);
+  background: var(--fs-brand-background);
+}
+
+.fs-careers .fs-header-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding-block: 1rem;
+}
+
+.fs-careers .fs-brand {
+  display: flex;
+  gap: .7rem;
+  align-items: center;
+  font-size: 1.06rem;
+  font-weight: 800;
+  color: var(--fs-brand-text);
+}
+
+.fs-careers .fs-logo {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+}
+
+.fs-careers nav {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.fs-careers nav a {
+  font-weight: 600;
+}
+
+.fs-careers .fs-main {
+  flex: 1;
+}
+
+.fs-careers h1, .fs-careers h2, .fs-careers p {
+  margin-top: 0;
+}
+
+.fs-careers h1 {
+  font-size: clamp(2rem,5vw,3.4rem);
+  line-height: 1.22;
+  letter-spacing: -.02em;
+}
+
+.fs-careers h2 {
+  font-size: clamp(1.35rem,3vw,1.75rem);
+}
+
+.fs-careers .fs-hero {
+  background: linear-gradient(160deg,var(--fs-brand-secondary),var(--fs-brand-background));
+  padding: clamp(3rem,8vw,7rem) 0;
+}
+
+.fs-careers .fs-hero-inner {
+  max-width: 820px;
+}
+
+.fs-careers .fs-eyebrow {
+  color: var(--fs-brand-primary);
+  font-weight: 800;
+  letter-spacing: .13em;
+  font-size: .75rem;
+  margin-bottom: 1.1rem;
+}
+
+.fs-careers .fs-lead {
+  font-size: clamp(1.04rem,2vw,1.26rem);
+  color: var(--fs-brand-text-secondary);
+  max-width: 680px;
+}
+
+.fs-careers .fs-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: .85rem 1.65rem;
+  border-radius: 12px;
+  min-height: 48px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background .16s ease,border-color .16s ease;
+}
+
+.fs-careers .fs-button-primary {
+  background: var(--fs-brand-primary);
+  color: var(--fs-brand-on-primary);
+  border: 2px solid var(--fs-brand-primary);
+}
+
+.fs-careers .fs-button-primary:hover {
+  background: var(--fs-brand-button-hover);
+  border-color: var(--fs-brand-button-hover);
+  color: var(--fs-brand-on-primary);
+}
+
+.fs-careers .fs-feature-wrap {
+  padding: 3rem 0;
+}
+
+.fs-careers .fs-feature {
+  max-width: 650px;
+  border: 1px solid var(--fs-brand-border);
+  background: var(--fs-brand-surface);
+  border-radius: 20px;
+  padding: 2rem;
+}
+
+.fs-careers .fs-icon {
+  color: var(--fs-brand-accent);
+  font-size: 2rem;
+}
+
+.fs-careers .fs-info {
+  margin-top: 1.5rem;
+}
+
+.fs-careers .fs-form-section {
+  padding: 2.2rem 0 4rem;
+  max-width: 820px;
+}
+
+.fs-careers .fs-form-intro {
+  margin-bottom: 2rem;
+}
+
+.fs-careers .fs-form-intro p, .fs-careers .fs-text-page p, .fs-careers .fs-centered p {
+  color: var(--fs-brand-text-secondary);
+}
+
+.fs-careers .fs-form-card {
+  border: 1px solid var(--fs-brand-border);
+  padding: clamp(1.2rem,4vw,2.5rem);
+  border-radius: 20px;
+  background: var(--fs-brand-background);
+  box-shadow: 0 8px 32px #0000000a;
+}
+
+.fs-careers .fs-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 1.3rem;
+}
+
+.fs-careers .fs-full {
+  grid-column: 1 / -1;
+}
+
+.fs-careers .fs-field label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: .45rem;
+}
+
+.fs-careers .fs-field input, .fs-careers .fs-field select, .fs-careers .fs-field textarea {
+  display: block;
+  width: 100%;
+  padding: .84rem 1rem;
+  border: 1px solid var(--fs-brand-border);
+  border-radius: 9px;
+  color: var(--fs-brand-text);
+  background: var(--fs-brand-background);
+  font: inherit;
+}
+
+.fs-careers .fs-field input[type=file] {
+  padding: .7rem;
+}
+
+.fs-careers .fs-field small {
+  display: block;
+  color: var(--fs-brand-text-secondary);
+  margin-top: .5rem;
+}
+
+.fs-careers .fs-field textarea {
+  resize: vertical;
+}
+
+.fs-careers .fs-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: .8rem;
+  margin: 1.7rem 0;
+  cursor: pointer;
+}
+
+.fs-careers .fs-consent input {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  margin-top: .23rem;
+  accent-color: var(--fs-brand-primary);
+}
+
+.fs-careers .fs-submit {
+  width: 100%;
+}
+
+.fs-careers .fs-submit:disabled {
+  cursor: wait;
+  opacity: .75;
+}
+
+.fs-careers .fs-alert {
+  padding: 1rem 1.2rem;
+  border-radius: 10px;
+  margin-bottom: 1.4rem;
+}
+
+.fs-careers .fs-alert-danger {
+  background: #fff1f0;
+  color: var(--fs-brand-error);
+  border: 1px solid #fab6b3;
+}
+
+.fs-careers .fs-alert-info {
+  background: var(--fs-brand-secondary);
+  color: var(--fs-brand-text);
+}
+
+.fs-careers .fs-honeypot {
+  position: absolute !important;
+  left: -10000px !important;
+  max-height: 0;
+  overflow: hidden;
+}
+
+.fs-careers .fs-centered {
+  min-height: 58vh;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-block: 3rem;
+}
+
+.fs-careers .fs-centered p {
+  max-width: 600px;
+}
+
+.fs-careers .fs-success-icon {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border: 3px solid var(--fs-brand-success);
+  border-radius: 50%;
+  font-size: 2rem;
+  color: var(--fs-brand-success);
+  margin-bottom: 2rem;
+}
+
+.fs-careers .fs-reference {
+  font-weight: 700;
+}
+
+.fs-careers .fs-text-page {
+  max-width: 800px;
+  padding-block: 3rem;
+  white-space: pre-line;
+}
+
+.fs-careers .fs-footer {
+  border-top: 1px solid var(--fs-brand-border);
+  background: var(--fs-brand-surface);
+}
+
+.fs-careers .fs-footer-inner {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.5rem 0;
+  font-size: .88rem;
+}
+
+@media (max-width:640px) {
+.fs-careers .fs-header-inner {
+  flex-wrap: wrap;
+}
+.fs-careers .fs-brand {
+  font-size: .95rem;
+}
+.fs-careers nav {
+  gap: 1rem;
+}
+.fs-careers .fs-form-grid {
+  grid-template-columns: 1fr;
+}
+.fs-careers .fs-feature {
+  padding: 1.3rem;
+}
+.fs-careers .fs-footer-inner {
+  flex-wrap: wrap;
+}
+}
+
+@media (prefers-reduced-motion:reduce) {
+.fs-careers .fs-button {
+  transition: none;
+}
+}
+
+.fs-careers .fs-logo { width: 52px; height: 52px; max-width: 52px; max-height: 52px; object-fit: contain; }
