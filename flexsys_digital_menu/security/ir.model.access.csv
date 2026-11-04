@@ -24,3 +24,5 @@ access_menu_branch_hour_manager,flexsys.menu.branch.hour manager,model_flexsys_m
 
 access_menu_banner_user,flexsys.menu.banner user,model_flexsys_menu_banner,flexsys_digital_menu.group_digital_menu_user,1,1,1,0
 access_menu_banner_manager,flexsys.menu.banner manager,model_flexsys_menu_banner,flexsys_digital_menu.group_digital_menu_manager,1,1,1,1
+access_product_tasting_note_user,flexsys.product.tasting.note user,model_flexsys_product_tasting_note,flexsys_digital_menu.group_digital_menu_user,1,1,1,0
+access_product_tasting_note_manager,flexsys.product.tasting.note manager,model_flexsys_product_tasting_note,flexsys_digital_menu.group_digital_menu_manager,1,1,1,1

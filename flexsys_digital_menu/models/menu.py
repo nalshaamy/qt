@@ -777,6 +777,11 @@ class FlexSysMenu(models.Model):
                     "availability": availability,
                     "calories": (product.digital_menu_calories or 0) if menu.show_calories else 0,
                     "ingredients": (product.digital_menu_ingredients or "") if menu.show_ingredients else "",
+                    "tasting_notes": [
+                    note.name
+                    for note in product.tasting_note_ids.sorted("sequence")
+                    if note.name
+                ],
                     "allergens": (product.digital_menu_allergens or "") if menu.show_allergens else "",
                     "spicy_level": (product.digital_menu_spicy_level or "none") if menu.show_dietary else "none",
                     "vegetarian": bool(product.digital_menu_vegetarian) if menu.show_dietary else False,

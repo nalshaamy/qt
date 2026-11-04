@@ -42,6 +42,12 @@
                             <field name="digital_menu_vegetarian"/>
                             <field name="digital_menu_vegan"/>
                             <field name="digital_menu_ingredients"/>
+                            <label for="tasting_note_ids" string="Tasting Notes"/>
+                            <field name="tasting_note_ids" nolabel="1">
+                                <list editable="bottom">
+                                    <field name="name" string="Tasting Note"/>
+                                </list>
+                            </field>
                             <field name="digital_menu_allergens"/>
                             <field name="digital_menu_recommendation_mode"/>
                             <field name="digital_menu_recommended_product_id"

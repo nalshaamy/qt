@@ -10,3 +10,4 @@ from . import menu_offer
 from . import menu_banner
 from . import pos_config
 from . import menu_analytics
+from . import product_tasting_note

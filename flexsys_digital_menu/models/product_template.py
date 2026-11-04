@@ -85,6 +85,11 @@ class ProductTemplate(models.Model):
     digital_menu_count = fields.Integer(compute="_compute_digital_menu_summary")
     digital_menu_branch_count = fields.Integer(compute="_compute_digital_menu_summary")
     digital_menu_is_featured = fields.Boolean(compute="_compute_digital_menu_summary")
+    tasting_note_ids = fields.One2many(
+        "flexsys.product.tasting.note",
+        "product_tmpl_id",
+        string="Tasting Notes",
+    )
 
     def _digital_menu_simple_line(self):
         """Return the primary menu assignment used by the simple product UI.

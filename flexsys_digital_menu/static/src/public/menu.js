@@ -33,6 +33,7 @@
             soldOut: "غير متوفر حاليًا",
             calories: "السعرات",
             allergens: "الحساسية",
+            tastingNotes: "الإيحاءات",
             ingredients: "المكونات",
             variants: "الخيارات",
             from: "يبدأ من",
@@ -59,6 +60,7 @@
             calories: "Calories",
             allergens: "Allergens",
             ingredients: "Ingredients",
+            tastingNotes: "Tasting Notes",
             variants: "Options",
             from: "From",
             branch: "Branch",
@@ -721,6 +723,14 @@
         const details = node("div", "fsm-detail-list");
         if (product.calories) details.appendChild(detailRow(t("calories"), `${product.calories} kcal`));
         if (product.ingredients) details.appendChild(detailRow(t("ingredients"), product.ingredients));
+        if (product.tasting_notes?.length) {
+    details.appendChild(
+        detailRow(
+            t("tastingNotes"),
+            product.tasting_notes.join(" · ")
+        )
+    );
+}
         if (product.allergens) details.appendChild(detailRow(t("allergens"), product.allergens));
         if (details.childNodes.length) bodyContent.appendChild(details);
         if (product.variants?.length > 1) {
