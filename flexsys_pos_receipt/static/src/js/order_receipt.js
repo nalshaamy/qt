@@ -14,6 +14,9 @@ const settingsCache = new Map();
 
 const DEFAULT_SETTINGS = Object.freeze({
     logo_width_mm: 72,
+    logo_trim_whitespace: true,
+    header_width_mm: 48,
+    footer_width_mm: 36,
     show_company_footer: false,
     currency_symbol_mode: "new",
     header_enabled: false,
@@ -47,7 +50,10 @@ function waitForImage(src) {
 
 async function getReceiptSettings(configId) {
     if (!Number.isInteger(configId) || configId <= 0) return DEFAULT_SETTINGS;
-    if (settingsCache.has(configId)) return settingsCache.get(configId);
+    const cached = settingsCache.get(configId);
+    // Allow campaigns configured in backend to update without a permanent
+    // page-long cache. Printer can still use fallback data while offline.
+    if (cached && Date.now() - cached.fetchedAt < 15_000) return cached.promise;
     const promise = (async () => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 2500);
@@ -64,6 +70,12 @@ async function getReceiptSettings(configId) {
             settings.logo_width_mm = Number.isFinite(rawWidth)
                 ? Math.max(30, Math.min(72, Math.round(rawWidth)))
                 : 72;
+            for (const [key, fallback] of [["header_width_mm", 48], ["footer_width_mm", 36]]) {
+                const width = Number(settings[key]);
+                settings[key] = Number.isFinite(width)
+                    ? Math.max(20, Math.min(72, Math.round(width))) : fallback;
+            }
+            settings.logo_trim_whitespace = settings.logo_trim_whitespace === true;
             await Promise.all([waitForImage(settings.header_image), waitForImage(settings.footer_image)]);
             return settings;
         } catch (error) {
@@ -73,8 +85,96 @@ async function getReceiptSettings(configId) {
             clearTimeout(timeout);
         }
     })();
-    settingsCache.set(configId, promise);
+    settingsCache.set(configId, { promise, fetchedAt: Date.now() });
     return promise;
+}
+
+/* The ZATCA extension may insert its QR between sibling images after QWeb
+ * inheritance runs. Reposition the already rendered promo relative to the
+ * original receipt logo, without moving or modifying the fiscal QR itself. */
+function positionHeaderPromo(root, settings) {
+    if (!root || !settings?.header_enabled) return;
+    const logo = root.querySelector("img.pos-receipt-logo");
+    const promo = root.querySelector(".flexsys-header-promo");
+    if (!logo || !promo || !logo.parentNode) return;
+    if (settings.header_position === "below") {
+        if (logo.nextSibling !== promo) logo.parentNode.insertBefore(promo, logo.nextSibling);
+    } else if (logo.previousSibling !== promo) {
+        logo.parentNode.insertBefore(promo, logo);
+    }
+}
+
+/* Crop optical whitespace only in the displayed receipt image. Never write
+ * to res.company, pos.config, or the native logo asset. Gracefully revert to
+ * the original URL on CORS/canvas errors or a missing image. */
+const trimmedLogoCache = new Map();
+function cropReceiptLogo(src) {
+    if (!src) return Promise.resolve(src);
+    if (trimmedLogoCache.has(src)) return trimmedLogoCache.get(src);
+    const job = new Promise((resolve) => {
+        const image = new Image();
+        let finished = false;
+        const finish = (value) => {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timer);
+            resolve(value);
+        };
+        const timer = setTimeout(() => finish(src), 1300);
+        image.onerror = () => finish(src);
+        image.onload = () => {
+            try {
+                const iw = image.naturalWidth;
+                const ih = image.naturalHeight;
+                if (!iw || !ih || iw > 4000 || ih > 4000) return finish(src);
+                const factor = Math.min(1, 1024 / Math.max(iw, ih));
+                const width = Math.max(1, Math.round(iw * factor));
+                const height = Math.max(1, Math.round(ih * factor));
+                const canvas = document.createElement("canvas");
+                canvas.width = width;
+                canvas.height = height;
+                const context = canvas.getContext("2d", { willReadFrequently: true });
+                if (!context) return finish(src);
+                context.drawImage(image, 0, 0, width, height);
+                const rgba = context.getImageData(0, 0, width, height).data;
+                let minX = width, minY = height, maxX = -1, maxY = -1;
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const offset = (y * width + x) * 4;
+                        const alpha = rgba[offset + 3];
+                        if (alpha < 35) continue;
+                        const lightness = (rgba[offset] + rgba[offset + 1] + rgba[offset + 2]) / 3;
+                        if (lightness >= 237) continue;
+                        minX = Math.min(minX, x);
+                        maxX = Math.max(maxX, x);
+                        minY = Math.min(minY, y);
+                        maxY = Math.max(maxY, y);
+                    }
+                }
+                if (maxX < 0 || maxY < 0) return finish(src);
+                const padding = 2;
+                minX = Math.max(0, minX - padding);
+                minY = Math.max(0, minY - padding);
+                maxX = Math.min(width - 1, maxX + padding);
+                maxY = Math.min(height - 1, maxY + padding);
+                const cropW = maxX - minX + 1, cropH = maxY - minY + 1;
+                // Avoid touching logos that already use most of their canvas.
+                if (cropW >= width * .92 && cropH >= height * .92) return finish(src);
+                // Avoid blowing up tiny noise / low-quality source images.
+                if (cropW < width * .12 || cropH < height * .12) return finish(src);
+                const output = document.createElement("canvas");
+                output.width = cropW;
+                output.height = cropH;
+                output.getContext("2d").drawImage(canvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
+                finish(output.toDataURL("image/png"));
+            } catch (error) {
+                finish(src);
+            }
+        };
+        image.src = src;
+    });
+    trimmedLogoCache.set(src, job);
+    return job;
 }
 
 function decorateReceiptCurrency(root, settings) {
@@ -115,8 +215,14 @@ patch(OrderReceipt.prototype, {
         onWillStart(async () => {
             this.flexsysSettings = await getReceiptSettings(this.order?.config?.id);
         });
-        onMounted(() => decorateReceiptCurrency(this.flexsysReceiptEl.el, this.flexsysSettings));
-        onPatched(() => decorateReceiptCurrency(this.flexsysReceiptEl.el, this.flexsysSettings));
+        onMounted(() => {
+            positionHeaderPromo(this.flexsysReceiptEl.el, this.flexsysSettings);
+            decorateReceiptCurrency(this.flexsysReceiptEl.el, this.flexsysSettings);
+        });
+        onPatched(() => {
+            positionHeaderPromo(this.flexsysReceiptEl.el, this.flexsysSettings);
+            decorateReceiptCurrency(this.flexsysReceiptEl.el, this.flexsysSettings);
+        });
     },
     get flexsysIsArabic() {
         return localization.direction === "rtl";
@@ -142,9 +248,16 @@ patch(ReceiptHeader.prototype, {
             super.setup(...arguments);
         }
         this.flexsysSettings = DEFAULT_SETTINGS;
+        this.flexsysTrimmedLogoUrl = null;
         onWillStart(async () => {
             this.flexsysSettings = await getReceiptSettings(this.order?.config?.id);
+            if (this.flexsysSettings.logo_trim_whitespace) {
+                this.flexsysTrimmedLogoUrl = await cropReceiptLogo(this.logoUrl);
+            }
         });
+    },
+    get flexsysReceiptLogoSrc() {
+        return this.flexsysTrimmedLogoUrl || this.logoUrl;
     },
     get flexsysIsArabic() {
         return localization.direction === "rtl";

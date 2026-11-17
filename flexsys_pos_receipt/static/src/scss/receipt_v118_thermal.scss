@@ -1,0 +1,192 @@
+/* 19.0.1.0.18 — TM-T20III field-print correction.
+ * Odoo 19 renders the live receipt DOM for direct printer output. Every
+ * adjustment applies OUTSIDE @media print as well; pricing and ZATCA QR
+ * generation remain untouched. Paper 80mm, printable width 72mm (576 dots).
+ * This file intentionally follows v111..v117 to override older small fonts.
+ */
+.pos-receipt.flexsys-premium-receipt {
+  box-sizing: border-box !important;
+  width: 72mm !important;
+  max-width: 72mm !important;
+  min-width: 0 !important;
+  padding: 4px 4px 8px !important;
+  margin: 0 !important;
+  direction: ltr !important;
+  font-size: 16px !important;
+  font-family: Arial, "Noto Sans Arabic", Tahoma, sans-serif !important;
+  line-height: 1.4 !important;
+  color: #080808 !important;
+  background: #ffffff !important;
+
+  /* Native date/ticket block has inline font-size:75%; override deliberately. */
+  > .text-center.pt-3,
+  .pos-receipt-contact,
+  .pos-receipt-order-data,
+  .pos-receipt-customer,
+  #order-date,
+  .cashier {
+    font-size: 13.5px !important;
+    line-height: 1.4 !important;
+    color: #101010 !important;
+  }
+  .pos-receipt-header .pos-receipt-contact,
+  .pos-receipt-contact > div { margin-block: 1px !important; }
+  .pos-receipt-header .pos-receipt-qr { margin-block: 2px 3px !important; }
+  .flexsys-vat-top { font-size: 13.5px !important; line-height: 1.33 !important; }
+  .flexsys-order-number-frame {
+    margin: 3px auto 5px !important;
+    padding: 5px 10px !important;
+    min-width: 130px;
+    max-width: calc(100% - 6px);
+  }
+  .flexsys-order-number-label { font-size: 15px !important; font-weight: 800 !important; }
+  .flexsys-order-number-value { font-size: 30px !important; font-weight: 800 !important; }
+
+  /* Products need more physical height than the legacy 10px and 12px rules. */
+  --fs-qty-width: 25px;
+  --fs-price-width: 80px;
+  --fs-col-gap: 4px;
+  .flexsys-products-title {
+    font-size: 13.5px !important;
+    line-height: 1.32 !important;
+    font-weight: 800 !important;
+    padding: 5px 1px !important;
+    margin-block: 7px 4px !important;
+    border-color: #333 !important;
+  }
+  .orderline {
+    min-width: 0 !important;
+    font-size: 16.5px !important;
+    line-height: 1.45 !important;
+    padding-block: 5px !important;
+    color: #050505 !important;
+  }
+  .orderline .line-details > .product-name > .qty {
+    font-size: 16px !important;
+    line-height: 1.45 !important;
+    font-weight: 700 !important;
+    color: #050505 !important;
+  }
+  .orderline .line-details > .product-name > .text-wrap {
+    font-size: 16.5px !important;
+    font-weight: 700 !important;
+    line-height: 1.42 !important;
+    white-space: normal !important;
+    overflow-wrap: break-word !important;
+    word-break: normal !important;
+  }
+  .orderline .line-details > .product-price {
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    line-height: 1.45 !important;
+    white-space: nowrap !important;
+    font-variant-numeric: tabular-nums;
+  }
+  .orderline .info-list,
+  .orderline .info-list li,
+  .orderline .line-details ul:not(.product-name),
+  .orderline .line-details ul:not(.product-name) li,
+  .orderline .customer-note {
+    font-size: 13.5px !important;
+    line-height: 1.4 !important;
+    overflow-wrap: break-word !important;
+    white-space: normal !important;
+    color: #111 !important;
+  }
+
+  .pos-receipt-taxes,
+  .pos-receipt-taxes > div,
+  .receipt-rounding,
+  .receipt-to-pay,
+  .receipt-change,
+  .paymentlines {
+    font-size: 15px !important;
+    line-height: 1.42 !important;
+    color: #090909 !important;
+  }
+  .pos-receipt-taxes > div { padding-block: 3px !important; }
+  .pos-receipt-amount.receipt-total {
+    display: flex !important;
+    font-size: 21px !important;
+    font-weight: 800 !important;
+    line-height: 1.25 !important;
+    gap: 6px !important;
+    padding: 9px 4px !important;
+    margin: 6px 0 4px !important;
+    border-top: 2px solid #171717 !important;
+    border-bottom: 2px solid #171717 !important;
+    background: #fff !important;
+    color: #050505 !important;
+  }
+  .pos-receipt-amount.receipt-total .pos-receipt-right-align {
+    white-space: nowrap !important;
+    font-size: 20px !important;
+    font-weight: 800 !important;
+  }
+  .paymentlines { padding-block: 4px !important; }
+  .flexsys-thank-you { font-size: 15px !important; font-weight: 700 !important; }
+  .flexsys-company-details { font-size: 12.5px !important; }
+  .footer-powered-by { font-size: 10px !important; }
+  img.flexsys-riyal-symbol {
+    display: inline-block !important;
+    width: 15px !important;
+    height: 16px !important;
+    max-width: 15px !important;
+    min-width: 15px !important;
+    vertical-align: -2px !important;
+  }
+  .pos-receipt-amount.receipt-total img.flexsys-riyal-symbol {
+    width: 18px !important;
+    min-width: 18px !important;
+    max-width: 18px !important;
+    height: 20px !important;
+  }
+
+  /* Width control is on the visible bitmap, not merely its wrapper. It
+   * upscales small uploaded campaign art while preserving intrinsic ratio. */
+  .flexsys-header-promo,
+  .flexsys-footer-promo {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 3px auto 5px !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    text-align: center !important;
+  }
+  .flexsys-header-promo img.flexsys-promo-image,
+  .flexsys-footer-promo img.flexsys-promo-image {
+    display: block !important;
+    box-sizing: border-box !important;
+    width: var(--fs-promo-image-width, 48mm) !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: 55mm !important;
+    object-fit: contain !important;
+    margin: 0 auto !important;
+  }
+  .flexsys-footer-promo img.flexsys-promo-image { max-height: 44mm !important; }
+  .flexsys-footer-promo { margin-top: 7px !important; }
+
+  /* The original photo may contain its own whitespace: the JS optional
+   * optical trim produces a receipt-only crop; CSS still preserves ratio. */
+  img.pos-receipt-logo {
+    width: var(--flexsys-logo-width, 72mm) !important;
+    max-width: 72mm !important;
+    height: auto !important;
+    object-fit: contain !important;
+    display: block !important;
+    margin-left: 50% !important;
+    margin-right: 0 !important;
+    transform: translateX(-50%) !important;
+  }
+}
+@media print {
+  .pos-receipt.flexsys-premium-receipt,
+  .render-container .pos-receipt.flexsys-premium-receipt {
+    width: 72mm !important;
+    max-width: 72mm !important;
+    padding: 4px 4px 8px !important;
+    font-size: 16px !important;
+    margin: 0 !important;
+  }
+}

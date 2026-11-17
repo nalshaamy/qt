@@ -17,11 +17,20 @@ Version: **19.0.1.0.17 (STAGING CANDIDATE)**. Built by extending the 0.16 STAGIN
 
 ## Configuration
 Point of Sale > Configuration > Point of Sales > Edit a POS > **FlexSys POS Receipt**.
-Set **Receipt Logo Width (mm)** to any whole number from **30** through **72** (default **72**). The image is centered and keeps its native proportions, with height calculated automatically. A logo file that has transparent/white margins still needs cropping for the *visible artwork* to fill 72 mm.
-Upload images to the dedicated fields and enable respective checkboxes. The POS customer account must have POS access. After settings changes, reload POS so the client-side read cache picks them up.
+Set **Receipt Logo Width (mm)** to any whole number from **30** through **72** (default **72**). The image is centered and keeps its native proportions, with height calculated automatically. The **Trim White Logo Margins** option (default ON in 0.18) can remove near-white/transparent blank borders in the receipt-only rendering. Disable it for intentionally padded artwork.
+Upload images to the dedicated fields and enable respective checkboxes. The POS customer account must have POS access. Settings are refreshed on receipt rendering with a short client cache (approximately 15 seconds); reopening POS always refreshes them.
 
 ## Security and scope
 Images are served through an authenticated HTTP route, restricted to POS users and the POS's company. This module never changes `res.currency`, `product.pricelist`, POS payment logic or ZATCA data. Image payloads are limited to 1.2MB base64 each; unsupported image signatures are rejected.
 
 ## Runtime status
 Python/XML/JS static checks performed; Odoo server upgrade, POS runtime, Epson direct printing and ZATCA QR scanning **not performed** in this environment. See `TEST_PLAN.md` for mandatory nine-gate acceptance tests. Do not deploy to production until all pass.
+
+
+## 19.0.1.0.18 thermal print calibration (STAGING)
+
+- More legible live receipt fonts on Epson TM-T20III; note that final approval still requires a physical thermal print.
+- Promotional header and footer image widths independently adjustable (20–72mm, default 48/36mm).
+- Header image is repositioned relative to the MAIN receipt logo after all template inheritances to prevent the ZATCA QR extension from slipping between them. QR image source/data is unchanged.
+- Optional trimming of near-white / transparent margins in an in-memory copy of the main receipt logo (default ON, disable if margins were intentional). Original logo binary is never changed.
+- No changes to POS loader, orders, prices, tax amounts, or company accounting.

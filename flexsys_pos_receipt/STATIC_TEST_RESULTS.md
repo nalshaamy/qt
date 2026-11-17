@@ -23,3 +23,17 @@
 - Confirm invalid values 29 and 73 cannot be saved.
 
 **Not a production acceptance certificate.** This file records static/browser results only, not physical thermal receipt tests.
+
+
+## FlexSys 19.0.1.0.18 — supplemental local results
+
+- Source ZIP base: 19.0.1.0.17 combined staging (previously exercised by user on physical Epson).
+- Python syntax and module XML well-formedness: PASS.
+- POS JavaScript syntax via Node.js: PASS.
+- Chromium 72mm receipt-root geometry: 272.125 CSS px, no horizontal overflow with the new CSS; physical printing **not checked**.
+- Chromium main logo width: 272.125 CSS px (72mm).
+- Chromium header/footer images: 181.4px / 136.1px (48/36mm).
+- Chromium item/meta/total font sizes: 16.5px / 13.5px / 21px.
+- Simulated QWeb-inherited DOM image repositioning: both BEFORE and AFTER main logo PASS; QR DOM content untouched.
+- In-memory trim of artificial white-padded logo: 400x200 => 164x84 content-based crop, without changing source.
+- Requires real Staging upgrade/asset check and TM-T20III paper print; do **not** treat these tests as user acceptance.

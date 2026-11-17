@@ -43,7 +43,9 @@
            t-att-dir="flexsysIsArabic ? 'rtl' : 'ltr'" t-out="flexsysThankYouMessage"/>
       <div t-if="flexsysSettings.footer_enabled &amp;&amp; flexsysSettings.footer_image"
            class="flexsys-footer-promo text-center">
-        <img class="flexsys-promo-image" t-att-src="flexsysSettings.footer_image" alt="Receipt promotional footer"/>
+        <img class="flexsys-promo-image" t-att-src="flexsysSettings.footer_image"
+             t-att-style="'--fs-promo-image-width: ' + flexsysSettings.footer_width_mm + 'mm;'"
+             alt="Receipt promotional footer"/>
       </div>
     </xpath>
   </t>
@@ -51,17 +53,22 @@
     <!-- Apply the per-POS width directly to the native receipt logo only; promo images / fiscal QR remain untouched. -->
     <xpath expr="//img[hasclass('pos-receipt-logo')]" position="attributes">
       <attribute name="t-att-style">'--flexsys-logo-width: ' + flexsysSettings.logo_width_mm + 'mm;'</attribute>
+      <attribute name="t-att-src">flexsysReceiptLogoSrc</attribute>
     </xpath>
     <xpath expr="//img[hasclass('pos-receipt-logo')]" position="before">
       <div t-if="flexsysSettings.header_enabled &amp;&amp; flexsysSettings.header_image &amp;&amp; flexsysSettings.header_position === 'above'"
            class="flexsys-header-promo text-center">
-        <img class="flexsys-promo-image" t-att-src="flexsysSettings.header_image" alt="Receipt promotional header"/>
+        <img class="flexsys-promo-image" t-att-src="flexsysSettings.header_image"
+             t-att-style="'--fs-promo-image-width: ' + flexsysSettings.header_width_mm + 'mm;'"
+             alt="Receipt promotional header"/>
       </div>
     </xpath>
     <xpath expr="//img[hasclass('pos-receipt-logo')]" position="after">
       <div t-if="flexsysSettings.header_enabled &amp;&amp; flexsysSettings.header_image &amp;&amp; flexsysSettings.header_position === 'below'"
            class="flexsys-header-promo text-center">
-        <img class="flexsys-promo-image" t-att-src="flexsysSettings.header_image" alt="Receipt promotional header"/>
+        <img class="flexsys-promo-image" t-att-src="flexsysSettings.header_image"
+             t-att-style="'--fs-promo-image-width: ' + flexsysSettings.header_width_mm + 'mm;'"
+             alt="Receipt promotional header"/>
       </div>
     </xpath>
     <!-- Keep the distinct fiscal invoice reference for audit/ZATCA, not as a duplicate order number. -->

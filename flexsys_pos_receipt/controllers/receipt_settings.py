@@ -51,6 +51,9 @@ class FlexsysReceiptSettings(http.Controller):
         result = {
             # Always bound server-side even if data was inserted by SQL/import.
             "logo_width_mm": min(72, max(30, config.flexsys_logo_width_mm or 72)),
+            "logo_trim_whitespace": bool(config.flexsys_logo_trim_whitespace),
+            "header_width_mm": min(72, max(20, config.flexsys_header_image_width_mm or 48)),
+            "footer_width_mm": min(72, max(20, config.flexsys_footer_image_width_mm or 36)),
             "show_company_footer": bool(config.flexsys_show_company_footer),
             "currency_symbol_mode": config.flexsys_currency_symbol_mode or "new",
             "header_enabled": bool(config.flexsys_show_header_image),

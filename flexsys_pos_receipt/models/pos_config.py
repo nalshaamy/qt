@@ -17,6 +17,26 @@ class PosConfig(models.Model):
             if not 30 <= config.flexsys_logo_width_mm <= 72:
                 raise ValidationError("Receipt Logo Width must be between 30 and 72 mm.")
 
+    flexsys_logo_trim_whitespace = fields.Boolean(
+        string="Trim White Logo Margins", default=True,
+        help="Trim blank white/transparent margins in the receipt-only copy of the main logo. The original image is not changed.",
+    )
+    flexsys_header_image_width_mm = fields.Integer(
+        string="Promotional Header Image Width (mm)", default=48, required=True,
+        help="Thermal-print image width from 20 to 72 mm. Default 48 mm.",
+    )
+    flexsys_footer_image_width_mm = fields.Integer(
+        string="Promotional Footer Image Width (mm)", default=36, required=True,
+        help="Thermal-print image width from 20 to 72 mm. Default 36 mm.",
+    )
+
+    @api.constrains("flexsys_header_image_width_mm", "flexsys_footer_image_width_mm")
+    def _check_flexsys_promo_widths(self):
+        for config in self:
+            for field_name in ("flexsys_header_image_width_mm", "flexsys_footer_image_width_mm"):
+                if not 20 <= config[field_name] <= 72:
+                    raise ValidationError("Promotional image widths must be between 20 and 72 mm.")
+
     # Intentionally NO _load_pos_data_fields override: the POS loader is left untouched.
     flexsys_show_company_footer = fields.Boolean(
         string="Show Company Details on POS Receipt", default=False,

@@ -17,3 +17,17 @@
 13. Do not clear POS IndexedDB if it may contain offline/unsynced orders.
 
 **Note**: display settings are loaded from a narrowly scoped authenticated HTTP endpoint on first receipt render, without overriding `_load_pos_data_fields`. Pending runtime verification for printer image capture and settings fetch timing. If settings cannot load, receipt falls back to core printing without optional images/messages.
+
+
+## Additional staging tests for 19.0.1.0.18
+1. Upgrade addon (not just asset rebuild), clear stale POS assets via normal reload and open receipt settings.
+2. Confirm logo width defaults to 72mm; automatic blank-margin trim ON (turn OFF for intentionally padded artwork).
+3. Confirm Header Image Width defaults 48mm and Footer Image Width defaults 36mm, both 20–72mm. Save and reopen configuration.
+4. Select BELOW logo; on printed paper check logo -> promo -> ZATCA QR order; select ABOVE and reprint to check promo -> logo -> ZATCA QR.
+5. Print both Arabic and English with longest product, options, VAT, discount, real Saudi riyal symbol, large order number and both promotional images.
+6. Check product names, prices and totals are physically readable, no clipping, and verify ZATCA QR scans; not only visible in PDF.
+7. Print with header/footer image toggled OFF; check no extra whitespace / missing fiscal content.
+8. Confirm new logo trimming only affects rendered receipt image and company logo elsewhere remains unchanged.
+9. Inspect for POS startup, pricing, loader, offline, payments and accounting regressions.
+
+Warning: the static and browser tests bundled here do not substitute for a real Odoo.sh upgrade and Epson print tests.

@@ -9,6 +9,7 @@
         <group name="flexsys_pos_receipt_settings" string="FlexSys POS Receipt">
           <group string="Main Receipt Logo / الشعار الرئيسي">
             <field name="flexsys_logo_width_mm"/>
+            <field name="flexsys_logo_trim_whitespace"/>
           </group>
           <group string="Receipt Footer / الفوتر">
             <field name="flexsys_show_company_footer"/>
@@ -20,11 +21,13 @@
           <group string="Promotional Header Image / صورة الهيدر">
             <field name="flexsys_show_header_image"/>
             <field name="flexsys_header_image_position" invisible="not flexsys_show_header_image"/>
+            <field name="flexsys_header_image_width_mm" invisible="not flexsys_show_header_image"/>
             <field name="flexsys_header_image" widget="image" class="oe_avatar"
                    options="{'size': [288, 350]}" invisible="not flexsys_show_header_image"/>
           </group>
           <group string="Promotional Footer Image / صورة الفوتر">
             <field name="flexsys_show_footer_image"/>
+            <field name="flexsys_footer_image_width_mm" invisible="not flexsys_show_footer_image"/>
             <field name="flexsys_footer_image" widget="image" class="oe_avatar"
                    options="{'size': [288, 350]}" invisible="not flexsys_show_footer_image"/>
           </group>
