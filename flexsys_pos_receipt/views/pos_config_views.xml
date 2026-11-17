@@ -7,6 +7,9 @@
     <field name="arch" type="xml">
       <xpath expr="//sheet" position="inside">
         <group name="flexsys_pos_receipt_settings" string="FlexSys POS Receipt">
+          <group string="Main Receipt Logo / الشعار الرئيسي">
+            <field name="flexsys_logo_width_mm"/>
+          </group>
           <group string="Receipt Footer / الفوتر">
             <field name="flexsys_show_company_footer"/>
             <field name="flexsys_currency_symbol_mode"/>

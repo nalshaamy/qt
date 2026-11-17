@@ -1,8 +1,21 @@
-from odoo import fields, models
+from odoo import api, fields, models
+from odoo.exceptions import ValidationError
 
 
 class PosConfig(models.Model):
     _inherit = "pos.config"
+
+    # Configuration applies to the original company/POS logo, not promotional imagery.
+    flexsys_logo_width_mm = fields.Integer(
+        string="Receipt Logo Width (mm)", default=72, required=True,
+        help="Width of the main POS receipt logo. 30-72 mm, default 72 mm for Epson TM-T20III 80 mm paper. The original aspect ratio is preserved.",
+    )
+
+    @api.constrains("flexsys_logo_width_mm")
+    def _check_flexsys_logo_width_mm(self):
+        for config in self:
+            if not 30 <= config.flexsys_logo_width_mm <= 72:
+                raise ValidationError("Receipt Logo Width must be between 30 and 72 mm.")
 
     # Intentionally NO _load_pos_data_fields override: the POS loader is left untouched.
     flexsys_show_company_footer = fields.Boolean(

@@ -1,10 +1,12 @@
 # FlexSys POS Receipt — Odoo 19 Enterprise
 
-Version: **19.0.1.0.16 (STAGING CANDIDATE)**. Based on user-tested 0.15 design source.
+Version: **19.0.1.0.17 (STAGING CANDIDATE)**. Built by extending the 0.16 STAGING candidate with configurable main-logo width. No claim of prior acceptance on the target hardware.
 
 ## Features
 - POS thermal 80mm receipt with 72mm print width for Epson TM-T20III calibration.
-- Preserves Odoo-original logo, ZATCA payload, prices, accounting and taxation.
+- Version 0.17 is the **single combined STAGING** build: version 0.16 promotional images, order/customer labels, thank-you customization, and logo-width control are tested together.
+- Main receipt logo width setting per POS: **30-72 mm**, default **72 mm**, maintaining source aspect ratio and horizontal centering. This changes *only* the displayed native logo, not its binary or the campaign images.
+- Preserves Odoo-original logo source, ZATCA payload, prices, accounting and taxation.
 - Arabic/English text display, RTL/LTR item handling, per-POS Saudi Riyal SVG / SR selection.
 - Exactly one framed order/tracking number. The **distinct technical invoice reference** is still printed, labeled "Invoice No." / "رقم الفاتورة", to preserve fiscal traceability; it is not mislabeled as another order number.
 - Displays customer label only when a customer is present.
@@ -15,6 +17,7 @@ Version: **19.0.1.0.16 (STAGING CANDIDATE)**. Based on user-tested 0.15 design s
 
 ## Configuration
 Point of Sale > Configuration > Point of Sales > Edit a POS > **FlexSys POS Receipt**.
+Set **Receipt Logo Width (mm)** to any whole number from **30** through **72** (default **72**). The image is centered and keeps its native proportions, with height calculated automatically. A logo file that has transparent/white margins still needs cropping for the *visible artwork* to fill 72 mm.
 Upload images to the dedicated fields and enable respective checkboxes. The POS customer account must have POS access. After settings changes, reload POS so the client-side read cache picks them up.
 
 ## Security and scope

@@ -1,0 +1,21 @@
+/* 19.0.1.0.17 — main receipt logo width, per POS config, TM-T20III.
+ * 80mm roll has 72mm printable width / 576 dots at 203dpi.
+ * This rule applies to live receipt rasterization AND print media.
+ * Receipt outer box is 72mm wide; centering from the content-box midpoint
+ * lets a 72mm logo cover the entire printable region despite inner padding.
+ * Do not touch fiscal QR, promotional images, or original logo source.
+ */
+.pos-receipt.flexsys-premium-receipt {
+  img.pos-receipt-logo {
+    box-sizing: border-box !important;
+    display: block !important;
+    width: var(--flexsys-logo-width, 72mm) !important;
+    max-width: 72mm !important;
+    height: auto !important;
+    max-height: none !important;
+    object-fit: contain !important;
+    margin-left: 50% !important;
+    margin-right: 0 !important;
+    transform: translateX(-50%);
+  }
+}

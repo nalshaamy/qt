@@ -13,6 +13,7 @@ const SYMBOL_URL = "/flexsys_pos_receipt/static/src/img/saudi_riyal_mark.svg";
 const settingsCache = new Map();
 
 const DEFAULT_SETTINGS = Object.freeze({
+    logo_width_mm: 72,
     show_company_footer: false,
     currency_symbol_mode: "new",
     header_enabled: false,
@@ -58,6 +59,11 @@ async function getReceiptSettings(configId) {
             const result = await response.json();
             if (!result || typeof result !== "object") return DEFAULT_SETTINGS;
             const settings = { ...DEFAULT_SETTINGS, ...result };
+            // Defense in depth: never interpolate untrusted strings into CSS dimensions.
+            const rawWidth = Number(settings.logo_width_mm);
+            settings.logo_width_mm = Number.isFinite(rawWidth)
+                ? Math.max(30, Math.min(72, Math.round(rawWidth)))
+                : 72;
             await Promise.all([waitForImage(settings.header_image), waitForImage(settings.footer_image)]);
             return settings;
         } catch (error) {

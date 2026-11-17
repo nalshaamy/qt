@@ -49,6 +49,8 @@ class FlexsysReceiptSettings(http.Controller):
             return f"data:{mimetype};base64,{encoded}"
 
         result = {
+            # Always bound server-side even if data was inserted by SQL/import.
+            "logo_width_mm": min(72, max(30, config.flexsys_logo_width_mm or 72)),
             "show_company_footer": bool(config.flexsys_show_company_footer),
             "currency_symbol_mode": config.flexsys_currency_symbol_mode or "new",
             "header_enabled": bool(config.flexsys_show_header_image),
